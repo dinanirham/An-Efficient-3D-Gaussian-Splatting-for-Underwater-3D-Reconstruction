@@ -2,4 +2,5 @@ dataset.zip
 *.zip
 dataset/
 draft-repo-output/
-.claude/
+.claude/seasplat-efficiency-adaptation/audit-output/
+seasplat-efficient-3dgs-underwater/
