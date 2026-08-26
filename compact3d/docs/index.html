@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="Compact3D reduces the storage memory requirements of 3D Gaussian Splatting models.">
+  <meta name="keywords" content="3D Gaussian Splat, Compact3D, Comp3D">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CompGS: Smaller and Faster Gaussian Splatting</title>
+
+  <!-- Global site tag (gtag.js) - Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-PYVRSFMDRL"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+
+    function gtag() {
+      dataLayer.push(arguments);
+    }
+
+    gtag('js', new Date());
+
+    gtag('config', 'G-PYVRSFMDRL');
+  </script>
+
+  <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
+  <!-- <link rel="icon" href="./static/images/favicon.svg"> -->
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="./static/js/index.js"></script>
+</head>
+<body>
+
+
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <h1 class="title is-1 publication-title">Compact3D: Smaller and Faster Gaussian Splatting with Vector Quantization</h1>
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">
+              <a href="https://klnavaneet.github.io/">KL Navaneet</a><sup>*</sup>,</span>
+            <span class="author-block">
+              <a href="https://arghavan-kpm.github.io/">Kossar Pourahmadi</a><sup>*</sup>,</span>
+            <span class="author-block">
+              <a href="https://soroush-abbasi.github.io/">Soroush Abbasi Koohpayegani</a>,</span>
+            <span class="author-block">
+              <a href="https://web.cs.ucdavis.edu/~hpirsiav/">Hamed Pirsiavash</a></span>
+            
+          </div>
+
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">University of California, Davis</span>
+          </div>
+          <div class="is-size-5 publication-authors">
+            <p>(*) Denotes equal contribution</p>
+          </div>
+          
+
+          <div class="column has-text-centered">
+            <div class="publication-links">
+              <!-- PDF Link. -->              
+              <span class="link-block">
+                <a href="https://arxiv.org/abs/2311.18159"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>arXiv</span>
+                </a>
+              </span>              
+              <!-- Code Link. -->
+              <span class="link-block">
+                <a href="https://github.com/UCDvision/compact3d"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                  </a>
+              </span>              
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+<section class="section">
+  <div class="container">
+    <div class="w3-center">
+
+        <div style="width: 30%; display: inline-block;">
+            <video controls style="width:100%" autoplay loop playsinline muted>
+                <source src="./static/videos/bicycle_split.mp4" type="video/mp4">
+                Sorry, your browser doesn't support embedded videos.
+            </video>
+        </div>
+        <div style="width: 30%; display: inline-block;">
+            <video controls style="width:100%" autoplay loop playsinline muted>
+                <source src="./static/videos/garden_split.mp4" type="video/mp4">
+                Sorry, your browser doesn't support embedded videos.
+            </video>
+        </div>
+        <div style="width: 30%; display: inline-block;">
+            <video controls style="width:100%" autoplay loop playsinline muted>
+                <source src="./static/videos/truck_split.mp4" type="video/mp4">
+                Sorry, your browser doesn't support embedded videos.
+            </video>
+        </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- Abstract. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            3D Gaussian Splatting (3DGS) is a new method for modeling and rendering 3D radiance fields that achieves much faster learning and rendering time compared to SOTA NeRF methods. However, it comes with a drawback in the much larger storage demand compared to NeRF methods since it needs to store the parameters for several 3D Gaussians.
+          </p>
+          <p>
+            We notice that many Gaussians may share similar parameters, so we introduce a simple vector quantization method based on K-means to quantize the Gaussian parameters while optimizing them. Then, we store the small codebook along with the index of the code for each Gaussian. We compress the indices further by sorting them and using a method similar to run-length encoding. Moreover, we use a simple regularizer to encourage zero opacity (invisible Gaussians) to reduce the storage and rendering time by a large factor through reducing the number of Gaussians.
+          </p>
+          <p>
+            We do extensive experiments on standard benchmarks as well as an existing 3D dataset that is an order of magnitude larger than the standard benchmarks used in this field. We show that our simple yet effective method can reduce the storage cost for 3DGS by 40-50x and rendering time by 2-3x with a very small drop in the quality of rendered images.
+          </p>          
+        </div>
+      </div>
+    </div>    
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+
+    <div class="w3-left-align">
+      <h2 class="title is-3">How It Works</h2>      
+    </div>
+    <div class="w3-display-container w3-row w3-white w3-margin-bottom w3-center">
+        <embed src="./static/images/teaser_new.png" style="width:70%">
+    </div>
+    <p>We compress 3DGS using vector quantization of the parameters of the Gaussians. The quantization is performed along with the training of the Gaussian parameters. Considering each Gaussian as a vector, we perform K-means clustering to represent the N Gaussians in the model with k cluster centers (codes). Each Gaussian is then replaced by its corresponding code for rendering and loss calculation. The gradients wrt centers are copied to all the elements in the corresponding cluster and the non-quantized versions of the parameters are updated. Only the codebook and code assignments for each Gaussian are stored and used for inference. To further reduce the storage and inference time, we regularize opacity in the loss to encourage fully transparent Gaussians. CompGS maintains the real-time rendering property of 3DGS while compressing it by an order of magnitude. 
+    </p>
+
+    <hr>
+    <div class="w3-left-align w3-margin-bottom">
+        <h2 class="title is-3">Comparison with SOTA Methods</h2>
+    </div>
+    <div class="w3-display-container w3-row w3-white w3-margin-bottom w3-center">
+        <embed src="./static/images/teaser_results.png" style="width:80%">
+    </div>
+    <p>
+      All methods except INGP achieve comparable PSNR that are reported in Table below. CompGS, our compressed version of 3DGS, maintains the speed and performance of 3DGS while reducing its size to the levels of NeRF based approaches. We achieve around 45x compression and 2.5x inference speed up with little drop in performance (CompGS-32K). A bit quantized version of this (Ours-BitQ) compresses it further to a total compression of 65x with hardly noticeable difference in quality.
+    </p>
+
+    <hr>
+    <div class="w3-display-container w3-row w3-white w3-margin-bottom w3-center">
+        <embed src="./static/images/table_1_v2.png" style="width:80%">
+    </div>
+    <p>3DGS performs comparably or outperforms the best of the NeRF based approaches while maintaining a high rendering speed during inference. Trained NeRF models are significantly smaller than 3DGS since NeRFs are parameterized using neural networks while 3DGS requires storage of parameters of millions of 3D Gaussians. CompGS is a vector quantized version of 3DGS that maintains the speed and performance advantages of 3DGS while being 40-50x <strong>smaller</strong>. CompGS 32K BitQ is the post-training bit quantized version of CompGS 32K, in which position parameters are 16-bits, opacity is 8 bits, and the rest are 32 bits. * Reproduced using official code. † Reported from 3DGS. Our timings for 3DGS and CompGS are reported using a RTX6000 GPU while those with † used A6000 GPU. We boldface entries for emphasis.
+    </p>
+
+
+    <hr>
+    <div class="w3-left-align w3-margin-bottom">
+        <h2 class="title is-3">Comparison of Compression Methods</h2>
+    </div>
+    <div class="w3-display-container w3-row w3-white w3-margin-bottom w3-center">
+        <embed src="./static/images/table_2.png" style="width:80%">
+    </div>
+    <p>We evaluate different baseline approaches for compressing the parameters of 3DGS without any reduction in the number of Gaussians. All memory values are reported as a ratio of the method with our smallest model. Our K-Means based vector quantization performs favorably compared to all methods both in terms of novel view synthesis performance and compression. Not quantizing the position values (Int-x no-pos) is crucial in bit quantization. Since harmonics constitute 76% of each Gaussian, 3DGS-no-SH achieves a high level of compression. But CompGS with only quantized harmonics achieves similar compression with nearly no loss in performance compared to 3DGS.
+    </p>
+
+    <hr>
+    <div class="w3-left-align w3-margin-bottom">
+        <h2 class="title is-3">Results on the Large-scale ARKit Dataset</h2>
+    </div>       
+    <div class="w3-display-container w3-row w3-white w3-margin-bottom w3-center">
+        <embed src="./static/images/table_3.png" style="width:50%">
+    </div>
+    <div class="w3-display-container w3-row w3-white w3-margin-bottom w3-center">
+        <embed src="./static/images/ARKit.png" style="width:70%">
+    </div>
+    <p>We introduce ARKit with 200 scenes as a large scale
+      benchmark for novel view synthesis. The benchmark is created
+      using a subset of multi-view images from the ARKit indoor
+      scene understanding dataset. We report results for just the vector quantized version of CompGS. All memory compresssion values are normalized by our smallest model (CompGS 32K BitQ). In the table, CompGS achieves a high level of compression with nearly identical metrics for view synthesis. In the figure, 3DGS-No-SH fails to reconstruct well in several images while CompGS is nearly identical to 3DGS with a large reduction in model size.
+    </p>
+
+    <hr>
+    <div class="w3-left-align w3-margin-bottom">
+        <h2 class="title is-3">Results on DL3DV datasets</h2>
+    </div>
+    <div class="w3-display-container w3-row w3-white w3-margin-bottom w3-center">
+        <embed src="./static/images/table_4.png" style="width:50%">
+    </div>
+    <p>
+      Results on the 140 scenes NVS benchmark of DL3DV-10K dataset are shown in this table. Similar to the results on the smaller benchmarks, CompGS 32K compresses 3DGS by nearly 30x with a small drop in reconstruction quality. * is our reproduced results.
+    </p>
+
+    <hr>
+    <div class="w3-left-align w3-margin-bottom">
+        <h2 class="title is-3">Conclusion</h2>
+    </div>       
+    <p>3D Gaussian Splatting efficiently models 3D radiance fields, outperforming NeRF in learning and rendering efficiency at the cost of increased storage. To reduce storage demands, we apply opacity regularization and K-means-based vector quantization, compressing indices and employing a compact codebook. Our method cuts the storage cost of 3DGS by almost 45x, increases rendering FPS by 2.5x while maintaining image quality across benchmarks.
+
+    </p>
+
+  </div>
+</section>
+
+<hr>
+<section class="section">
+  <div class="container">
+    <div class="w3-left-align w3-margin-bottom">
+        <h2 class="title is-3">BibTeX</h2>
+    </div>
+    <pre><code>@article{navaneet2023compact3d,
+          title={Compact3D: Smaller and Faster Gaussian Splatting with Vector Quantization},
+          author={Navaneet, KL and Meibodi, Kossar Pourahmadi and Koohpayegani, Soroush Abbasi and Pirsiavash, Hamed},
+          journal={arXiv preprint arXiv:2311.18159},
+          year={2023}
+        }</code>
+    </pre>
+  </div>
+</section>
+
+<!-- <section class="section" id="BibTeX">
+  <div class="container is-max-desktop content">
+    <h2 class="title">BibTeX</h2>
+    <pre><code>@inproceedings{navaneet2023compact3d,
+ author = {Navaneet, K L and Pourahmadi Meibodi, Kossar and Koohpayegani, Soroush Abbasi and Pirsiavash, Hamed},
+ title = {Compact3D: Smaller and Faster Gaussian Splatting with Vector Quantization},
+ year = {2023}
+}</code></pre>
+  </div>
+</section> -->
+
+
+<footer class="footer">
+  <div class="container">
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+          <p>
+            We thank the authors of <a href="https://nerfies.github.io/">Nerfies</a> that kindly open sourced the template of this website.
+          </p>        
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
