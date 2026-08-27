@@ -90,10 +90,12 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, render_b
         )
 
         render_pkg = render(render_view, gaussians, pipeline, render_background)
-        rendered_image, image_alpha = render_pkg["render"], render_pkg["alpha"]
+        rendered_image = render_pkg["render"]
 
+        # CD-13: alpha and depth both come from the probe pass.
         render_depth_pkg = render_depth(render_view, gaussians, pipeline, render_background)
-        depth_image = render_depth_pkg["render"][0].unsqueeze(0)
+        image_alpha = render_depth_pkg["alpha"]
+        depth_image = render_depth_pkg["depth"]
         depth_image = depth_image / image_alpha
 
         if torch.any(torch.logical_or(torch.isnan(depth_image), torch.isinf(depth_image))):

@@ -199,8 +199,16 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
 
         # Render
         render_pkg = render(viewpoint_cam, gaussians, pipe_params, bg)
-        rendered_image, image_alpha, viewspace_point_tensor, visibility_filter, radii = \
-            render_pkg["render"], render_pkg["alpha"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        rendered_image, viewspace_point_tensor, visibility_filter, radii = \
+            render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+
+        # CD-13: the diff_gaussian_rasterization_ms fork returns no alpha from
+        # the colour pass, so the depth pass doubles as an alpha probe (see
+        # gaussian_renderer/__init__.py).  This pass ran unconditionally
+        # upstream as well -- it has only moved earlier, it is not an extra one.
+        render_depth_pkg = render_depth(viewpoint_cam, gaussians, pipe_params, bg)
+        image_alpha = render_depth_pkg["alpha"]
+
         if opt_params.learn_background:
             if opt_params.bg_from_bs and opt_params.do_seathru and iteration > opt_params.seathru_from_iter:
                 # do not use learned background; rely on backscatter to hopefully fill this in
@@ -217,8 +225,7 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
         else:
             image = rendered_image
 
-        render_depth_pkg = render_depth(viewpoint_cam, gaussians, pipe_params, bg)
-        depth_image = render_depth_pkg["render"][0].unsqueeze(0)
+        depth_image = render_depth_pkg["depth"]
         if opt_params.filter_depth:
             depth_image = depth_image / image_alpha
             if torch.any(torch.logical_or(torch.isnan(depth_image), torch.isinf(depth_image))):
@@ -791,8 +798,9 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                     render_depth_pkg = render_depth(viewpoint, scene.gaussians, *renderArgs)
 
                     rendered_image = render_pkg["render"]
-                    image_alpha = render_pkg["alpha"]
-                    depth_image = render_depth_pkg["render"][0].unsqueeze(0)
+                    # CD-13: alpha comes from the depth/alpha probe pass.
+                    image_alpha = render_depth_pkg["alpha"]
+                    depth_image = render_depth_pkg["depth"]
 
                     if filter_depth:
                         depth_image = depth_image / image_alpha

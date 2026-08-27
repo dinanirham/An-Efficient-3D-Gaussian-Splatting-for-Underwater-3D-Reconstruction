@@ -129,9 +129,11 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, render_b
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         start_time = time.time()
         render_pkg = render(view, gaussians, pipeline, render_background)
-        rendered_image, image_alpha = render_pkg["render"], render_pkg["alpha"]
+        rendered_image = render_pkg["render"]
+        # CD-13: alpha and depth both come from the probe pass.
         render_depth_pkg = render_depth(view, gaussians, pipeline, render_background)
-        depth_image = render_depth_pkg["render"][0].unsqueeze(0)
+        image_alpha = render_depth_pkg["alpha"]
+        depth_image = render_depth_pkg["depth"]
         depth_image = depth_image / image_alpha
         end_3dgs = time.time()
         if torch.any(torch.logical_or(torch.isnan(depth_image), torch.isinf(depth_image))):
