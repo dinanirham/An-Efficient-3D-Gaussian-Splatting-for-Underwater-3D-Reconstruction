@@ -257,6 +257,23 @@ class OptimizationParams(ParamGroup):
         self.m2_lr_rewind = False
         self.m2_lr_rewind_to = 5_000
 
+        # --- M3 sub-parameters (active only when m3_quantize) --------------
+        # CD-10: quantization must start AFTER the last simplification event.
+        # A codebook fitted before a 60-90% prune is fitted to a population
+        # about to be discarded, and quantization-aware training would spend
+        # its gradient budget adapting parameters that are then deleted.
+        self.kmeans_st_iter = 22_000
+        self.kmeans_k = 4096      # NOT 256: at sh_degree=0 the group machinery
+                                  # is inert, so k is the only quality dial.
+        self.kmeans_freq = 100    # t: full reassignment interval
+        self.kmeans_iters = 1     # K-means iterations per assignment pass
+        # CD-8: the reference method's l1-opacity regulariser is deliberately
+        # NOT implemented.  Its own authors attribute their 2-3x rendering
+        # speedup to it rather than to the quantization, so including it would
+        # make the M3 factor a quantization-plus-pruning factor and the M2/M3
+        # columns of the matrix would stop being independent.  Expect A3 to
+        # show approximately no frame-rate gain; that is the correct result.
+
         # Run-harness controls (not part of the method).
         self.allow_any_gpu = False   # bypass the A100 check; invalidates cross-cell contrasts
         self.diag_interval = 500     # iterations between unconditional diagnostic rows

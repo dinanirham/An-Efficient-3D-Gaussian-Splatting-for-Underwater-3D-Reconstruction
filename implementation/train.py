@@ -37,6 +37,7 @@ from arguments import (
 from utils.preflight import preflight_args, preflight_scene, write_manifest
 from utils.diagnostics import DiagnosticLogger
 from source.simplify import accumulate_importance, cdf_keep_mask, sample_to_budget
+from source.quantize import AttributeQuantizer
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -186,6 +187,12 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
     # CD-6: medium-only steps still owed after a simplification event.
     rewarm_remaining = 0
 
+    # M3: the three codebooks. Constructed unconditionally so that the storage
+    # report exists even for cells that never enable it.
+    attr_quantizer = AttributeQuantizer(
+        num_clusters=opt_params.kmeans_k, num_iters=opt_params.kmeans_iters
+    )
+
     update_gs_color_counter = 0
     adjust_gs_colors_for_cc = False
 
@@ -240,6 +247,18 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+
+        # --- M3: install quantized overrides before anything renders --------
+        # Cleared first, so an iteration before kmeans_st_iter renders exactly
+        # the unquantized parameters. Kept in place for the whole iteration --
+        # including evaluation -- because the quantized model is what gets
+        # stored, so that is what should be scored.
+        gaussians.clear_quant_override()
+        if opt_params.m3_quantize and iteration > opt_params.kmeans_st_iter:
+            attr_quantizer.apply(
+                gaussians,
+                assign=(iteration % opt_params.kmeans_freq == 1),
+            )
 
         # Render
         render_pkg = render(viewpoint_cam, gaussians, pipe_params, bg)
@@ -747,6 +766,20 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                     how = f"cdf prune at {opt_params.cdf_thres}"
 
                 gaussians.prune_points(~keep)
+
+                # The QAT x simplification conflict.  This does not exist for
+                # post-hoc quantization and is created by choosing the
+                # quantization-aware formulation: the assignment vector is
+                # per-primitive, so pruning silently desynchronises it from the
+                # model.  Index-select it alongside everything else, then force
+                # a full reassignment -- a prune is not parameter drift, so
+                # waiting up to `kmeans_freq` steps would leave the model
+                # rendering from a partition fitted to primitives that no
+                # longer exist.
+                if opt_params.m3_quantize:
+                    attr_quantizer.prune(keep)
+                    attr_quantizer.invalidate()
+
                 torch.cuda.empty_cache()
                 n_after = gaussians.get_xyz.shape[0]
 
@@ -793,6 +826,36 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
             if (iteration in saving_iterations):
                 print(f"\n[ITER {iteration}] Saving Gaussians")
                 scene.save(iteration)
+
+                # M3: the codebooks and indices ARE the compressed artifact --
+                # the .ply above holds the unquantized remainder (position and
+                # opacity, which are never quantized).  Both count toward the
+                # reported model size, along with the medium parameter files.
+                if opt_params.m3_quantize and iteration > opt_params.kmeans_st_iter:
+                    n_prim = gaussians.get_xyz.shape[0]
+                    qdir = Path(model_params.model_path) / "quantization"
+                    qdir.mkdir(parents=True, exist_ok=True)
+                    torch.save(
+                        {
+                            name: {
+                                "centers": q.centers.detach().cpu(),
+                                "nn_index": q.nn_index.detach().cpu(),
+                            }
+                            for name, q in attr_quantizer.quantizers.items()
+                        },
+                        qdir / f"codebooks_{iteration}.pt",
+                    )
+                    report = attr_quantizer.storage_report(n_prim)
+                    with open(qdir / f"storage_{iteration}.json", "w",
+                              encoding="utf-8") as fh:
+                        json.dump(report, fh, indent=2)
+                    print(
+                        f"[ITER {iteration}] quantized storage: "
+                        f"{report['total_bits'] / 8 / 1024 / 1024:.2f} MB, "
+                        f"ratio {report['ratio_vs_this_baseline']:.2f}x vs this "
+                        f"baseline's 14 floats/primitive (NOT comparable to "
+                        f"published ratios against 59)"
+                    )
             if (iteration in checkpoint_iterations):
                 print(f"\n[ITER {iteration}] Saving Checkpoint in {scene.model_path}")
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")

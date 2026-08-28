@@ -42,7 +42,12 @@
     "imp_metric": "outdoor",
     "cdf_thres": 0.99,
     "m2_rewarm_steps": 200,
-    "m2_lr_rewind": false
+    "m2_lr_rewind": false,
+
+    "kmeans_st_iter": 22000,
+    "kmeans_k": 4096,
+    "kmeans_freq": 100,
+    "kmeans_iters": 1
   },
 
   "cells": {

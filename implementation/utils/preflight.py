@@ -231,6 +231,33 @@ def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
                 "simplification boundary when interpreting the result."
             )
 
+    # -- M3 schedule and codebook -------------------------------------------
+    if flags[2]:
+        if opt.kmeans_st_iter >= opt.iterations:
+            fail.append(
+                f"kmeans_st_iter={opt.kmeans_st_iter} >= iterations="
+                f"{opt.iterations}: quantization would never start. (This is "
+                f"the reference implementation's own CLI default, which "
+                f"silently disables the method.)"
+            )
+        if flags[1] and opt.kmeans_st_iter <= opt.simp_iteration2:
+            fail.append(
+                f"kmeans_st_iter={opt.kmeans_st_iter} <= simp_iteration2="
+                f"{opt.simp_iteration2}. The codebook would be fitted to a "
+                f"population that is about to be pruned, and quantization-aware "
+                f"training would spend its gradient budget adapting parameters "
+                f"that are then discarded (CD-10)."
+            )
+        if opt.kmeans_k < 2:
+            fail.append(f"kmeans_k must be >= 2, got {opt.kmeans_k}")
+        elif opt.kmeans_k < 4096:
+            warn.append(
+                f"kmeans_k={opt.kmeans_k} is below 4096. At sh_degree=0 the "
+                f"grouping machinery is inert, so k is the only quality dial "
+                f"quantization has; small values here were a known defect in a "
+                f"previous attempt."
+            )
+
     # -- seeding ------------------------------------------------------------
     seed = getattr(args, "seed", -1)
     if seed is None or seed < 0:

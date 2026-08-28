@@ -59,6 +59,10 @@ class GaussianModel:
         self.percent_dense = 0
         self.spatial_lr_scale = 0
         self.do_isotropic = do_isotropic
+        # M3: straight-through quantized stand-ins for the RAW parameters.
+        # Empty means "render the real parameters", so every cell without
+        # quantization is bit-identical to the unquantized path.
+        self._quant_override: dict = {}
         self.tensor_requires_grad = {
             "xyz": True,
             "f_dc": True,
@@ -103,24 +107,43 @@ class GaussianModel:
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
 
+    # ---- M3: quantization overrides ------------------------------------
+    # The override replaces the RAW parameter and the existing activation
+    # still applies on top, which is what "quantize before activation" means:
+    # scale is clustered pre-exp and rotation pre-normalisation, so Euclidean
+    # distance in the clustered space stays meaningful.  Post-activation, the
+    # same codebook error would mean wildly different geometric error at
+    # different magnitudes.
+
+    def set_quant_override(self, name: str, tensor) -> None:
+        self._quant_override[name] = tensor
+
+    def clear_quant_override(self) -> None:
+        self._quant_override = {}
+
+    def _maybe_quant(self, name: str, default):
+        return self._quant_override.get(name, default)
+
     @property
     def get_scaling(self):
+        raw = self._maybe_quant("scaling", self._scaling)
         if self.do_isotropic:
-            return self.scaling_activation(self._scaling).repeat(1, 3)
+            return self.scaling_activation(raw).repeat(1, 3)
         else:
-            return self.scaling_activation(self._scaling)
+            return self.scaling_activation(raw)
 
     @property
     def get_rotation(self):
-        return self.rotation_activation(self._rotation)
+        return self.rotation_activation(self._maybe_quant("rotation", self._rotation))
 
     @property
     def get_xyz(self):
+        # Never quantized: sharing positions makes distinct primitives coincide.
         return self._xyz
 
     @property
     def get_features(self):
-        features_dc = self._features_dc
+        features_dc = self._maybe_quant("features_dc", self._features_dc)
         features_rest = self._features_rest
         return torch.cat((features_dc, features_rest), dim=1)
 
