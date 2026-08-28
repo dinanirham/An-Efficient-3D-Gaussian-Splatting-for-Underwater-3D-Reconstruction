@@ -9,9 +9,12 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-from argparse import ArgumentParser, Namespace
-import sys
+import argparse
+import json
 import os
+import sys
+from argparse import ArgumentParser, Namespace
+from pathlib import Path
 
 class GroupParams:
     pass
@@ -26,16 +29,27 @@ class ParamGroup:
                 key = key[1:]
             t = type(value)
             value = value if not fill_none else None
-            if shorthand:
-                if t == bool:
-                    group.add_argument("--" + key, ("-" + key[0:1]), default=value, action="store_true")
-                else:
-                    group.add_argument("--" + key, ("-" + key[0:1]), default=value, type=t)
+            if t == bool:
+                # CD-1.  Upstream registered every bool with action="store_true",
+                # which can only SET a flag.  Roughly a dozen options default to
+                # True, so they could not be turned off from the command line at
+                # all -- making a 2^3 ablation matrix impossible without editing
+                # source between cells.  BooleanOptionalAction gives both
+                # --flag and --no-flag, which is the whole fix.
+                #
+                # Bools lose their single-dash shorthand: argparse cannot give a
+                # short option a --no- counterpart.  Only _white_background was
+                # affected (-w); the shorthands SeaSplat's README actually uses
+                # (-s, -m) are strings and are untouched.
+                group.add_argument(
+                    "--" + key,
+                    default=value,
+                    action=argparse.BooleanOptionalAction,
+                )
+            elif shorthand:
+                group.add_argument("--" + key, ("-" + key[0:1]), default=value, type=t)
             else:
-                if t == bool:
-                    group.add_argument("--" + key, default=value, action="store_true")
-                else:
-                    group.add_argument("--" + key, default=value, type=t)
+                group.add_argument("--" + key, default=value, type=t)
 
     def extract(self, args):
         group = GroupParams()
@@ -183,7 +197,80 @@ class OptimizationParams(ParamGroup):
         self.scale_grad_threshold = 1.0
         self.do_z_score = False               # z threshold direct image to +/- 5 stdevs
 
+        # ------------------------------------------------------------------
+        # Ablation mechanism flags (CD-1).
+        #
+        # These three bits, and nothing else, select a cell of the 2^3
+        # factorial matrix:
+        #     A0 000  A1 100  A2 010  A3 001
+        #     A4 110  A5 101  A6 011  A7 111
+        # Prefer `--cell A4` (configs/cells.json) over setting them by hand;
+        # the cell file also carries the per-cell overrides each mechanism
+        # needs, and it is what gets recorded in the run manifest.
+        # ------------------------------------------------------------------
+        self.m1_dense_init = False   # dense correspondence init; densification off
+        self.m2_simplify = False     # importance-weighted simplification to budget
+        self.m3_quantize = False     # quantization-aware attribute VQ
+
+        # Run-harness controls (not part of the method).
+        self.allow_any_gpu = False   # bypass the A100 check; invalidates cross-cell contrasts
+        self.diag_interval = 500     # iterations between unconditional diagnostic rows
+
         super().__init__(parser, "Optimization Parameters")
+
+CELLS_PATH = Path(__file__).resolve().parent.parent / "configs" / "cells.json"
+
+
+def load_cells() -> dict:
+    """Read the ablation-matrix definition."""
+    with open(CELLS_PATH, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def add_cell_argument(parser: ArgumentParser) -> None:
+    """Register `--cell`, the only supported way to select a matrix cell."""
+    parser.add_argument(
+        "--cell",
+        type=str,
+        default=None,
+        help="Ablation cell (A0..A7). Values from configs/cells.json are folded "
+             "into the parser defaults, so anything given explicitly on the "
+             "command line still wins.",
+    )
+
+
+def apply_cell_config(parser: ArgumentParser) -> tuple[str | None, dict]:
+    """Fold the selected cell's values into `parser`'s defaults (CD-1).
+
+    Resolution order is therefore, weakest to strongest:
+
+        code defaults  <  cell file  <  explicit command line
+
+    which falls out of argparse's own precedence once the cell values are
+    installed as defaults -- no second parse and no "was this passed?"
+    sentinel logic, both of which are easy to get subtly wrong.
+
+    Returns (cell_name, applied_values) for the manifest.
+    """
+    pre = ArgumentParser(add_help=False)
+    pre.add_argument("--cell", type=str, default=None)
+    known, _ = pre.parse_known_args()
+    if known.cell is None:
+        return None, {}
+
+    cells = load_cells()
+    name = known.cell.upper()
+    if name not in cells["cells"]:
+        raise SystemExit(
+            f"unknown cell {known.cell!r}; expected one of "
+            f"{', '.join(sorted(cells['cells']))}"
+        )
+
+    values = dict(cells["defaults"])
+    values.update(cells["cells"][name]["set"])
+    parser.set_defaults(**values)
+    return name, values
+
 
 def get_combined_args(parser : ArgumentParser):
     cmdlne_string = sys.argv[1:]

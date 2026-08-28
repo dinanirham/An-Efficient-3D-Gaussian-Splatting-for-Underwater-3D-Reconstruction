@@ -135,8 +135,15 @@ def safe_state(silent, seed:int):
         random.seed()
         np.random.seed()
         torch.manual_seed(torch.seed())
+        torch.cuda.manual_seed_all(torch.seed())
     else:
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
+        # Upstream never seeded the CUDA generator, so --seed left every
+        # GPU-side draw uncontrolled -- including the initial backscatter
+        # coefficients and water colour, which matter because the "no medium"
+        # degeneracy is a global optimum of the photometric loss and the
+        # starting point is what decides whether the run escapes it.
+        torch.cuda.manual_seed_all(seed)
     torch.cuda.set_device(torch.device("cuda:0"))

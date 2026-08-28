@@ -27,7 +27,15 @@ from tqdm import tqdm
 from utils.general_utils import inverse_sigmoid
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
-from arguments import ModelParams, PipelineParams, OptimizationParams
+from arguments import (
+    ModelParams,
+    PipelineParams,
+    OptimizationParams,
+    add_cell_argument,
+    apply_cell_config,
+)
+from utils.preflight import preflight_args, preflight_scene, write_manifest
+from utils.diagnostics import DiagnosticLogger
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -78,6 +86,16 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
     tb_writer = prepare_output_and_logger(model_params)
     gaussians = GaussianModel(model_params.sh_degree, opt_params.do_isotropic)
     scene = Scene(model_params, gaussians, shuffle=opt_params.shuffle)
+
+    # M2: the split can only be checked once the dataset is loaded.
+    split_sizes = preflight_scene(scene)
+    diag = DiagnosticLogger(model_params.model_path, opt_params.diag_interval)
+    diag.log(
+        iteration=0,
+        event="init",
+        n_primitives=gaussians.get_xyz.shape[0],
+        note=f"train={split_sizes['train_cameras']} test={split_sizes['test_cameras']}",
+    )
 
     # deep see color
     if opt_params.do_seathru:
@@ -226,6 +244,11 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
             image = rendered_image
 
         depth_image = render_depth_pkg["depth"]
+        # CD-12: the per-frame depth normalisation constants. Recorded because
+        # beta is only identifiable relative to them, so any change in the
+        # primitive population rescales the medium model's only spatial input.
+        depth_norm_min = None
+        depth_norm_max = None
         if opt_params.filter_depth:
             depth_image = depth_image / image_alpha
             if torch.any(torch.logical_or(torch.isnan(depth_image), torch.isinf(depth_image))):
@@ -238,10 +261,14 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                 depth_image = torch.nan_to_num(depth_image, not_nan_max, not_nan_max)
             depth_image = depth_image / opt_params.normalize_depth
             if opt_params.norm_depth_max:
+                # Capture the constants BEFORE applying them: afterwards they
+                # are 0 and 1 by construction and carry no information.
+                depth_norm_min = depth_image.min().item()
+                depth_norm_max = depth_image.max().item()
                 if depth_image.min() != depth_image.max():
                     depth_image = (depth_image - depth_image.min()) / (depth_image.max() - depth_image.min())
                 else:
-                    depth_image = depth_image = depth_image / depth_image.max()
+                    depth_image = depth_image / depth_image.max()
 
         if opt_params.use_gt_depth:
             assert viewpoint_cam.original_depth_image is not None
@@ -433,6 +460,24 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
             bg_optimizer.zero_grad()
 
         loss.backward()
+
+        # CD-12: one unconditional diagnostic row every diag_interval steps.
+        # Unconditional matters: upstream printed a primitive count only when
+        # something was actually pruned, which makes silence ambiguous between
+        # "under budget" and "never ran" -- and that ambiguity is precisely what
+        # loses the answer to whether the budget ever bound.
+        if diag.due(iteration):
+            diag.log(
+                iteration=iteration,
+                event="periodic",
+                n_primitives=gaussians.get_xyz.shape[0],
+                alpha_image=image_alpha,
+                bs_model=bs_model if opt_params.do_seathru else None,
+                at_model=at_model if opt_params.do_seathru else None,
+                loss=loss.item(),
+                z_min=depth_norm_min,
+                z_max=depth_norm_max,
+            )
 
         '''
         periodically update the backscatter and attenuation functions for a given splat
@@ -1032,6 +1077,15 @@ if __name__ == "__main__":
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--exp", type=str, default = "test")
     parser.add_argument("--seed", type=int, default = -1)
+    add_cell_argument(parser)
+
+    # CD-1: fold the selected cell into the parser DEFAULTS before parsing, so
+    # that explicit command-line arguments still override it.  Doing it this
+    # way means argparse's own precedence gives us
+    #     code defaults < cell file < command line
+    # without a second parse or any "was this actually passed?" sentinel logic.
+    cell_name, cell_values = apply_cell_config(parser)
+
     args = parser.parse_args(sys.argv[1:])
     args.test_iterations.insert(0, 1)
     args.save_iterations.append(args.iterations)
@@ -1045,6 +1099,18 @@ if __name__ == "__main__":
         os.makedirs(args.model_path)
 
     print("Optimizing " + args.model_path)
+
+    # M2: refuse to start a run that cannot answer the question it was
+    # configured to ask.  Every check here guards a failure that is otherwise
+    # silent -- see utils/preflight.py.
+    preflight_args(args, op.extract(args), lp.extract(args))
+    write_manifest(
+        model_path=args.model_path,
+        args=args,
+        cell_name=cell_name,
+        cell_values=cell_values,
+        repo_root=Path(__file__).resolve().parent,
+    )
 
     # Initialize system state (RNG)
     safe_state(args.quiet, args.seed)
