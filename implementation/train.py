@@ -39,6 +39,7 @@ from utils.preflight import preflight_args, preflight_scene, write_manifest
 from utils.diagnostics import DiagnosticLogger
 from source.simplify import accumulate_importance, cdf_keep_mask, sample_to_budget
 from source.quantize import AttributeQuantizer
+from source.storage import measure_model_size, write_compressed_model
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -837,35 +838,48 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                 print(f"\n[ITER {iteration}] Saving Gaussians")
                 scene.save(iteration)
 
-                # M3: the codebooks and indices ARE the compressed artifact --
-                # the .ply above holds the unquantized remainder (position and
-                # opacity, which are never quantized).  Both count toward the
-                # reported model size, along with the medium parameter files.
-                if opt_params.m3_quantize and iteration > opt_params.kmeans_st_iter:
-                    n_prim = gaussians.get_xyz.shape[0]
-                    qdir = Path(model_params.model_path) / "quantization"
-                    qdir.mkdir(parents=True, exist_ok=True)
-                    torch.save(
-                        {
-                            name: {
-                                "centers": q.centers.detach().cpu(),
-                                "nn_index": q.nn_index.detach().cpu(),
-                            }
-                            for name, q in attr_quantizer.quantizers.items()
-                        },
-                        qdir / f"codebooks_{iteration}.pt",
-                    )
-                    report = attr_quantizer.storage_report(n_prim)
-                    with open(qdir / f"storage_{iteration}.json", "w",
-                              encoding="utf-8") as fh:
-                        json.dump(report, fh, indent=2)
+                # Model size, measured rather than asserted.  Written for EVERY
+                # cell, not only the quantized ones: a compression ratio is only
+                # meaningful against an artifact produced the same way, so the
+                # unquantized cells need one too.  The .ply saved above is for
+                # rendering and inspection; this is the shippable artifact and
+                # the thing the reported size refers to.
+                quant_active = (
+                    opt_params.m3_quantize
+                    and iteration > opt_params.kmeans_st_iter
+                )
+                artifact = write_compressed_model(
+                    Path(model_params.model_path) / f"compressed_{iteration}",
+                    gaussians,
+                    attr_quantizer if quant_active else None,
+                    bs_model=bs_model if opt_params.do_seathru else None,
+                    at_model=at_model if opt_params.do_seathru else None,
+                    learned_bg=learned_bg if opt_params.learn_background else None,
+                )
+                size_report = measure_model_size(artifact)
+                with open(artifact / "model_size.json", "w", encoding="utf-8") as fh:
+                    json.dump(size_report, fh, indent=2)
+
+                print(
+                    f"[ITER {iteration}] model size: {size_report['total_mb']:.3f} MB "
+                    f"({size_report['bytes_per_primitive']:.2f} B/primitive, "
+                    f"{size_report['num_primitives']} primitives)"
+                )
+                if quant_active:
                     print(
-                        f"[ITER {iteration}] quantized storage: "
-                        f"{report['total_bits'] / 8 / 1024 / 1024:.2f} MB, "
-                        f"ratio {report['ratio_vs_this_baseline']:.2f}x vs this "
-                        f"baseline's 14 floats/primitive (NOT comparable to "
-                        f"published ratios against 59)"
+                        f"[ITER {iteration}] ratio {size_report['ratio_vs_this_baseline']:.2f}x "
+                        f"vs this baseline's 14 floats/primitive -- NOT comparable "
+                        f"with published ratios against 59"
                     )
+                    # A gap here means the encoder is spending bits the analysis
+                    # does not know about.
+                    over = size_report.get("measured_over_analytical")
+                    if over and over > 1.10:
+                        print(
+                            f"[ITER {iteration}] NOTE: measured size is {over:.2f}x the "
+                            f"analytical count; the difference is container overhead "
+                            f"and should be reported, not silently dropped."
+                        )
             if (iteration in checkpoint_iterations):
                 print(f"\n[ITER {iteration}] Saving Checkpoint in {scene.model_path}")
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")

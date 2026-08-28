@@ -142,6 +142,48 @@ failure of the method.
 > at 10⁶ primitives is 15.3 MB and is the entire residual budget once attributes are cheap) —
 > the same diagnosis CompGS-VQ made, arriving here for the same structural reason.
 
+### ⭐ The compression ratio depends on the primitive count — which M2 changes
+
+Measuring the artifact on disk (rather than counting bits) exposed something the analytical
+estimate hides: **the codebook is a fixed cost.** At `k = 4096` over three groups it is
+`4096 × 10 floats × 4 B ≈ 160 KB` regardless of how many primitives exist, so it is amortised
+over `N` and the achievable ratio *grows* with `N`.
+
+Measured, and fitted by `ratio(N) = 56N / (20.5N + 163840)`:
+
+| `N` | Ratio vs the 14-float baseline | Source |
+|---|---|---|
+| 5 000 | **1.05×** | measured `[verify_storage.py T4]` |
+| 20 000 | **1.95×** | measured `[verify_storage.py T5]` |
+| 100 000 | 2.53× | from the fit |
+| 500 000 | 2.69× | from the fit |
+| 1 000 000 | **2.71×** | analytical `[verify_quantize.py T9]` |
+| `N → ∞` | 2.73× | asymptote, `56 / 20.5` |
+
+The fit reproduces all three measured points, so the relationship is understood rather than
+merely observed.
+
+**Why this matters for the study.** M2 reduces `N`; M3's ratio improves with `N`. So the two
+mechanisms interact on the **storage** axis, in a direction that is now predictable and
+signed: *pruning makes quantization relatively less effective per primitive*, because the same
+fixed codebook is spread over fewer of them.
+
+Two consequences worth stating up front:
+
+1. **The interaction is small at realistic budgets.** Between 500 k and 1 M primitives the
+   ratio moves by only 0.02×. It becomes material only below ~50 k, which is well under any
+   budget this study would set. So the effect exists, is real, and is probably not what makes
+   A6 interesting — the quality-side sensitivity that `../OMG/` predicts remains the more
+   likely story.
+2. **A6 and A7 must report storage per primitive as well as total**, or a ratio that fell
+   because `N` fell will be misread as quantization performing worse. That is a reporting
+   requirement, not an analysis one, and it is now emitted automatically
+   (`bytes_per_primitive` in every `model_size.json`).
+
+This is a genuine interaction prediction with a closed form, derived from the implementation
+rather than from either source paper — neither faced it, because neither varies `N` and the
+codebook size together.
+
 **(2) Hardware is not comparable across the four sources.** `../comparison-glossary.md` §3.6
 ranks disclosure: RoMa v2 (H200) > SeaThru-NeRF and EDGS (A100) > Mini-Splatting (3090),
 CompGS-VQ (RTX 6000) > **SeaSplat and CompGS-Liu (none named)**. Three GPU generations and
