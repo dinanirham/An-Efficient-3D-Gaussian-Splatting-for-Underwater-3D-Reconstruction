@@ -149,6 +149,7 @@ python -m tools.verify_config_layer   # 6
 python -m tools.verify_ledger         # 11
 python -m tools.verify_metrics        # 7
 python -m tools.verify_storage        # 8
+python -m tools.verify_analysis       # 9
 python -m tools.verify_dense_init     # 6
 python -m tools.verify_simplify       # 6
 python -m tools.verify_quantize       # 9
