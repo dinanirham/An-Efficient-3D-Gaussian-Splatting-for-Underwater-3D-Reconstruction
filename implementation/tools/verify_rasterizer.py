@@ -173,14 +173,20 @@ def t1_alpha_range() -> Result:
 
 
 def t2_alpha_composition() -> Result:
-    """Two stacked Gaussians must composite as 1-(1-a1)(1-a2)."""
+    """Two stacked Gaussians must composite as 1-(1-a1)(1-a2).
+
+    Both sit at the SAME depth, so their projected footprints -- and hence
+    their per-pixel alphas -- are identical.  At different depths the screen
+    sizes differ, the two per-pixel alphas are no longer equal, and
+    1-(1-a)^2 stops being the right closed form to compare against.
+    """
     from gaussian_renderer import render_depth_alpha
 
     cam, pipe = make_camera(), FakePipe()
     a = 0.5
     one = FakeGaussians(torch.tensor([[0.0, 0.0, 2.0]]), torch.tensor([[a]]))
     two = FakeGaussians(
-        torch.tensor([[0.0, 0.0, 2.0], [0.0, 0.0, 3.0]]),
+        torch.tensor([[0.0, 0.0, 2.0], [0.0, 0.0, 2.0]]),
         torch.tensor([[a], [a]]),
     )
 
