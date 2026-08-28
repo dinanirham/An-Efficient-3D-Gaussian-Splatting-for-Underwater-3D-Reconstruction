@@ -103,6 +103,7 @@ def gpu_info() -> dict[str, Any]:
 def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
     """Checks that depend only on the resolved configuration."""
     fail: list[str] = []
+    warn: list[str] = []
 
     # -- GPU identity -------------------------------------------------------
     gpu = gpu_info()
@@ -183,6 +184,53 @@ def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
         elif not Path(pcd).exists():
             fail.append(f"m1_dense_init cloud does not exist: {pcd}")
 
+    # -- M2 needs a budget that can actually bind ---------------------------
+    if flags[1]:
+        n_bud = getattr(opt, "n_bud", -1)
+        if n_bud is None or n_bud <= 0:
+            fail.append(
+                "m2_simplify is set but n_bud is unset. The budget is an "
+                "explicit primitive count, and it must be derived from A0's "
+                "converged count so that it binds in every cell -- a budget "
+                "that does not bind makes A4 equivalent to A1 and A7 to A5, "
+                "and a null interaction measured in that state is a "
+                "configuration artifact rather than a finding. Run A0 first "
+                "and read its final count from diagnostics.csv."
+            )
+        if getattr(opt, "imp_metric", None) not in ("indoor", "outdoor"):
+            fail.append(
+                f"imp_metric must be 'indoor' or 'outdoor', got "
+                f"{getattr(opt, 'imp_metric', None)!r}. Neither was designed "
+                f"for a scattering medium; the choice must be deliberate."
+            )
+        if not (opt.simp_iteration1 < opt.simp_iteration2 <= opt.iterations):
+            fail.append(
+                f"simplification schedule out of order: simp_iteration1="
+                f"{opt.simp_iteration1}, simp_iteration2={opt.simp_iteration2}, "
+                f"iterations={opt.iterations}"
+            )
+        if opt.simp_iteration1 <= opt.seathru_from_iter:
+            fail.append(
+                f"simp_iteration1={opt.simp_iteration1} <= seathru_from_iter="
+                f"{opt.seathru_from_iter}: the medium model would not yet be "
+                f"active at the first simplification event, so the CD-6 "
+                f"re-identification burst could not run and the depth rescale "
+                f"it exists to absorb would go uncorrected."
+            )
+        if getattr(opt, "m2_rewarm_steps", 0) <= 0:
+            # Not fatal: running without the burst is exactly the ablation that
+            # tests whether CD-6 is necessary.  But it must be visible in the
+            # log, because the resulting damage shows up as "pruning cost
+            # quality" -- indistinguishable, without the diagnostics, from the
+            # effect being measured.
+            warn.append(
+                "m2_rewarm_steps=0: the medium model will NOT be re-identified "
+                "after the primitive population changes. Valid as a deliberate "
+                "ablation of CD-6; invalid as a default. Confirm this is "
+                "intended, and read diagnostics.csv's beta columns across the "
+                "simplification boundary when interpreting the result."
+            )
+
     # -- seeding ------------------------------------------------------------
     seed = getattr(args, "seed", -1)
     if seed is None or seed < 0:
@@ -195,6 +243,8 @@ def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
     if fail:
         raise PreflightError(fail)
 
+    for w in warn:
+        print(f"[preflight] WARNING: {w}")
     print(f"[preflight] ok  cell={cell}  gpu={gpu.get('name')}  seed={seed}")
 
 

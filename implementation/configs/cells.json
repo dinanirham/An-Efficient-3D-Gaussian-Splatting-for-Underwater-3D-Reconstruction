@@ -20,12 +20,29 @@
     "cell definition and the manifest always describe the same run."
   ],
 
+  "_n_bud_note": [
+    "n_bud (the M2 primitive budget) is deliberately NOT set here.",
+    "It must be derived from A0's converged primitive count, which no",
+    "publication of the baseline reports, so it is not knowable until A0 has",
+    "run.  Pass it on the command line for every m2 cell:  --n_bud <count>.",
+    "Preflight refuses to start an m2 run without it, because a budget that",
+    "does not bind makes A4 equivalent to A1 and A7 to A5 -- and a null",
+    "interaction measured in that state is a configuration artifact."
+  ],
+
   "defaults": {
     "iterations": 30000,
     "eval": true,
     "do_seathru": true,
     "seathru_from_iter": 10000,
-    "diag_interval": 500
+    "diag_interval": 500,
+
+    "simp_iteration1": 15000,
+    "simp_iteration2": 20000,
+    "imp_metric": "outdoor",
+    "cdf_thres": 0.99,
+    "m2_rewarm_steps": 200,
+    "m2_lr_rewind": false
   },
 
   "cells": {

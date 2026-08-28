@@ -36,6 +36,7 @@ from arguments import (
 )
 from utils.preflight import preflight_args, preflight_scene, write_manifest
 from utils.diagnostics import DiagnosticLogger
+from source.simplify import accumulate_importance, cdf_keep_mask, sample_to_budget
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -182,6 +183,9 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
     at_inited = False
     bs_inited = False
 
+    # CD-6: medium-only steps still owed after a simplification event.
+    rewarm_remaining = 0
+
     update_gs_color_counter = 0
     adjust_gs_colors_for_cc = False
 
@@ -201,6 +205,19 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
         lr_iteration = iteration
         if opt_params.m1_dense_init and opt_params.m1_max_lr:
             lr_iteration = max(iteration, opt_params.m1_max_lr_floor)
+        if (
+            opt_params.m2_simplify
+            and opt_params.m2_lr_rewind
+            and iteration >= opt_params.simp_iteration1
+        ):
+            # Off by default.  Mini-Splatting's rewind exists so that freshly
+            # REINITIALIZED primitives still have enough LR to move; under the
+            # simplification-only scoping the survivors keep their parameters
+            # and their Adam state, so the premise does not hold.  Kept as a
+            # flag because it is the natural sensitivity check.
+            lr_iteration = (
+                iteration - opt_params.simp_iteration1 + opt_params.m2_lr_rewind_to
+            )
         gaussians.update_learning_rate(lr_iteration)
 
         # Freeze the gaussian model as necessary
@@ -492,6 +509,48 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
         periodically update the backscatter and attenuation functions for a given splat
         '''
         if opt_params.do_seathru and iteration > opt_params.seathru_from_iter :
+            # ---- CD-6: medium re-identification after a simplification event.
+            #
+            # This is the central integration decision of the method.  The
+            # medium model's only spatial input is a depth map renormalised to
+            # [0,1] by its own per-frame min and max, and beta enters the image
+            # formation model only through the product beta*Z.  Removing a
+            # large fraction of the primitives changes which surfaces are
+            # nearest and farthest in each frame, so the normalisation moves and
+            # the depth field is rescaled -- which is formally indistinguishable
+            # from a change in beta itself.
+            #
+            # That is SeaSplat's own depth/medium degeneracy, but it does NOT
+            # arrive as something the optimizer discovered and is exploiting: it
+            # is injected from outside the objective by a scheduled event.  Every
+            # mechanism the baseline provides (gradient detachment, alternating
+            # optimization, the global-homogeneity assumption) defends against
+            # the former case and is silent about the latter.
+            #
+            # The remedy reuses the baseline's own machinery rather than adding
+            # a new device: medium-only steps with the geometry untouched, the
+            # same block-coordinate discipline that makes the factorisation
+            # tractable in the first place.  Like the existing warm-up, these
+            # steps consume no iteration budget -- they are extra optimizer
+            # steps, and are reported as such.
+            if rewarm_remaining > 0:
+                bs_optimizer.step()
+                at_optimizer.step()
+                rewarm_remaining -= 1
+                if rewarm_remaining == 0:
+                    print(f"[{iteration}] medium re-identification complete")
+                    diag.log(
+                        iteration=iteration,
+                        event="rewarm_end",
+                        n_primitives=gaussians.get_xyz.shape[0],
+                        bs_model=bs_model,
+                        at_model=at_model,
+                        z_min=depth_norm_min,
+                        z_max=depth_norm_max,
+                        note=f"steps={opt_params.m2_rewarm_steps}",
+                    )
+                continue
+
             do_at_bs_update = (not bs_inited and not at_inited) or (iteration % opt_params.update_bs_at_interval == 0)
             if do_at_bs_update:
                 update_count = opt_params.update_bs_at_count if bs_inited else 1000
@@ -651,6 +710,78 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                     )
                 ):
                     gaussians.reduce_opacity_step(opt_params.m1_reduce_opacity_factor)
+
+            # --- M2: simplification to the primitive budget -----------------
+            if opt_params.m2_simplify and iteration in (
+                opt_params.simp_iteration1,
+                opt_params.simp_iteration2,
+            ):
+                n_before = gaussians.get_xyz.shape[0]
+                # Captured before the event: this row and the post_simp row
+                # together are the direct test of whether primitive reduction
+                # rescales the medium model's input (CD-12).
+                diag.log(
+                    iteration=iteration,
+                    event="pre_simp",
+                    n_primitives=n_before,
+                    bs_model=bs_model if opt_params.do_seathru else None,
+                    at_model=at_model if opt_params.do_seathru else None,
+                    z_min=depth_norm_min,
+                    z_max=depth_norm_max,
+                )
+
+                importance, _ = accumulate_importance(
+                    gaussians,
+                    scene.getTrainCameras(),
+                    render,
+                    pipe_params,
+                    bg,
+                    metric=opt_params.imp_metric,
+                )
+
+                if iteration == opt_params.simp_iteration1:
+                    keep = sample_to_budget(importance, opt_params.n_bud)
+                    how = f"stochastic sampling to budget {opt_params.n_bud}"
+                else:
+                    keep = cdf_keep_mask(importance, opt_params.cdf_thres)
+                    how = f"cdf prune at {opt_params.cdf_thres}"
+
+                gaussians.prune_points(~keep)
+                torch.cuda.empty_cache()
+                n_after = gaussians.get_xyz.shape[0]
+
+                if iteration == opt_params.simp_iteration1:
+                    budget_bound = n_before > opt_params.n_bud
+                    note = f"{how}; before={n_before}; budget_bound={budget_bound}"
+                    if not budget_bound:
+                        # G-2.  A non-binding budget makes this cell equivalent
+                        # to running without M2, which silently collapses A4
+                        # onto A1 and A7 onto A5.  A null interaction measured
+                        # in that state is a configuration artifact, not a
+                        # finding, so it is called out loudly rather than left
+                        # for the analysis to discover.
+                        print(
+                            f"[{iteration}] *** WARNING: budget did NOT bind "
+                            f"({n_before} <= n_bud={opt_params.n_bud}). This run is "
+                            f"equivalent to one without M2; treat any interaction "
+                            f"result from it as a configuration artifact. ***"
+                        )
+                else:
+                    note = f"{how}; before={n_before}"
+
+                print(f"[{iteration}] M2 {how}: {n_before} -> {n_after}")
+                diag.log(
+                    iteration=iteration,
+                    event="post_simp",
+                    n_primitives=n_after,
+                    bs_model=bs_model if opt_params.do_seathru else None,
+                    at_model=at_model if opt_params.do_seathru else None,
+                    note=note,
+                )
+
+                # CD-6: owe the medium model its re-identification steps.
+                if opt_params.do_seathru and iteration > opt_params.seathru_from_iter:
+                    rewarm_remaining = opt_params.m2_rewarm_steps
 
 
             # Optimizer step

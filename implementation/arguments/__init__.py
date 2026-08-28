@@ -230,6 +230,33 @@ class OptimizationParams(ParamGroup):
         self.m1_reduce_opacity_interval = 10     # ...every N iterations
         self.m1_decay_stops_at_seathru = True    # stop once L_op is also acting
 
+        # --- M2 sub-parameters (active only when m2_simplify) --------------
+        self.simp_iteration1 = 15_000   # stochastic sampling to the budget
+        self.simp_iteration2 = 20_000   # light deterministic CDF prune
+        self.n_bud = -1                 # primitive budget; REQUIRED when m2 is on.
+                                        # An explicit count, not a ratio (CD-5):
+                                        # a ratio of a varying population cannot
+                                        # be made to bind in every cell, and a
+                                        # non-binding budget silently collapses
+                                        # A4 onto A1 and A7 onto A5.
+        self.imp_metric = "outdoor"     # indoor -> I^1, outdoor -> I^2
+        self.cdf_thres = 0.99           # mass retained at the second event
+
+        # CD-6 -- the central integration decision of this work.  After a
+        # simplification event the per-frame depth normalisation constants have
+        # moved, so beta is now fitted to a rescaled input.  These medium-only
+        # steps let it re-identify before geometry moves again.  Exposed rather
+        # than fixed because the right length is genuinely unknown (OQ-10).
+        self.m2_rewarm_steps = 200
+
+        # Mini-Splatting rewinds the position-LR schedule after simplification
+        # so that freshly REINITIALIZED primitives can still move.  Under the
+        # simplification-only scoping (CD-4) nothing is reinitialized -- the
+        # survivors keep their parameters and their Adam state -- so that
+        # premise does not hold here and the rewind is off by default.
+        self.m2_lr_rewind = False
+        self.m2_lr_rewind_to = 5_000
+
         # Run-harness controls (not part of the method).
         self.allow_any_gpu = False   # bypass the A100 check; invalidates cross-cell contrasts
         self.diag_interval = 500     # iterations between unconditional diagnostic rows
