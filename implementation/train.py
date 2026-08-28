@@ -10,6 +10,7 @@
 #
 
 import os
+import time
 from datetime import datetime
 import glob
 import json
@@ -198,9 +199,18 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
 
     done_binf_init_with_bg = False
     print_message_once = False
+    effective_steps = 0
+    training_started_at = time.time()
     while iteration < opt_params.iterations + 1:
-        # # maybe this will help?
-        # torch.cuda.empty_cache()
+        # Effective optimizer steps, which are NOT the iteration count.  The
+        # medium warm-up, the colour-adjustment phase, the periodic medium
+        # bursts and CD-6's re-identification all `continue` past
+        # `iteration += 1`, so each performs a full forward, backward and
+        # optimizer step without advancing the counter -- at default settings a
+        # nominally 30k-iteration run does roughly 43k of them, each paying the
+        # cost of both rasterization passes.  Every loop pass is one step, so
+        # counting here is exactly the quantity a timing comparison needs.
+        effective_steps += 1
         iter_start.record()
 
         # R-5 / CD-7: under dense initialization the position LR schedule is
@@ -925,12 +935,42 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
     eval images
     '''
     print("Running metrics")
-    results = {}
+    from utils.metrics_conventions import (
+        aggregate_images,
+        convention_note,
+        evaluate_pair,
+    )
+
+    # The container choice is silent upstream: the harness writes JPEG whenever
+    # the ground-truth directory holds no PNGs, which quietly changes every
+    # reported number. The local corpus is PNG, so this should read "png" --
+    # logged rather than assumed.
+    container = "jpeg" if use_jpeg else "png"
+    lpips_net = "vgg"
+    print(f"[eval] container={container}  lpips_backbone={lpips_net}  "
+          f"masking=none  psnr=both conventions")
+
+    results = {
+        "container": container,
+        "lpips_backbone": lpips_net,
+        "masking": "none",
+        "conventions": convention_note(lpips_net, container),
+        "cost": {
+            # Both, always.  A figure reported only in iterations is not
+            # comparable with one reported in steps, and the two differ by
+            # roughly 40% here.
+            "iterations": int(opt_params.iterations),
+            "effective_optimizer_steps": int(effective_steps),
+            "train_wall_seconds": round(time.time() - training_started_at, 1),
+            # The realised count, never the target budget: the survival draw is
+            # stochastic and driven by device-computed probabilities, so it
+            # varies run to run even at a fixed seed.
+            "n_primitives_final": int(gaussians.get_xyz.shape[0]),
+        },
+    }
     chunk_size = 128
     for eval_idx, image_dir in enumerate(metrics_dirs):
-        ssims = []
-        psnrs = []
-        lpipss = []
+        records = []
 
         fname_list = os.listdir(image_dir)
         for i in tqdm(range(0, len(fname_list), chunk_size)):
@@ -940,26 +980,40 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
             renders, gts, image_name = readImages(image_dir, gt_dir, fnames)
 
             for idx in range(len(renders)):
-                ssims.append(ssim(renders[idx], gts[idx]))
-                psnrs.append(psnr(renders[idx], gts[idx]))
-                lpipss.append(lpips(renders[idx], gts[idx], net_type='vgg'))
+                rec = evaluate_pair(
+                    renders[idx], gts[idx], ssim, lpips, lpips_net=lpips_net
+                )
+                rec["image"] = image_name[idx]
+                records.append(rec)
 
-        print(f"-----------{'Train' if eval_idx == 0 else 'Test'}")
-        print("  SSIM ^: {:>12.7f}".format(torch.tensor(ssims).mean(), ".5"))
-        print("  PSNR ^: {:>12.7f}".format(torch.tensor(psnrs).mean(), ".5"))
-        print("  LPIPS v: {:>12.7f}".format(torch.tensor(lpipss).mean(), ".5"))
+        agg = aggregate_images(records)
+        key = 'Train' if eval_idx == 0 else 'Test'
+
+        print(f"-----------{key}  (n={agg['n_images']})")
+        print("  SSIM  ^: {:>12.7f}".format(agg["ssim"]))
+        print("  PSNR  ^: {:>12.7f}  (pooled -- the standard definition)".format(
+            agg["psnr_pooled"]))
+        print("  PSNR  ^: {:>12.7f}  (per-channel -- SeaSplat's convention)".format(
+            agg["psnr_per_channel"]))
+        print("  LPIPS v: {:>12.7f}  ({})".format(agg["lpips"], lpips_net))
         print("")
 
-        key = 'Train' if eval_idx == 0 else 'Test'
         results[key] = {
-            "SSIM": torch.tensor(ssims).mean().item(),
-            "PSNR": torch.tensor(psnrs).mean().item(),
-            "LPIPS": torch.tensor(lpipss).mean().item(),
+            **agg,
+            # Legacy key names. "PSNR" maps to the POOLED figure because that
+            # is what the upstream code actually computed here: readImages
+            # returns (1,3,H,W), so image_utils.psnr's view(shape[0], -1)
+            # collapsed to a single row and pooled the channels. The alias
+            # preserves the historical meaning rather than the historical name.
+            "SSIM": agg["ssim"],
+            "PSNR": agg["psnr_pooled"],
+            "LPIPS": agg["lpips"],
+            "per_image": records,
         }
 
     results_file = Path(model_params.model_path) / "eval_metrics.json"
     with open(str(results_file), 'w') as f:
-        json.dump(results, f)
+        json.dump(results, f, indent=2)
 
 
 def prepare_output_and_logger(args):
