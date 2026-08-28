@@ -1,0 +1,185 @@
+# Experiment plan
+
+Exactly what gets run, in what order, with which arguments. Written so that a
+reader can reconstruct any reported number from the command that produced it.
+
+Companions: `ablation_design.md` (why these cells), `reproducibility_notes.md`
+(what is pinned), `tools/CAMPAIGN.md` (how to drive the queue).
+
+---
+
+## 1. Scope
+
+**96 runs** = 8 cells × 4 scenes × 3 seeds, plus **4–8 offline preprocessing
+jobs** (one dense cloud per scene, per density preset used).
+
+| Scene | Images | Image directory |
+|---|---|---|
+| Curasao | 21 | `images_wb` |
+| IUI3-RedSea | 29 | **`Images_wb`** — capital I |
+| JapaneseGradens-RedSea | 20 | `images_wb` |
+| Panama | 18 | `images_wb` |
+
+The image directory is resolved case-insensitively by the queue. A hard-coded
+`images_wb` silently drops IUI3-RedSea on a case-sensitive filesystem, and a
+scene that fails to load is a scene missing from the results, not an error.
+
+**Split:** every 8th frame held out (`llffhold = 8`), giving 3 test frames per
+scene, 12 in total. This rule is inherited unchanged and coincides with the
+held-out frames of every published method on these scenes, so a fidelity number
+produced here is measured on the same pixels as a published one.
+
+**Seeds:** 0, 1, 2. Explicit; the run refuses to start without one.
+
+---
+
+## 2. Order, and why it is fixed
+
+```
+S1  A0              12 runs   -> the budget, and environment validity
+S2  A2              12 runs   -> H4, the central hypothesis
+S3  A1, A3          24 runs   -> remaining main effects
+S4  A4, A5, A6      36 runs   -> the two-way interactions
+S5  A7              12 runs   -> three-way term, from-above contrasts
+```
+
+**S1 is a hard dependency, not a preference.** The primitive budget is derived
+from A0's converged count, which no publication of the baseline reports — so it
+is unknowable until A0 has run. Preflight refuses any M2 cell without it.
+
+A stage with runnable work holds the queue. A stage whose remaining work is
+entirely *blocked* is skipped with a printed note, so a missing prerequisite
+does not idle the GPU — but the skip is always announced.
+
+---
+
+## 3. Commands
+
+### 3.1 Offline: the dense cloud (M1 cells only)
+
+Once per scene, before any A1/A4/A5/A7 run.
+
+```bash
+python -m source.roma_init \
+    --source_path  <data>/<scene> \
+    --output       <output_root>/dense/<scene>.ply \
+    --preset       sparse \
+    --seed         0
+```
+
+`--preset sparse` = 5000 matches/ref, τ_corr 0.05; `dense` = 20000, 0.02.
+
+**The preset is a real experimental choice, not a performance knob.** With
+densification disabled the primitive count can never grow, so if the cloud
+lands below the budget then A4 collapses onto A1 and A7 onto A5. Check the
+reported point count against the budget before committing to a preset.
+
+Preprocessing wall-clock is **not** part of training time. Report it alongside,
+or A1's cost is understated relative to A0's — the script prints it and writes
+it into the cloud's sidecar.
+
+### 3.2 Training
+
+Driven by the queue, which builds this:
+
+```bash
+python train.py \
+    -s            <data>/<scene> \
+    --images      <images_wb|Images_wb> \
+    --model_path  <output_root>/runs/<cell>/<scene>/s<seed> \
+    --cell        <A0..A7> \
+    --seed        <0|1|2> \
+    [--pcd_path   <output_root>/dense/<scene>.ply]   # M1 cells
+    [--n_bud      <count>]                           # M2 cells
+```
+
+Everything else comes from `configs/cells.json`, which is folded into the
+parser **defaults**, so an explicit command-line argument still overrides it.
+Resolution order: code defaults < cell file < command line.
+
+### 3.3 Driving it
+
+```bash
+python -m tools.run_ledger init  --output_root <root>          # once
+bash   tools/setup_colab.sh                                    # per session
+python -m tools.verify_rasterizer                              # per session
+python -m tools.run_queue --output_root <root> --data_root <data> --max_minutes 200
+python -m tools.run_ledger set-budget <count> --output_root <root>   # after S1
+```
+
+---
+
+## 4. Resolved configuration
+
+From `configs/cells.json`, applied to every cell.
+
+| Parameter | Value | Why it is stated rather than defaulted |
+|---|---|---|
+| `iterations` | 30 000 | shared convention across all four source methods |
+| `eval` | **true** | upstream default is `false`, which empties the test set and trains on everything |
+| `do_seathru` | **true** | upstream default is `false`; without it the medium model never activates and every cell is plain 3DGS |
+| `seathru_from_iter` | **10 000** | upstream default is 9 000 000, i.e. past the end of training |
+| `diag_interval` | 500 | CD-12 diagnostics |
+| `simp_iteration1` | 15 000 | must follow `seathru_from_iter`, or the CD-6 burst cannot run |
+| `simp_iteration2` | 20 000 | |
+| `imp_metric` | `outdoor` | neither variant was designed for a scattering medium; see §5 |
+| `cdf_thres` | 0.99 | |
+| `m2_rewarm_steps` | **200** | CD-6. Setting it to 0 is a valid ablation but warns loudly |
+| `m2_lr_rewind` | **false** | CD-7, reversed: nothing is reinitialised, so the rewind has no premise |
+| `kmeans_st_iter` | **22 000** | must follow `simp_iteration2`, or the codebook is fitted to a population about to be discarded |
+| `kmeans_k` | **4096** | not 256: at `sh_degree = 0` the grouping machinery is inert, so `k` is the only quality dial |
+| `kmeans_freq` | 100 | assignment refresh interval |
+| `kmeans_iters` | 1 | the source method's value |
+| `n_bud` | **from A0** | deliberately absent from the cell file — not knowable before S1 |
+
+Inherited unchanged: `sh_degree = 0`, `lambda_dssim = 0.2`, the six auxiliary
+loss weights (1.0, 1.0, 0.1, 2.0, 0.01, 2.0), the 3DGS learning rates, and the
+densification thresholds.
+
+---
+
+## 5. Choices that need justifying in the write-up
+
+**`imp_metric = outdoor`.** The two implemented variants are `indoor`
+(accumulated blending weight) and `outdoor` (weight ÷ projected area, gated on
+being the argmax contributor). Neither was designed for a scattering medium,
+and the `outdoor` variant's area normalisation exists specifically to suppress
+*sky*. An underwater far field is systematically low-contrast but is scene, not
+sky. `outdoor` is chosen because intersection gating is the property that
+matters here; the choice is recorded in every manifest and is a candidate
+ablation.
+
+**RoMa configured as `outdoor`, with upsampling and symmetry disabled.**
+Neither `outdoor` nor `indoor` describes a scattering medium; the two disabled
+features are EDGS's own speed choices, and the resolution loss matters more at
+18–29 views than at the counts they were validated on.
+
+**`--preset sparse` vs `dense`.** See §3.1. This decides whether two cells of
+the matrix exist.
+
+---
+
+## 6. What each run writes
+
+Under `runs/<cell>/<scene>/s<seed>/`:
+
+| File | Contents |
+|---|---|
+| `run_config.json` | resolved args, git SHA, GPU, versions, seed, split sizes, dense-cloud hash |
+| `diagnostics.csv` | depth normalisation constants, medium coefficients, primitive count — one row per interval and per event |
+| `eval_metrics.json` | both PSNR conventions, SSIM, LPIPS, per-image records, and the cost block (iterations, **effective optimizer steps**, wall clock, final primitive count) |
+| `compressed_<iter>/` | the shippable artifact plus `model_size.json` |
+| `train.log` | full stdout/stderr |
+| `point_cloud/`, `chkpnt*.pth` | the model, for rendering and inspection |
+
+---
+
+## 7. Cost
+
+≈1.5 h per run on an A100 → **≈145 GPU-hours**, plus preprocessing. Colab
+sessions terminate well before that, so the campaign is designed to be resumed
+at the *run* level: state lives in the ledger on Drive, and a killed run is
+restarted rather than resumed from its checkpoint — the checkpoint omits the
+medium model, the codebooks and the loop's schedule flags, so resuming would
+silently reinitialise β and produce a different experiment. Losing up to ~1.5 h
+is much cheaper than one invisibly invalid cell.

@@ -1,0 +1,160 @@
+# Reproducibility notes
+
+What is pinned, what varies, and what cannot be made deterministic. Written on
+the assumption that the reader is trying to work out whether two numbers are
+comparable.
+
+Companions: `experiment_plan.md` (what runs), `ablation_design.md` (how to read
+the contrasts).
+
+---
+
+## 1. Seeding
+
+Every run takes an explicit `--seed`; preflight **refuses to start without
+one**, because the upstream default draws from OS entropy and would make
+dispersion across seeds incidental rather than measurable.
+
+`safe_state` now also calls `torch.cuda.manual_seed_all`. Upstream did not, so
+`--seed` left every GPU-side draw uncontrolled — including the initial
+backscatter coefficients and water colour, which matter because the "no medium"
+degeneracy is a *global optimum* of the photometric loss and the starting point
+decides whether the run escapes it.
+
+### Draws a seed must control
+
+| Draw | Where |
+|---|---|
+| `β_bs`, `B^∞` ~ U(0,1)³ | medium model init |
+| `learned_bg` ~ U(0,1)³, before being overwritten with the fixed prior | background init |
+| camera shuffle, per-iteration view sample | training loop |
+| k-means over camera poses (reference selection) | `source/roma_init.py` |
+| RoMa's internal correspondence sampling | `source/roma_init.py` |
+| **importance-weighted survival draw** | `source/simplify.py` |
+| k-means++ codebook seeding | `source/quantize.py` |
+
+## 2. What cannot be made deterministic
+
+**Bit-exact reproduction is unattainable**, and chasing it would be the wrong
+response. Two independent reasons:
+
+- The differentiable rasterizer uses **atomic accumulation in its backward
+  pass**, which is non-deterministic in floating point regardless of seeding.
+- The **realised primitive count after simplification is run-dependent even at
+  a fixed seed**, because the survival draw is fed by device-computed
+  probabilities.
+
+The correct response is to **measure and report dispersion**: three seeds per
+cell per scene, mean ± standard deviation. The realised `n_primitives_final` is
+reported per run, never the target budget — a budget that lands within a few
+per cent across seeds is a different experiment from one that scatters.
+
+## 3. Versions and hardware
+
+Recorded automatically in every `run_config.json`: git SHA (with a `-dirty`
+marker), `nvidia-smi` output, GPU name and compute capability, torch version
+and its CUDA version, Python version, platform, and the full `argv`.
+
+**Hardware is a correctness constraint, not metadata.** The run aborts on a
+non-A100 unless `--allow_any_gpu` is passed, because every conclusion is a
+between-cell contrast and cells on different devices are not comparable. If the
+override is used, those runs must be reported as not comparable with the rest.
+
+### Verified environment
+
+| Component | Value |
+|---|---|
+| torch | 2.6.0+cu124 |
+| CUDA toolkit | 12.4 |
+| Host compiler | MSVC 2019 (14.29) — CUDA 12.4 rejects newer hosts |
+| Rasterizer | `diff_gaussian_rasterization_ms`, built from `mini-splatting/submodules` |
+| kNN | `simple_knn`, same source |
+| Matcher | `romatch` — **pin this**; it is the only import absent from `requirements.txt` |
+
+The rasterizer merge has been verified on **sm_86**, not the campaign's sm_80.
+The probe-channel argument is arithmetic rather than architecture-specific, so
+it should transfer — but re-run `tools/verify_rasterizer.py` as the first action
+of the first A100 session anyway. It costs seconds.
+
+**Windows build note.** `torch/include/ATen/ops/…` header paths overrun the
+260-character limit from a deep working directory, producing a misleading
+`cannot open include file` error. Build through a short path (a junction is
+enough) and set a short `TMP`.
+
+## 4. The dense cloud is an experimental condition
+
+For A1/A4/A5/A7 the cloud, not just the configuration, determines the result:
+with densification disabled the count can never grow, so the cloud decides the
+starting and largely the final geometry — and whether the budget binds.
+
+Each cloud is therefore written with a sidecar recording its SHA-256, point
+count, and every parameter that produced it, including the realised
+reference-view count and the confidence threshold. **The loader verifies the
+hash and refuses to run if it has changed.** An unversioned cloud from an
+unseeded matcher would make four cells unattributable: two runs would give
+different counts and different efficiency numbers, indistinguishable from a
+real effect.
+
+`τ_corr` is exposed and logged. Upstream has no configuration key for it and
+silently inherits the matcher's internal threshold, so it changes identity
+whenever the matcher is swapped.
+
+## 5. Metric conventions
+
+Both PSNR conventions are computed and labelled at every evaluation. This is
+not belt-and-braces: the inherited routine reduces along the leading tensor
+dimension, so **which convention it computes is decided by the shape it is
+handed** — and the codebase passes both. The in-training report supplies
+`(3,H,W)` and gets per-channel; the disk evaluation supplies `(1,3,H,W)` and
+gets pooled. Measured, the same function returned 27.881 dB and 16.068 dB on
+one image pair.
+
+Also recorded per run: the LPIPS backbone (VGG — the two backbones give
+systematically different values and no source paper states which it used), that
+masking is none, and **which container format was actually written**, since the
+harness silently falls back to JPEG when the ground-truth directory holds no
+PNGs. The local corpus is PNG, so it should read `png`; it is logged rather
+than assumed.
+
+Aggregation is reported under **both** weightings, because scene image counts
+are unequal (21/29/20/18) and the two differ by ~0.27 dB — larger than many
+ablation differences in this literature.
+
+## 6. Timing
+
+Reported as wall-clock **and effective optimizer steps**. They are not
+proportional: the medium warm-up, the colour-adjustment phase, the periodic
+medium bursts and the CD-6 re-identification all bypass the iteration counter,
+each performing a full forward, backward and optimizer step. A nominally
+30 000-iteration run does roughly 43 000 of them, each paying both
+rasterization passes. A figure reported only in iterations is not comparable
+with one reported in steps.
+
+## 7. Known reproducibility gaps
+
+| Gap | Status |
+|---|---|
+| **Checkpoints are incomplete** — no medium model, learned background, codebooks or schedule flags | Interrupted runs are **restarted, not resumed**. Correct resume needs that state in the checkpoint first. |
+| Which convention produced the baseline's *published* PSNR | Unrecorded upstream. Reporting both makes this work immune, but the comparability claim about the baseline should not be repeated until settled. |
+| k-means++ seeding deviates from the source method's uniform seeding | Deliberate — uniform seeding wastes codewords (worst-case error 5.14 → 0.20 on the test fixture). Its effect at k=4096 on real data is unmeasured. |
+| Rasterizer verified on sm_86, campaign runs sm_80 | Re-verify on the first A100 session. |
+
+## 8. Self-checks
+
+Eight suites, **60 checks**, no GPU required except the first:
+
+```bash
+python -m tools.verify_rasterizer     # 7  -- needs CUDA; T3 is decisive
+python -m tools.verify_config_layer   # 6
+python -m tools.verify_ledger         # 11
+python -m tools.verify_metrics        # 7
+python -m tools.verify_storage        # 8
+python -m tools.verify_dense_init     # 6
+python -m tools.verify_simplify       # 6
+python -m tools.verify_quantize       # 9
+```
+
+Run them after any environment change. They are cheap, and several encode
+findings that are easy to reintroduce — the shape-dependence of the PSNR
+routine, the index bit-width, the stage-ordering rule, and the probe-channel
+identity that the whole rasterizer merge rests on.
