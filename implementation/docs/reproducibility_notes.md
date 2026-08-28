@@ -141,7 +141,7 @@ with one reported in steps.
 
 ## 8. Self-checks
 
-Eight suites, **60 checks**, no GPU required except the first:
+Nine suites, **69 checks**, no GPU required except the first:
 
 ```bash
 python -m tools.verify_rasterizer     # 7  -- needs CUDA; T3 is decisive
