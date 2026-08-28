@@ -107,13 +107,19 @@ GATES   it_st  = seathru_from_iter = 10 000                       [SS repo: READ
 30  i ← 1
 31  WHILE i ≤ 30 000:
 
-     ── learning-rate schedule: three competing sources, precedence by recency ────────
-32     ⟨if M2 AND i ≥ it_s1⟩  update_lr( i − it_s1 + 5000 )        [MS repo: ms/train.py:98-99]
+     ── learning-rate schedule: M2's rewind is default-OFF, so no conflict ────────────
+32     ⟨if M2 AND m2_lr_rewind AND i ≥ it_s1⟩  update_lr( i − it_s1 + 5000 )
+                                        ⚠ DEFAULT OFF                  [MS repo: ms/train.py:98-99]
 33     ⟨elif M1⟩              update_lr( max(i, 8000) )            [ED repo: trainer.py:146-147]
 34     ⟨else⟩                 update_lr( i )                       [SS repo: train.py:177]
-                        ▲ M1 CLAMPS DOWN (init already near-correct); M2 REWINDS UP (the
-                          population is new). Contradictory intents, both default-on, both
-                          undocumented in their papers. Resolution: M2 wins after it_s1
+                        ▲ M1 CLAMPS DOWN because the init is already near-correct.
+                          M2's REWIND is DISABLED BY DEFAULT (CD-7, reversed 2026-08-28):
+                          it exists so freshly REINITIALIZED primitives can still move, and
+                          under CD-4's simplification-only scoping nothing is reinitialized —
+                          survivors keep their parameters AND their Adam state, since
+                          prune_points index-selects the optimizer state. With no
+                          reinitialization there is nothing for the rewind to compensate for.
+                          So there is no precedence conflict to resolve: only line 33 fires.
                                                                    [PI — CD-7; see 03-variables IC-3]
 
      ── freeze schedule around the SeaThru transition ─────────────────────────────────

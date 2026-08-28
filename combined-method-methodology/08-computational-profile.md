@@ -128,6 +128,20 @@ quantization alone**, before the count reduction M2 provides. This is an order o
 below CompGS-VQ's headline and it is a *structural* consequence of the baseline, not a
 failure of the method.
 
+> ✅ **Confirmed by the implementation, 2026-08-28.** The storage accounting now computes this
+> directly rather than estimating it: at `k = 4096` (12-bit indices) over three codebooks, the
+> reported ratio against this baseline's 14 floats/primitive is **2.71×**
+> `[implementation/tools/verify_quantize.py T9, executed]`. That sits just below the ~3.5×
+> zero-index-cost ceiling above — as it must, since indices are not free — and it independently
+> matches a third estimate of **≈2.8×** reached by a separate analysis of the same bottleneck.
+> **Three estimates from different directions agreeing is the strongest evidence available
+> that the ceiling analysis is right**, and it means the figure can be stated up front in the
+> write-up rather than discovered at results time.
+>
+> The accounting also reports the unquantized remainder separately (position + opacity, which
+> at 10⁶ primitives is 15.3 MB and is the entire residual budget once attributes are cheap) —
+> the same diagnosis CompGS-VQ made, arriving here for the same structural reason.
+
 **(2) Hardware is not comparable across the four sources.** `../comparison-glossary.md` §3.6
 ranks disclosure: RoMa v2 (H200) > SeaThru-NeRF and EDGS (A100) > Mini-Splatting (3090),
 CompGS-VQ (RTX 6000) > **SeaSplat and CompGS-Liu (none named)**. Three GPU generations and

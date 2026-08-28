@@ -97,10 +97,25 @@ and why quantization damage to `Ĵ` needs a self-consistency proxy (`01-taxonomy
 
 ### (c) PSNR formula — three conventions
 
-Covered in full in `09-glossary.md` §9.4. `[PI]` **This work reports both `PSNR_perchan`
-(SeaSplat's convention, keeping A0 comparable to SeaSplat's published Table I) and
-`PSNR_pooled` (the standard definition, enabling comparison with SeaThru-NeRF, UW-3DGS,
-TUGS).**
+Covered in full in `09-glossary.md` §9.4. `[PI]` **This work reports both `PSNR_perchan` and
+`PSNR_pooled`, each labelled, at every evaluation** (implemented in
+`utils/metrics_conventions.py`; tested in `tools/verify_metrics.py`).
+
+> ⚠️ **CORRECTION 2026-08-28 — this section previously attributed the per-channel convention
+> to SeaSplat's *reported* numbers, and that is wrong.** `utils/image_utils.py:psnr` reduces
+> with `.view(img.shape[0], -1)`, so **its convention is decided by the shape it is handed**,
+> and the repository hands it both: the in-training report passes `(3,H,W)` → per-channel,
+> while the disk-based evaluation that writes `eval_metrics.json` passes `(1,3,H,W)` (because
+> `metrics.py:readImages` does `.unsqueeze(0)`) → **pooled MSE**. Measured: the same function
+> returns **27.881 dB** from `(3,H,W)` and **16.068 dB** from `(1,3,H,W)` on one synthetic
+> pair with underwater-like channel divergence — 11.8 dB from input shape alone
+> `[implementation/tools/verify_metrics.py T4, executed]`.
+>
+> **Consequence.** The figure a paper would quote is the *stricter* pooled one, not the
+> inflated per-channel one. The claim below — that SeaSplat's Table I comparison against
+> SeaThru-NeRF is biased in SeaSplat's favour by its PSNR convention — therefore **does not
+> hold if both used pooled MSE**, and which path produced SeaSplat's published numbers is
+> recorded nowhere. Treat that comparability argument as open, not established.
 
 ### (d) Data path — the 8-bit disk round-trip
 

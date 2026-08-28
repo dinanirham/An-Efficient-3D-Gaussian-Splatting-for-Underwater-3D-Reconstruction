@@ -41,15 +41,37 @@ computes a single mean squared error over all pixels and all channels and conver
 By Jensen's inequality the per-channel convention is always the larger of the two, and the gap
 grows as the channels' errors diverge. **Underwater imagery is the regime of maximum channel
 divergence** — the red channel is attenuated to near-nothing over range while blue is barely
-affected — so the convention inflates results more here than in any other domain. The
-consequence is concrete and citable: the baseline's own published comparison table places its
-per-channel numbers beside a neural-radiance-field competitor's pooled numbers, in the
-direction that favours the baseline.
+affected — so the convention inflates results more here than in any other domain. This is not
+a small effect: measured on a synthetic pair with an underwater-like error profile, the two
+conventions differ by nearly twelve decibels, while on uniformly distributed error they agree
+to four decimal places.
 
-Reporting both costs nothing and removes the entire class of ambiguity. The per-channel figure
-keeps the untreated cell comparable with the baseline's published table; the pooled figure
-allows comparison with the neural-radiance-field lineage and with competing underwater
-efficiency methods, which use the standard definition.
+A related hazard is worth stating carefully, because this study initially got it wrong. It is
+tempting to assert that the baseline's published comparison table places its own per-channel
+figures beside a competitor's pooled ones, in the direction that flatters the baseline. The
+implementation showed this cannot be asserted. The baseline's peak-signal-to-noise routine
+reduces along the tensor's leading dimension, so **which convention it computes is decided by
+the shape of the tensor passed to it** — and the codebase passes both: the in-training report
+supplies a three-channel image and obtains the per-channel figure, while the evaluation that
+writes the results file supplies a single-image batch and obtains the pooled one. The number a
+publication would quote therefore comes from the *stricter* convention, not the inflated one,
+and nothing in either the paper or the repository records which path produced the published
+table. The comparability concern is real and the conventions genuinely are incompatible; the
+specific accusation of bias is not established, and this chapter does not make it.
+
+Reporting both costs nothing and removes the entire class of ambiguity — including the one
+just described, since a reader can select whichever convention the comparison at hand
+requires without this study having had to guess. The pooled figure allows comparison with the
+neural-radiance-field lineage and with competing underwater efficiency methods, which use the
+standard definition, and it is also the figure most likely to match the baseline's own
+published table. The per-channel figure is retained because the baseline's in-training
+reporting uses it, so any comparison drawn against numbers logged during training rather than
+at evaluation needs it.
+
+The implementation also removes the mechanism that caused the confusion: the two conventions
+are now separate named functions, each normalising its input first, and a genuine batch is
+rejected rather than silently averaged. A call site can no longer change which quantity is
+produced by changing a tensor's shape.
 
 It is worth recording that exactly one paper among the nine surveyed identifies this problem
 explicitly, and it is one of the composed methods. Its authors observe that averaging

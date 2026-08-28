@@ -10,7 +10,7 @@ in what order, and how each step is proved done.
 |---|---|---|
 | First milestone | **Full 2³ matrix** — all 8 cells, 4 scenes, 3 seeds = **96 runs** | No science result until the whole stack lands. Staged run plan in §7 mitigates. |
 | Prior adaptation code | **Do not port.** Reimplement from spec. | ~650 lines of existing `roma_init.py` / `quantize.py` / A2 code are *not* reused. `BINUS/Thesis/**` is **out of scope** and must not be read or written. |
-| Spec vs existing implementation | **New spec wins throughout** | Includes R-12 (quantization-aware training with STE) and R-13 (accumulated-blending-weight importance). Requires the CUDA fork merge. **Chapter 4's reported numbers are fully superseded.** |
+| Spec vs existing implementation | **New spec wins throughout** | Includes R-12 (quantization-aware training with STE) and R-13 (accumulated-blending-weight importance). ~~Requires the CUDA fork merge~~ — **resolved with no CUDA changes, see §2 M1**. **Chapter 4's reported numbers are fully superseded.** |
 | Compute | **Colab Pro, A100** | Session limits and non-guaranteed allocation are first-class engineering constraints, not footnotes. See §7. |
 
 ---

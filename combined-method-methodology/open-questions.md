@@ -248,6 +248,61 @@ sets — is available and was not pursued in this pass.
 
 ---
 
+## F. Raised by the implementation (2026-08-27/28)
+
+These did not exist when the methodology was written; each was produced by the code.
+
+### OQ-17 — The checkpoint is incomplete, so resume is unsafe
+
+`train.py` checkpoints the Gaussians and can restore them, but the checkpoint contains **no
+medium model, no learned background, no codebooks, and none of the loop's schedule flags**
+(`bs_inited`, `rewarm_remaining`, the colour-adjust counter). Resuming would silently
+reinitialise `β` and `B^∞` — producing a run that looks complete, reports plausible numbers,
+and is a different experiment.
+
+**Current handling:** the harness restarts interrupted runs rather than resuming them
+(CD-18). That is correct but costs up to ~1.5 h per killed session.
+
+**To close:** extend `GaussianModel.capture()`/`restore()` — or add a parallel state dict — to
+carry `bs_model`, `at_model`, `learned_bg`, the three codebooks with their assignment vectors,
+and the loop flags. Then resume becomes safe and the harness can use it. Worth doing if
+session kills prove frequent; not worth doing speculatively.
+
+### OQ-18 — Which convention produced SeaSplat's *published* PSNR?
+
+`09-glossary.md` §9.4 and `10-reproducibility.md` §10.3c now record that the inherited
+`psnr()` returns per-channel or pooled depending on the **shape** it is handed, and that this
+repository uses both paths. The disk-based path that writes `eval_metrics.json` is pooled.
+
+**Unknown:** whether SeaSplat's Table I numbers came from that path. Nothing records it.
+
+**Why it matters:** the previously-asserted claim that SeaSplat's comparison against
+SeaThru-NeRF is biased in its own favour by the PSNR convention **depends entirely on this**,
+and is currently unsupported. Reporting both conventions (CD-19) makes this work immune to
+the question, but the claim about SeaSplat should not be repeated until it is settled.
+
+### OQ-19 — Does k-means++ seeding change A3 relative to the reference?
+
+CD-17 replaced the reference's uniform `randperm` codebook initialization with k-means++ plus
+empty-cluster reseeding, because uniform seeding demonstrably wastes codewords (worst-case
+error on the test fixture fell 5.14 → 0.20). This is a deviation from CompGS-VQ as published.
+
+**Unknown:** how much it moves A3's quality at `k = 4096` on real data, where the codebook is
+large and random seeding is less pathological than in a k=4 fixture. **To close:** run A3 once
+with each initialization. Cheap — it is an offline-ish change affecting only the codebook.
+
+### OQ-20 — The rasterizer is verified on sm_86, not sm_80
+
+`verify_rasterizer.py` passes 7/7 on an RTX 3050 Ti (sm_86, CUDA 12.4, torch 2.6.0+cu124),
+including the decisive `Z_raw/α` identity to float precision. The campaign targets A100
+(sm_80) with whatever toolchain Colab provides.
+
+The probe-channel argument is arithmetic, not architecture-specific, so it should transfer —
+but "should" is doing work in that sentence. **To close:** re-run the same seven checks as the
+first action of the first Colab session, before any training. It costs seconds.
+
+---
+
 ## E. Stop-condition assessment
 
 The brief's stop condition: report rather than fill silently if (i) any expected breakdown is

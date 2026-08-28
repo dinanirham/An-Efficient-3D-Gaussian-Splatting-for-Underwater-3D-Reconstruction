@@ -47,14 +47,34 @@ root project. Its dependency set is the least modern of the four but the most ce
 it supplies the medium model, the loss, the data loader and the evaluation harness.
 
 **Rasterization extension.** One kernel must serve two purposes: the baseline's second
-depth-rendering pass, which overrides primitive colour with camera-frame depth, and the
-pruning mechanism's per-primitive importance accumulators, which the standard kernel does not
-return. The baseline's addition is a Python-level second invocation with an overridden colour
-argument; the pruning mechanism's additions are inside the kernel itself. **The baseline's
-depth pass is therefore ported onto the pruning mechanism's forked kernel**, rather than the
-reverse, and the combined extension is rebuilt for the target compute architecture. Both
-outputs are unit-checked against a synthetic scene before the matrix is run, because a build
-that produces one correct tensor set and one incorrect one will not crash.
+depth-rendering pass, and the pruning mechanism's per-primitive importance accumulators, which
+the standard kernel does not return. This was anticipated to be the most demanding part of the
+implementation, requiring the two forks to be merged at the CUDA level. It was not, and the
+reason is worth recording because it changes what the system depends on.
+
+The obstacle turned out not to be the depth pass at all — the pruning mechanism's fork already
+accepts precomputed colours, so overriding primitive colour with camera-frame depth composes
+without modification. What that fork does not return is the **accumulated alpha**, and the
+baseline requires a *differentiable* one, because the opacity prior's gradient reaches opacity
+through alpha alone. The fork does expose an alpha map, but outside the automatic
+differentiation machinery, so it cannot serve.
+
+The resolution exploits a property of alpha compositing: it is applied independently per
+colour channel and does not depend on the colour values. Rendering a three-channel probe whose
+first channel carries depth, whose second is unity, and whose third is zero, against a zero
+background, makes the second channel accumulate exactly the quantity the baseline needs — and
+it arrives through the ordinary differentiable path. Since the baseline already performed that
+depth pass on every iteration while reading only its first channel, the remaining two channels
+were simply unused. **No kernel modification is required, and no additional rendering pass is
+introduced.**
+
+The equivalence is exact rather than approximate, and is verified numerically rather than
+argued: for a single primitive at a known range, the probe yields depth scaled by alpha, so
+dividing one channel by the other must recover that range on every covered pixel at every
+opacity. Measured on the target hardware, it does so to floating-point precision. The full
+check also confirms that alpha composites correctly across overlapping primitives, that its
+gradient reaches opacity, that the importance accumulators arrive intact, and that a zero
+background does not contaminate either channel.
 
 **Quantization.** The quantization mechanism's four method files are overlaid onto the
 baseline rather than onto stock Gaussian splatting. Because the mechanism is distributed as an

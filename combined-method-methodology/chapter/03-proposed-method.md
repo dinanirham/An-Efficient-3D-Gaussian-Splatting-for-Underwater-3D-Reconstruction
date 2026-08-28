@@ -438,13 +438,24 @@ quantization-aware phase than the source method uses; the most recent work in th
 reports that clustering in only the final thousand iterations costs almost nothing, which is
 the reason to expect the shortened phase is sufficient.
 
-**Learning-rate precedence is resolved in favour of the pruning mechanism.** The initialization
-mechanism clamps the position learning rate on the grounds that a good initialization should
-not be scattered; the pruning mechanism rewinds it on the grounds that a freshly reinitialised
-population needs enough learning rate to move. The intents are contradictory and both default
-on. After simplification the population genuinely is new, so the rewind's premise holds and
-the clamp's does not; the rewind takes precedence from the first simplification event onward.
-This decision has no support in any source and is a candidate for its own sensitivity check.
+**The learning-rate conflict dissolves rather than being adjudicated, and only implementation
+revealed why.** The initialization mechanism clamps the position learning rate on the grounds
+that a good initialization should not be scattered; the pruning mechanism rewinds it on the
+grounds that a freshly reinitialised population needs enough learning rate to move. Both
+default on in their source implementations, and their intents are contradictory, so the design
+initially specified a precedence rule in favour of the rewind — reasoning that after
+simplification the population is genuinely new.
+
+Writing the simplification stage showed that premise to be false under this work's own
+scoping. Because the pruning mechanism is scoped to simplification only, nothing is
+reinitialised: the surviving primitives keep their parameters *and* their optimiser state,
+since the underlying pruning routine index-selects the second-moment estimates rather than
+rebuilding them. There is no new population for the rewind to compensate for. Enabling it
+would inject a correction for a condition that does not arise, so it is **disabled by
+default** and the clamp stands alone; the rewind is retained as a flag purely for sensitivity
+analysis. This is a case where the specification was wrong in a way that reading could not
+have exposed — the error was in an assumption about optimiser-state handling that only becomes
+visible when the two mechanisms are made to coexist.
 
 ---
 

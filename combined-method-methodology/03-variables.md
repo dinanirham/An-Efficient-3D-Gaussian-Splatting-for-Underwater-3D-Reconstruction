@@ -238,10 +238,17 @@ explicit logged state in §3.2 above so the effect can be measured rather than a
 | M1 | `update_lr(max(i, 8000))` — **clamped**, never uses the high early LR | `[../EDGS/05-constraints.md M-7]` |
 | M2 | `update_lr(i − simp_iteration1 + 5000)` — **rewound** after simplification | `[../mini-splatting/05-constraints.md M-8]` |
 
-Contradictory intents, both undocumented in their source papers, both on by default. The
-`[PI]` resolution — M2's rewind takes precedence from `simp_iteration1` onward — is stated in
-`02-pipeline.md` §2.6 and recorded as a combined-method-specific decision in
-`06-implementation-deltas.md`.
+Contradictory intents, both undocumented in their source papers, both on by default upstream.
+
+> **RESOLVED 2026-08-28, and not as originally specified.** The interaction turns out not to
+> exist under CD-4's simplification-only scoping: **M2's rewind is disabled by default**, so
+> only M1's clamp ever fires. Mini-Splatting rewinds the schedule so that freshly
+> *reinitialized* primitives still have enough LR to move; here nothing is reinitialized —
+> survivors keep their parameters *and* their Adam state, because `prune_points`
+> index-selects the optimizer state rather than rebuilding it. With no reinitialization there
+> is nothing for the rewind to compensate for, and enabling it would inject a correction for
+> a condition that does not occur. Retained as `--m2_lr_rewind` for sensitivity analysis.
+> See `06-implementation-deltas.md` CD-7.
 
 ### IC-4 — iteration-schedule collisions
 
