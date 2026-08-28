@@ -1,0 +1,87 @@
+{
+  "_about": [
+    "The 2^3 ablation matrix (CD-1).  Selected with `--cell A4`.",
+    "",
+    "Values here are folded into the argument parser's DEFAULTS, so anything",
+    "passed explicitly on the command line still overrides them.  Resolution",
+    "order, weakest to strongest:  code defaults < this file < command line.",
+    "",
+    "`defaults` applies to every cell.  Three of its entries exist because the",
+    "upstream defaults would silently produce a different experiment:",
+    "  do_seathru        upstream False -> the medium model never activates and",
+    "                    every cell would be a study of plain 3DGS.",
+    "  seathru_from_iter upstream 9_000_000, i.e. past the end of training --",
+    "                    the same 'defaults disable the method' trap.",
+    "  eval              upstream False -> empty test set, trains on everything,",
+    "                    reports inflated numbers, raises no error.",
+    "",
+    "Mechanism-specific keys (the primitive budget, codebook size, re-warm-up",
+    "length, ...) are added to this file as each mechanism lands, so that the",
+    "cell definition and the manifest always describe the same run."
+  ],
+
+  "_n_bud_note": [
+    "n_bud (the M2 primitive budget) is deliberately NOT set here.",
+    "It must be derived from A0's converged primitive count, which no",
+    "publication of the baseline reports, so it is not knowable until A0 has",
+    "run.  Pass it on the command line for every m2 cell:  --n_bud <count>.",
+    "Preflight refuses to start an m2 run without it, because a budget that",
+    "does not bind makes A4 equivalent to A1 and A7 to A5 -- and a null",
+    "interaction measured in that state is a configuration artifact."
+  ],
+
+  "defaults": {
+    "iterations": 30000,
+    "eval": true,
+    "do_seathru": true,
+    "seathru_from_iter": 10000,
+    "diag_interval": 500,
+
+    "simp_iteration1": 15000,
+    "simp_iteration2": 20000,
+    "imp_metric": "outdoor",
+    "cdf_thres": 0.99,
+    "m2_rewarm_steps": 200,
+    "m2_lr_rewind": false,
+
+    "kmeans_st_iter": 22000,
+    "kmeans_k": 4096,
+    "kmeans_freq": 100,
+    "kmeans_iters": 1
+  },
+
+  "cells": {
+    "A0": {
+      "description": "Baseline. SeaSplat unmodified. Reference for every contrast, and the run that supplies the primitive budget the other cells need.",
+      "set": { "m1_dense_init": false, "m2_simplify": false, "m3_quantize": false }
+    },
+    "A1": {
+      "description": "M1 only. Dense correspondence initialization; densification disabled, alpha-pruning and opacity reset retained (R-4).",
+      "set": { "m1_dense_init": true, "m2_simplify": false, "m3_quantize": false }
+    },
+    "A2": {
+      "description": "M2 only. Importance-weighted stochastic simplification to the primitive budget, with the medium re-identification burst (CD-6). Carries the study's central hypothesis.",
+      "set": { "m1_dense_init": false, "m2_simplify": true, "m3_quantize": false }
+    },
+    "A3": {
+      "description": "M3 only. Quantization-aware VQ over three codebooks. Expected to show ~no frame-rate gain, because CompGS-VQ's opacity regulariser is disabled (CD-8).",
+      "set": { "m1_dense_init": false, "m2_simplify": false, "m3_quantize": true }
+    },
+    "A4": {
+      "description": "M1+M2. Degeneracy risk: if M1 converges below the budget the prune is a no-op and A4 collapses onto A1. Whether the budget bound is reported per run (G-2).",
+      "set": { "m1_dense_init": true, "m2_simplify": true, "m3_quantize": false }
+    },
+    "A5": {
+      "description": "M1+M3. The least-coupled pair: no shared pipeline stage, and quantization touches neither position nor opacity. Predicted additive.",
+      "set": { "m1_dense_init": true, "m2_simplify": false, "m3_quantize": true }
+    },
+    "A6": {
+      "description": "M2+M3. The one interaction with external theory behind it: a sparser primitive set is predicted to be more sensitive to lossy attribute compression. Informative in both directions.",
+      "set": { "m1_dense_init": false, "m2_simplify": true, "m3_quantize": true }
+    },
+    "A7": {
+      "description": "Fully stacked. Source of the effect-from-above contrasts; inherits every integration decision and both degeneracy risks.",
+      "set": { "m1_dense_init": true, "m2_simplify": true, "m3_quantize": true }
+    }
+  }
+}

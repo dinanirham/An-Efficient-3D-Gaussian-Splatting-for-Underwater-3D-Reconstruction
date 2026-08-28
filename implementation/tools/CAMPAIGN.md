@@ -1,0 +1,112 @@
+# Running the campaign
+
+8 cells × 4 scenes × 3 seeds = **96 runs**, roughly 145 GPU-hours, on sessions
+that terminate long before that. The ledger holds the campaign's state on
+Drive; every session is disposable.
+
+## Once, per Drive
+
+```bash
+python -m tools.run_ledger init --output_root /content/drive/MyDrive/e3dgsuw
+```
+
+Creates 96 rows, all `pending`. Re-running is refused unless `--force`, so a
+stray re-init cannot wipe a campaign in progress.
+
+## Every session
+
+```bash
+bash tools/setup_colab.sh                 # builds the two CUDA extensions
+python -m tools.verify_rasterizer         # 7 checks; T3 is decisive
+python -m tools.run_queue \
+    --output_root /content/drive/MyDrive/e3dgsuw \
+    --data_root  /content/drive/MyDrive/SeathruNeRF_dataset \
+    --max_minutes 200
+```
+
+Set `--max_minutes` **below** the session limit so the loop stops claiming new
+work and exits cleanly, rather than being killed mid-run.
+
+`--dry_run` prints the commands that would execute and touches nothing.
+
+## The order things must happen in
+
+```
+S1  A0                 -> unblocks the budget and confirms the environment
+S2  A2                 -> the central hypothesis (H4)
+S3  A1, A3             -> remaining main effects
+S4  A4, A5, A6         -> the three two-way interactions
+S5  A7                 -> three-way term, effect-from-above contrasts
+```
+
+A stage with runnable work holds the queue. A stage whose remaining work is
+entirely **blocked** is skipped with a printed note, so a missing prerequisite
+does not idle the GPU — but the skip is always announced, because a silent
+reorder is what makes a results table mean something other than it appears to.
+
+## The two prerequisites
+
+**The primitive budget.** Derived from A0's converged count, which no
+publication of the baseline reports. After S1:
+
+```bash
+python -m tools.run_ledger status --output_root ...      # confirm S1 done
+# read the final n_primitives from any A0 run's diagnostics.csv
+python -m tools.run_ledger set-budget <count> --output_root ...
+```
+
+Until it is set, every m2 cell (A2, A4, A6, A7) is blocked. This is deliberate:
+a budget that does not bind makes A4 equivalent to A1 and A7 to A5, and a null
+interaction measured in that state is a configuration artifact, not a finding.
+The run itself also prints a loud warning if the budget fails to bind.
+
+**The dense clouds.** Every m1 cell (A1, A4, A5, A7) needs one per scene:
+
+```bash
+python -m source.roma_init \
+    --source_path <data>/Curasao \
+    --output      <output_root>/dense/Curasao.ply \
+    --preset sparse --seed 0
+```
+
+Preset choice is not cosmetic: with densification disabled the primitive count
+can never grow, so if the cloud lands below the budget then A4 collapses onto
+A1. Check the reported point count against the budget before committing to a
+preset. The `.ply` is hashed into a sidecar and verified at load; a cloud that
+changed since it was recorded will refuse to run rather than silently produce
+an unattributable cell.
+
+Preprocessing wall-clock is **not** part of training time. Report it alongside,
+or A1's cost is understated relative to A0's.
+
+## When a session dies
+
+Nothing to do. The row is left `running` with a stale heartbeat; the next
+session's `reap_stale` returns it to `pending` and it runs again from scratch.
+
+**Interrupted runs restart rather than resume, deliberately.** `train.py`
+checkpoints the Gaussians, but the checkpoint does not contain the medium
+model, the learned background, the codebooks, or the loop's schedule flags —
+so resuming would silently reinitialise β and B∞ and produce a run that looks
+complete and is not the experiment it claims to be. Losing up to ~1.5 h is much
+cheaper than one invisibly invalid cell. Making resume correct means putting
+that state in the checkpoint first.
+
+## Guard rails
+
+- **Non-A100 aborts.** Every cell must run on the same device or the
+  between-cell contrasts — which is what every conclusion rests on — are not
+  comparable. `--allow_any_gpu` overrides it; if you use it, record that those
+  runs are not comparable with the rest.
+- **Three attempts per run**, then it stops being claimed, so a broken
+  configuration cannot loop.
+- Each run writes `run_config.json` (resolved args, git SHA, GPU, seed,
+  split sizes, dense-cloud hash), `diagnostics.csv` and `train.log` into its
+  own directory under `runs/<cell>/<scene>/s<seed>/`.
+
+## Checking on it
+
+```bash
+python -m tools.run_ledger status --output_root ...
+python -m tools.run_ledger reap   --output_root ...   # force stale reclamation
+```
