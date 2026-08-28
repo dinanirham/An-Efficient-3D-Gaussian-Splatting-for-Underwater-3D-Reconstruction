@@ -1343,7 +1343,13 @@ if __name__ == "__main__":
 
     now = datetime.now()
     today = now.strftime("%m%d%Y")
-    args.model_path = str(Path(args.source_path) / "experiments" / today / args.exp)
+    if not args.model_path:
+        # Upstream always derived the output path from the source path and
+        # today's date.  The campaign needs it explicit and stable instead: the
+        # date makes a path change at midnight (so a resumed or re-attempted run
+        # would land somewhere new), and Drive-backed output cannot live under
+        # the dataset directory.  An explicit --model_path now wins.
+        args.model_path = str(Path(args.source_path) / "experiments" / today / args.exp)
     if not os.path.exists(args.model_path):
         os.makedirs(args.model_path)
 
