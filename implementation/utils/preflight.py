@@ -169,6 +169,20 @@ def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
             f"but it means the run is not the cell it claims to be."
         )
 
+    # -- M1 cannot run without its cloud ------------------------------------
+    if flags[0]:
+        pcd = getattr(dataset, "pcd_path", "") or ""
+        if not pcd:
+            fail.append(
+                "m1_dense_init is set but pcd_path is empty. The run would fall "
+                "back to COLMAP's sparse points *with densification disabled* -- "
+                "a configuration that is neither A0 nor A1, and which no metric "
+                "would flag. Produce the cloud with source/roma_init.py and pass "
+                "--pcd_path."
+            )
+        elif not Path(pcd).exists():
+            fail.append(f"m1_dense_init cloud does not exist: {pcd}")
+
     # -- seeding ------------------------------------------------------------
     seed = getattr(args, "seed", -1)
     if seed is None or seed < 0:

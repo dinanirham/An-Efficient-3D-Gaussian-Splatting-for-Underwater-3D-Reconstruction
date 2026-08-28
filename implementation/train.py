@@ -192,7 +192,16 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
         # torch.cuda.empty_cache()
         iter_start.record()
 
-        gaussians.update_learning_rate(iteration)
+        # R-5 / CD-7: under dense initialization the position LR schedule is
+        # clamped to its step-`m1_max_lr_floor` value.  EDGS applies this by
+        # default and does not document it: a dense init starts ~50x closer to
+        # the final geometry, so 3DGS's high early LR -- tuned to move a sparse
+        # SfM seed across the scene -- would scatter a good initialization
+        # rather than refine it.
+        lr_iteration = iteration
+        if opt_params.m1_dense_init and opt_params.m1_max_lr:
+            lr_iteration = max(iteration, opt_params.m1_max_lr_floor)
+        gaussians.update_learning_rate(lr_iteration)
 
         # Freeze the gaussian model as necessary
         if iteration == opt_params.freeze_gs_from_iter:
@@ -565,37 +574,83 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                     recon_depth_loss=dl1,
                 )
 
-            # Densification
+            # --- density control --------------------------------------------
+            # R-4.  Upstream bundles clone/split, the alpha-prune and the
+            # opacity reset into this single gated block, so the obvious
+            # one-line `--no_densify` gate silently disables all three.  Under
+            # dense initialization only the clone/split must go; the
+            # alpha-prune is what *executes* L_op (see prune_only's docstring)
+            # and the opacity reset is retained per CD-3.
+            #
+            # The two upstream branches differed only in the gradient
+            # threshold, so they are unified here and the threshold is chosen
+            # explicitly.  Behaviour at default settings is unchanged:
+            # freeze/unfreeze both default to 9_000_000 and
+            # scale_grad_threshold to 1.0.
             if iteration < opt_params.densify_until_iter:
-                if iteration < opt_params.freeze_gs_from_iter:
+                gs_frozen = (
+                    opt_params.freeze_gs_from_iter <= iteration < opt_params.unfreeze_gs_from_iter
+                )
+                if not gs_frozen:
                     # Keep track of max radii in image-space for pruning
                     gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
                     gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
-                    if iteration % opt_params.densification_interval == 0:
+                    if (
+                        iteration % opt_params.densification_interval == 0
+                        and iteration > opt_params.densify_from_iter
+                    ):
                         size_threshold = 20 if iteration > opt_params.opacity_reset_interval else None
-                        if iteration > opt_params.densify_from_iter:
-                            gaussians.densify_and_prune(opt_params.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
+                        if opt_params.m1_dense_init:
+                            # Opacity hygiene only: no clone/split, but the
+                            # alpha-prune still runs.
+                            n_pruned = gaussians.prune_only(
+                                0.005, scene.cameras_extent, size_threshold
+                            )
+                            if diag.due(iteration):
+                                diag.log(
+                                    iteration=iteration,
+                                    event="prune_only",
+                                    n_primitives=gaussians.get_xyz.shape[0],
+                                    note=f"pruned={n_pruned}",
+                                )
+                        else:
+                            grad_threshold = opt_params.densify_grad_threshold
+                            if iteration >= opt_params.unfreeze_gs_from_iter:
+                                grad_threshold *= opt_params.scale_grad_threshold
+                            gaussians.densify_and_prune(
+                                grad_threshold, 0.005, scene.cameras_extent, size_threshold
+                            )
 
+                    # CD-3: retained even under dense initialization.  It is a
+                    # co-mechanism of L_op against water-column floaters, and
+                    # Mini-Splatting's silent removal of it is defensible only
+                    # because its depth reinit resets opacity anyway -- a
+                    # compensation this configuration does not have.
                     if iteration % opt_params.opacity_reset_interval == 0 or (model_params.white_background and iteration == opt_params.densify_from_iter):
                         print(f"[{iteration}] opacity reset")
                         gaussians.reset_opacity()
-                elif iteration >= opt_params.unfreeze_gs_from_iter:
-                    # Keep track of max radii in image-space for pruning
-                    gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                    gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
-                    if iteration % opt_params.densification_interval == 0:
-                        size_threshold = 20 if iteration > opt_params.opacity_reset_interval else None
-                        if iteration > opt_params.densify_from_iter:
-                            gaussians.densify_and_prune(opt_params.scale_grad_threshold * opt_params.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-
-                    if iteration % opt_params.opacity_reset_interval == 0 or (model_params.white_background and iteration == opt_params.densify_from_iter):
-                        print(f"[{iteration}] opacity reset")
-                        gaussians.reset_opacity()
-                else:
-                    # do nothing when gaussian splat is completely frozen
-                    pass
+                # R-5: EDGS's continuous opacity decay, which pairs with the
+                # alpha-prune above into a decay-and-cull -- the smooth
+                # analogue of the periodic reset.
+                #
+                # Gated to stop at seathru_from_iter by default: L_op already
+                # pushes opacity down for backscatter-dominated primitives, and
+                # neither source method faced that combination, so stacking the
+                # two risks over-pruning.  The gate is a config value rather
+                # than a constant precisely so the choice is recorded in the
+                # manifest and can be ablated.
+                if (
+                    opt_params.m1_dense_init
+                    and opt_params.m1_reduce_opacity
+                    and iteration % opt_params.m1_reduce_opacity_interval == 0
+                    and not (
+                        opt_params.m1_decay_stops_at_seathru
+                        and iteration >= opt_params.seathru_from_iter
+                    )
+                ):
+                    gaussians.reduce_opacity_step(opt_params.m1_reduce_opacity_factor)
 
 
             # Optimizer step
@@ -1104,12 +1159,23 @@ if __name__ == "__main__":
     # configured to ask.  Every check here guards a failure that is otherwise
     # silent -- see utils/preflight.py.
     preflight_args(args, op.extract(args), lp.extract(args))
+    # The dense cloud IS the experimental condition for the A1-derived cells,
+    # so its provenance sidecar is folded into the manifest.
+    manifest_extra = {}
+    if args.pcd_path:
+        from utils.dense_init_io import read_sidecar
+        manifest_extra["dense_pcd"] = {
+            "path": args.pcd_path,
+            **read_sidecar(args.pcd_path),
+        }
+
     write_manifest(
         model_path=args.model_path,
         args=args,
         cell_name=cell_name,
         cell_values=cell_values,
         repo_root=Path(__file__).resolve().parent,
+        extra=manifest_extra,
     )
 
     # Initialize system state (RNG)

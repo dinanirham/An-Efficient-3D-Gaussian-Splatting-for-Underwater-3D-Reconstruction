@@ -75,6 +75,11 @@ class ModelParams(ParamGroup):
         self.start_cam = -1
         self.end_cam = -1
         self.rescale_units = 1.0
+        # M1: path to the dense correspondence-derived point cloud produced by
+        # source/roma_init.py.  Empty means "use COLMAP's sparse points", i.e.
+        # the baseline path.  This cloud IS the experimental condition for the
+        # A1-derived cells, so its sidecar hash is recorded in the manifest.
+        self.pcd_path = ""
         self.scene_bounds_xxyyzz = None
         self.do_scene_bb = False
         self.bb_xlo = 0.0
@@ -211,6 +216,19 @@ class OptimizationParams(ParamGroup):
         self.m1_dense_init = False   # dense correspondence init; densification off
         self.m2_simplify = False     # importance-weighted simplification to budget
         self.m3_quantize = False     # quantization-aware attribute VQ
+
+        # --- M1 sub-parameters (active only when m1_dense_init) ------------
+        # The two EDGS mechanisms below are on by default in EDGS and appear
+        # nowhere in its paper.  They are what make a densification-free
+        # regime survivable, so they are ported (R-5) rather than dropped --
+        # but both are exposed, because both interact with SeaSplat's opacity
+        # prior in ways neither source method had to consider.
+        self.m1_max_lr = True                    # clamp the position-LR schedule
+        self.m1_max_lr_floor = 8000              # ...to its value at this step
+        self.m1_reduce_opacity = True            # continuous opacity decay
+        self.m1_reduce_opacity_factor = 0.99     # logit += log(factor)
+        self.m1_reduce_opacity_interval = 10     # ...every N iterations
+        self.m1_decay_stops_at_seathru = True    # stop once L_op is also acting
 
         # Run-harness controls (not part of the method).
         self.allow_any_gpu = False   # bypass the A100 check; invalidates cross-cell contrasts

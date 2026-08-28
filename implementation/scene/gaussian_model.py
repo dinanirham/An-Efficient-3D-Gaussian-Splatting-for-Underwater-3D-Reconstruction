@@ -9,6 +9,8 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+import math
+
 import torch
 import numpy as np
 from utils.general_utils import inverse_sigmoid, get_expon_lr_func, build_rotation
@@ -466,6 +468,50 @@ class GaussianModel:
         self.prune_points(prune_mask)
 
         torch.cuda.empty_cache()
+
+    def prune_only(self, min_opacity, extent, max_screen_size):
+        """The prune half of `densify_and_prune`, without the densify half (R-4).
+
+        With dense initialization, densification is disabled but opacity
+        hygiene must not be.  Upstream bundles clone/split, the alpha-prune and
+        the opacity reset into one gated block, so a one-line `--no_densify`
+        gate disables all three.
+
+        That matters more than it looks.  The alpha-prune is what *executes*
+        SeaSplat's opacity prior: `L_op` drives backscatter-only Gaussians to
+        alpha ~ 0, and this prune is what removes them.  Left in place they
+        persist for all 30k iterations, costing memory and per-frame sort time
+        while contributing nothing to the rendered image -- so the efficiency
+        claim degrades while the quality metric stays blind to the cause.
+
+        EDGS, the source of the dense-init mechanism, keeps its own
+        `alpha < 0.005` prune running outside the densify gate.  This mirrors
+        that.  Returns the number of primitives removed.
+        """
+        prune_mask = (self.get_opacity < min_opacity).squeeze()
+        if max_screen_size:
+            big_points_vs = self.max_radii2D > max_screen_size
+            big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
+            prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
+        n_pruned = int(prune_mask.sum().item())
+        self.prune_points(prune_mask)
+        torch.cuda.empty_cache()
+        return n_pruned
+
+    def reduce_opacity_step(self, factor=0.99):
+        """EDGS's continuous opacity decay (R-5).
+
+        EDGS writes this as `logit <- log(exp(logit) * factor)`, which is
+        exactly `logit + log(factor)`; the additive form is used here because
+        it cannot overflow for large logits.  Applied every ~10 steps for the
+        first 15k iterations it accumulates to a shift of roughly -15, which
+        together with the alpha-prune above forms a continuous decay-and-cull:
+        every primitive's opacity bleeds away and only those the photometric
+        loss actively defends survive.  It is the smooth analogue of the
+        periodic opacity reset, and it is undocumented in the EDGS paper.
+        """
+        with torch.no_grad():
+            self._opacity.data.add_(math.log(factor))
 
     def add_densification_stats(self, viewspace_point_tensor, update_filter):
         self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)

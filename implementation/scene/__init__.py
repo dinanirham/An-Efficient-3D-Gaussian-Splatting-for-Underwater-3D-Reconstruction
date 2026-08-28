@@ -79,7 +79,29 @@ class Scene:
                                                            "iteration_" + str(self.loaded_iter),
                                                            "point_cloud.ply"))
         else:
-            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+            point_cloud = scene_info.point_cloud
+            pcd_path = getattr(args, "pcd_path", "") or ""
+            if pcd_path:
+                # M1: replace COLMAP's sparse points with the dense
+                # correspondence-derived cloud from source/roma_init.py.  The
+                # SfM points are discarded rather than merged, following EDGS:
+                # the triangulated set is denser and better informed, and the
+                # sparse points would otherwise persist as low-information
+                # primitives that nothing removes.
+                #
+                # (Retaining them is a defensible alternative in this domain --
+                # they are the only geometry NOT derived from a matcher with a
+                # documented failure mode on water -- and is left as a
+                # sensitivity check rather than taken silently.)
+                from utils.dense_init_io import load_dense_pcd
+
+                point_cloud = load_dense_pcd(pcd_path)
+                print(
+                    f"[M1] dense init: {point_cloud.points.shape[0]} points from "
+                    f"{pcd_path} (COLMAP's {scene_info.point_cloud.points.shape[0]} "
+                    f"sparse points discarded)"
+                )
+            self.gaussians.create_from_pcd(point_cloud, self.cameras_extent)
             self.gaussians.save_ply(os.path.join(self.model_path, "input.ply"))
 
     def save(self, iteration):
