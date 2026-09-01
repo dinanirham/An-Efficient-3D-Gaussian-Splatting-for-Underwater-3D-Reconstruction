@@ -86,13 +86,24 @@ pip install -q \
 # (A1, A4, A5, A7) need it, so a failure here is a warning rather than fatal:
 # A0, A2, A3 and A6 can all still run.
 #
-# --no-deps is deliberate. RoMa's own requirements pin torch/torchvision, and
-# letting pip act on them would downgrade the torch we have just compiled both
-# CUDA extensions against -- trading a missing matcher for a broken rasterizer.
-# Its runtime imports beyond Colab's stack are einops and timm; kornia,
-# opencv, matplotlib and h5py are already present.
+# Its full declared dependency set, minus torch and torchvision, then the
+# package itself with --no-deps. RoMa asks only for torch>=2.5.1, which Colab
+# already satisfies -- but leaving pip free to resolve those two risks it
+# reinstalling torch from PyPI, replacing the CUDA build both extensions were
+# just compiled against with a generic wheel. Everything else is installed
+# normally; stripping the deps wholesale is what left loguru missing.
 echo "--- RoMa (M1 only) ---"
-pip install -q einops timm
+pip install -q \
+    albumentations \
+    einops \
+    h5py \
+    loguru \
+    matplotlib \
+    opencv-python \
+    poselib \
+    timm \
+    tqdm \
+    wandb
 pip install -q --no-deps "git+https://github.com/Parskatt/RoMa.git" || true
 
 if python -c "import romatch" 2>/dev/null; then
@@ -100,6 +111,8 @@ if python -c "import romatch" 2>/dev/null; then
 else
     echo "    WARNING: romatch unavailable -- the M1 cells (A1/A4/A5/A7) and"
     echo "             source/roma_init.py will not run. A0/A2/A3/A6 are fine."
+    echo "    the import error was:"
+    python -c "import romatch" 2>&1 | tail -4 | sed 's/^/        /'
 fi
 
 # Quiet on success, but show the compiler output on failure. With `pip -q` a
