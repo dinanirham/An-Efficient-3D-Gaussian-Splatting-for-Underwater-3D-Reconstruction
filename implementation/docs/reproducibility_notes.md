@@ -94,11 +94,15 @@ regardless; it costs seconds and the whole merge rests on that identity.
   run. It is in SeaSplat's `requirements.txt`, which is how it reached the
   install list; under `set -e` it aborted the build script entirely.
 
-**`romatch` installs with `--no-deps`.** Its requirements pin torch and
-torchvision, and letting pip act on them downgrades the torch both CUDA
-extensions were just compiled against. Its runtime imports beyond Colab's stack
-are `einops` and `timm`, installed separately. A romatch failure is a warning
-rather than fatal: only the M1 cells (A1/A4/A5/A7) need it.
+**`romatch` installs with `--no-deps`, and its dependencies are installed
+explicitly.** RoMa declares `albumentations, einops, h5py, kornia, loguru,
+matplotlib, opencv-python, poselib>=2.0.4, timm, torch>=2.5.1, torchvision,
+tqdm, wandb`. The torch requirement is a floor that Colab's 2.11 already
+satisfies — but leaving pip free to resolve torch/torchvision risks it
+reinstalling torch from PyPI, replacing the CUDA build both extensions were
+just compiled against. So those two are excluded and the rest installed by
+name. A romatch failure is a warning rather than fatal: only the M1 cells
+(A1/A4/A5/A7) need it, so A0/A2/A3/A6 are unaffected.
 
 **Windows build note.** `torch/include/ATen/ops/…` header paths overrun the
 260-character limit from a deep working directory, producing a misleading
