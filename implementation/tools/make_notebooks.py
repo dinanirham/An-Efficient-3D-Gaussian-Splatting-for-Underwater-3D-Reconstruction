@@ -137,6 +137,11 @@ def _redact(s):
     return s.replace(GITHUB_TOKEN, '***') if GITHUB_TOKEN else s
 
 
+if os.path.isdir(REPO_DIR) and not os.path.isdir(f'{REPO_DIR}/.git'):
+    raise RuntimeError(
+        f'{REPO_DIR} exists but is not a git checkout -- probably a clone that '
+        f'died partway. Delete it and re-run this cell.')
+
 if not os.path.exists(REPO_DIR):
     r = subprocess.run(['git','clone','--depth','1',url,REPO_DIR],
                        capture_output=True, text=True, env=env)
@@ -146,10 +151,18 @@ if not os.path.exists(REPO_DIR):
             'secret in Colab and grant this notebook access.\\n'
             f'{_redact(r.stderr)[-800:]}')
 else:
+    # Repoint the remote before pulling. The stored URL was written by an
+    # earlier clone, which may have run without a token (or with a stale one);
+    # injecting the token into `url` alone never reaches the pull.
+    subprocess.run(['git','-C',REPO_DIR,'remote','set-url','origin',url],
+                   check=True, env=env)
     r = subprocess.run(['git','-C',REPO_DIR,'pull','--ff-only'],
                        capture_output=True, text=True, env=env)
     if r.returncode != 0:
-        raise RuntimeError(f'pull failed:\\n{_redact(r.stderr)[-800:]}')
+        raise RuntimeError(
+            'pull failed. If the repository is private, check the GITHUB_TOKEN '
+            'secret is set and this notebook has access.\\n'
+            f'{_redact(r.stderr)[-800:]}')
 
 # Fail here, naming the directory, rather than letting a later cell run from
 # whatever the working directory happened to be.
