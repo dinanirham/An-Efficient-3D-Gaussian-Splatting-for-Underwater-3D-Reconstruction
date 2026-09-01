@@ -30,16 +30,15 @@ drive.mount('/content/drive')
 # The one place paths are defined. Everything else derives from DRIVE_ROOT.
 #
 #   e3dgsuw/
-#     dataset/SeathruNeRF_dataset/   original, as downloaded
-#     dataset/undistorted/<scene>/   PINHOLE + sparse/0/  <- required
-#     dense/<scene>.ply|.json        M1 clouds, SHA-256 sidecars
-#     run_ledger.json                campaign state
-#     runs/<cell>/<scene>/s<seed>/   one run, all of it together
-#     analysis/                      analyse.py output, figures, tables
+#     dataset/     the four scenes (original) + undistorted/  <- created below
+#     dense/       M1 clouds, with SHA-256 sidecars
+#     runs/        <cell>/<scene>/s<seed>/  -- one run, all of it together
+#     analysis/    analyse.py output, figures, tables
+#     run_ledger.json
 # ---------------------------------------------------------------------------
 DRIVE_ROOT   = '/content/drive/MyDrive/e3dgsuw'
-DATA_ORIG    = f'{DRIVE_ROOT}/dataset/SeathruNeRF_dataset'
-DATA_UNDIST  = f'{DRIVE_ROOT}/dataset/undistorted'
+DATASET_DIR  = f'{DRIVE_ROOT}/dataset'
+DATA_UNDIST  = f'{DATASET_DIR}/undistorted'
 DENSE_DIR    = f'{DRIVE_ROOT}/dense'
 ANALYSIS_DIR = f'{DRIVE_ROOT}/analysis'
 
@@ -53,9 +52,32 @@ IMPL_DIR  = f'{REPO_DIR}/implementation'
 SCENES    = ['Curasao', 'IUI3-RedSea', 'JapaneseGradens-RedSea', 'Panama']
 
 import os
-for d in (DRIVE_ROOT, DATA_UNDIST, DENSE_DIR, ANALYSIS_DIR):
+assert os.path.isdir(DRIVE_ROOT), (
+    f'{DRIVE_ROOT} not found. Check the folder name, or edit DRIVE_ROOT above.')
+for d in (DATA_UNDIST, DENSE_DIR, f'{DRIVE_ROOT}/runs', ANALYSIS_DIR):
     os.makedirs(d, exist_ok=True)
-print('drive root:', DRIVE_ROOT)
+
+
+def find_originals():
+    """Locate the four scenes under dataset/, however they were arranged.
+
+    Accepts the scenes directly under dataset/, or nested one level (e.g.
+    dataset/SeathruNeRF_dataset/). Returns the directory that contains them.
+    """
+    candidates = [DATASET_DIR] + [
+        os.path.join(DATASET_DIR, d) for d in sorted(os.listdir(DATASET_DIR))
+        if os.path.isdir(os.path.join(DATASET_DIR, d)) and d != 'undistorted'
+    ]
+    for base in candidates:
+        if all(os.path.isdir(os.path.join(base, s)) for s in SCENES):
+            return base
+    return None
+
+
+DATA_ORIG = find_originals()
+print('drive root :', DRIVE_ROOT)
+print('originals  :', DATA_ORIG or 'NOT FOUND')
+print('undistorted:', DATA_UNDIST)
 '''
 
 GPU_CHECK = '''\
@@ -72,30 +94,48 @@ print(f'torch {torch.__version__}  cuda {torch.version.cuda}  {name}  sm_{cap[0]
 assert 'A100' in name, f'Expected an A100, got {name!r}. Restart the runtime.'
 '''
 
-CLONE_BUILD = '''\
+CLONE = '''\
 import os, subprocess
+
+# If the repository is private, create a fine-grained token with read access
+# and set it here (or in Colab's Secrets). Leave as None for a public repo.
+GITHUB_TOKEN = None
+
+url = REPO_URL
+if GITHUB_TOKEN:
+    url = REPO_URL.replace('https://', f'https://{GITHUB_TOKEN}@')
+
 if not os.path.exists(REPO_DIR):
-    subprocess.run(['git','clone','--depth','1',REPO_URL,REPO_DIR], check=True)
+    r = subprocess.run(['git','clone','--depth','1',url,REPO_DIR],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(
+            'clone failed. If the repository is private, set GITHUB_TOKEN '
+            f'above.\\n{r.stderr[-800:]}')
 else:
     subprocess.run(['git','-C',REPO_DIR,'pull','--ff-only'], check=True)
+
 os.chdir(IMPL_DIR)
 print(subprocess.run(['git','-C',REPO_DIR,'log','--oneline','-1'],
-                     capture_output=True, text=True).stdout)
+                     capture_output=True, text=True).stdout.strip())
+'''
 
-# Builds diff_gaussian_rasterization_ms and simple_knn for sm_80, and installs
-# only the dependencies Colab does not already ship.
+BUILD = '''\
+# Builds diff_gaussian_rasterization_ms and simple_knn against whatever torch
+# Colab ships -- deliberately NOT installing our own, which would risk a
+# mismatch between torch's CUDA and the toolkit the extensions compile with.
+# Takes a few minutes; must be repeated each session.
+%cd $IMPL_DIR
 !bash tools/setup_colab.sh
 '''
 
-VERIFY_RASTERIZER = '''\
-# The gate. The whole rasterizer merge rests on one identity: for a single
-# Gaussian at depth z the probe gives Z_raw = alpha*z, so Z_raw/alpha must
-# recover z on every covered pixel. Verified on sm_86 during development; this
-# confirms it on sm_80 before anything is trained on top of it.
-%cd {IMPL_DIR}
-!python -m tools.verify_rasterizer
+BUILD_CHECK = '''\
+import importlib, torch
+for m in ('diff_gaussian_rasterization_ms', 'simple_knn'):
+    importlib.import_module(m)
+print('extensions import OK  |  torch', torch.__version__,
+      '| cuda', torch.version.cuda)
 '''
-
 
 def md(text: str) -> dict:
     return {"cell_type": "markdown", "metadata": {}, "source": text.splitlines(True)}
@@ -121,124 +161,162 @@ def notebook(cells: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 00 -- setup, run once per Drive (and the build part once per session)
+# 00 -- setup and preprocessing. Once per Drive; cells 1-4 also per session.
 # ---------------------------------------------------------------------------
 
 SETUP = notebook([
     md("""# 00 — Setup and preprocessing
 
-Run this **once per Drive**. Cells 1–4 also run at the start of every session,
-because Colab discards the compiled extensions; cells 5–8 are one-time.
+Run **once per Drive**. Cells 1–4 also run at the start of every session,
+because Colab discards the compiled extensions.
 
 Order matters: undistortion must precede the dense clouds, because
 `roma_init` uses the same scene reader.
+
+Every cell is safe to re-run.
 """),
     md("## 1. Drive and paths"),
     code(DRIVE_HEADER),
     md("## 2. GPU — must be an A100"),
     code(GPU_CHECK),
-    md("## 3. Clone and build"),
-    code(CLONE_BUILD),
-    md("## 4. Verify the rasterizer merge"),
-    code(VERIFY_RASTERIZER.replace("{IMPL_DIR}", "$IMPL_DIR")),
-    md("""## 5. The rest of the self-checks
+    md("## 3. Clone the repository"),
+    code(CLONE),
+    md("## 4. Build the CUDA extensions  *(a few minutes, every session)*"),
+    code(BUILD),
+    code(BUILD_CHECK),
+    md("""## 5. Verify the rasterizer merge
 
-Sixty-nine checks across nine suites. Cheap, and several encode findings that
-are easy to reintroduce."""),
+The gate. The whole merge rests on one identity: for a single Gaussian at depth
+`z` the probe gives `Z_raw = α·z`, so `Z_raw/α` must recover `z` on every
+covered pixel. Verified on sm_86 during development — this confirms it on the
+A100 before anything is trained on top of it.
+"""),
+    code("!python -m tools.verify_rasterizer\n"),
+    md("""## 6. The remaining self-checks
+
+Seventy-six checks across ten suites. Cheap, and several encode findings that
+are easy to reintroduce.
+"""),
     code('''\
 for t in ['verify_config_layer','verify_ledger','verify_metrics','verify_storage',
           'verify_analysis','verify_undistort','verify_dense_init','verify_simplify',
           'verify_quantize']:
     !python -m tools.{t} 2>&1 | tail -2
 '''),
-    md("""## 6. Dataset → Drive
+    md("""## 7. Locate the dataset
 
-Place `SeathruNeRF_dataset/` under `dataset/` on Drive once. The four scenes
-are Curasao (21 images), IUI3-RedSea (29, note the capital-I `Images_wb`),
-JapaneseGradens-RedSea (20) and Panama (18)."""),
+Expects the four scenes under `dataset/` — either directly, or nested one level
+(e.g. `dataset/SeathruNeRF_dataset/`). Both layouts are accepted.
+"""),
     code('''\
 import os
-missing = [s for s in SCENES if not os.path.exists(f'{DATA_ORIG}/{s}')]
-assert not missing, (
-    f'Missing scenes under {DATA_ORIG}: {missing}\\n'
-    f'Upload SeathruNeRF_dataset there first.')
+assert DATA_ORIG, (
+    f'Could not find the four scenes under {DATASET_DIR}.\\n'
+    f'Expected {SCENES}\\n'
+    f'either directly in dataset/ or one level down.\\n'
+    f'Found: {sorted(os.listdir(DATASET_DIR))}')
+
 for s in SCENES:
-    d = [x for x in os.listdir(f'{DATA_ORIG}/{s}') if x.lower()=='images_wb'][0]
+    d = [x for x in os.listdir(f'{DATA_ORIG}/{s}') if x.lower() == 'images_wb'][0]
     n = len(os.listdir(f'{DATA_ORIG}/{s}/{d}'))
-    print(f'{s:24s} {n:3d} images   image dir: {d}')
+    print(f'{s:24s} {n:3d} images   dir: {d}')
+print('\\nExpect 21 / 29 / 20 / 18. Note IUI3-RedSea uses a capital-I Images_wb.')
 '''),
-    md("""## 7. COLMAP undistortion — **required**
+    md("""## 8. COLMAP undistortion — **required**
 
 All four scenes ship with the COLMAP **OPENCV** camera model and real
 distortion coefficients, while the scene reader accepts only
 PINHOLE/SIMPLE_PINHOLE. Without this step every run fails at scene load.
 
-The step is idempotent, so re-running this notebook is harmless."""),
+Idempotent — re-running this notebook will not resample the images again.
+"""),
     code('''\
-!apt-get -qq install colmap > /dev/null 2>&1 || pip install -q pycolmap
-import subprocess
+import shutil, subprocess
+if shutil.which('colmap') is None:
+    !apt-get -qq update > /dev/null 2>&1
+    !apt-get -qq install -y colmap > /dev/null 2>&1
+assert shutil.which('colmap'), (
+    'colmap not installed. Try:  !apt-get install -y colmap\\n'
+    'Undistortion cannot be skipped -- the scenes are OPENCV-model.')
+print(subprocess.run(['colmap','-h'], capture_output=True, text=True).stdout[:150])
+'''),
+    code('''\
+import subprocess, time
+t0 = time.time()
 for s in SCENES:
-    print(f'--- {s} ---')
+    print(f'--- {s} ---', flush=True)
     r = subprocess.run(['python','-m','source.undistort',
                         '--source', f'{DATA_ORIG}/{s}',
                         '--output', f'{DATA_UNDIST}/{s}'],
                        capture_output=True, text=True)
-    print(r.stdout[-800:] or r.stderr[-800:])
+    print((r.stdout or r.stderr)[-700:], flush=True)
+    if r.returncode != 0:
+        raise RuntimeError(f'undistortion failed for {s}')
+print(f'\\ntotal {(time.time()-t0)/60:.1f} min')
 '''),
     code('''\
 # Confirm every scene will now load.
+import sys
 from pathlib import Path
-import sys; sys.path.insert(0, IMPL_DIR)
+sys.path.insert(0, IMPL_DIR)
 from source.undistort import verify_undistorted
 for s in SCENES:
-    info = verify_undistorted(Path(DATA_UNDIST)/s)
-    print(f'{s:24s} {info["model"]:16s} {info["width"]}x{info["height"]}')
+    i = verify_undistorted(Path(DATA_UNDIST) / s)
+    n = len(list((Path(DATA_UNDIST) / s / 'images').iterdir()))
+    print(f'{s:24s} {i["model"]:16s} {i["width"]}x{i["height"]}  {n} images')
 '''),
-    md("""## 8. Dense clouds — for the M1 cells (A1, A4, A5, A7)
+    md("""## 9. Dense clouds — for the M1 cells (A1, A4, A5, A7)
 
-One per scene. The preset is a real experimental choice: with densification
-disabled the primitive count can never grow, so a cloud below the budget makes
-A4 collapse onto A1 and A7 onto A5. Check the reported point counts against the
-budget once S1 has produced one.
+One per scene, roughly 10–25 minutes each. The preset is a real experimental
+choice: with densification disabled the primitive count can never grow, so a
+cloud below the budget makes A4 collapse onto A1 and A7 onto A5. Compare these
+counts against the budget once S1 has produced one.
 
 Preprocessing wall-clock is **not** part of training time — report it
-alongside, or A1's cost is understated relative to A0's."""),
+alongside, or A1's cost is understated relative to A0's.
+"""),
     code('''\
-import subprocess
+import subprocess, time
 for s in SCENES:
-    print(f'--- {s} ---')
+    out = f'{DENSE_DIR}/{s}.ply'
+    if os.path.exists(out):
+        print(f'{s}: already present, skipping'); continue
+    print(f'--- {s} ---', flush=True)
+    t0 = time.time()
     r = subprocess.run(['python','-m','source.roma_init',
                         '--source_path', f'{DATA_UNDIST}/{s}',
-                        '--output',      f'{DENSE_DIR}/{s}.ply',
+                        '--output',      out,
                         '--images',      'images',
                         '--preset',      'sparse',
                         '--seed',        '0'],
                        capture_output=True, text=True)
-    print(r.stdout[-900:] or r.stderr[-900:])
+    print((r.stdout or r.stderr)[-900:], flush=True)
+    print(f'{s}: {(time.time()-t0)/60:.1f} min')
 '''),
-    md("""## 9. Initialise the ledger
+    md("""## 10. Initialise the ledger
 
-96 rows: 8 cells × 4 scenes × 3 seeds. Refuses to overwrite an existing
-campaign unless forced."""),
+96 rows: 8 cells × 4 scenes × 3 seeds. Refuses to overwrite a campaign in
+progress unless `--force`.
+"""),
     code('''\
-!python -m tools.run_ledger init --output_root "$DRIVE_ROOT"
+!python -m tools.run_ledger init   --output_root "$DRIVE_ROOT"
 !python -m tools.run_ledger status --output_root "$DRIVE_ROOT"
 '''),
     md("""---
-Next: open **01_worker.ipynb** and run it. Repeat it every session until the
+**Next:** open `01_worker.ipynb` and run it. Repeat every session until the
 ledger reports everything done.
 """),
 ])
 
 # ---------------------------------------------------------------------------
-# 01 -- worker, run unchanged every session
+# 01 -- worker. Run unchanged, every session.
 # ---------------------------------------------------------------------------
 
 WORKER = notebook([
     md("""# 01 — Worker
 
-**Run this unedited, every session, as many times as you like.** It claims
-whatever the ledger says is next and runs it.
+**Run this unedited, every session.** It claims whatever the ledger says is
+next and runs it.
 
 There is nothing to configure. The cell, scene and seed come from the ledger,
 which enforces stage order and prerequisites globally — which is precisely why
@@ -254,63 +332,77 @@ produce a run that looks complete and is a different experiment.
     code(DRIVE_HEADER),
     md("## 2. GPU — must be an A100"),
     code(GPU_CHECK),
-    md("## 3. Clone and build"),
-    code(CLONE_BUILD),
-    md("## 4. Verify the rasterizer, then the dataset"),
-    code(VERIFY_RASTERIZER.replace("{IMPL_DIR}", "$IMPL_DIR")),
+    md("## 3. Clone and build  *(a few minutes)*"),
+    code(CLONE),
+    code(BUILD),
+    code(BUILD_CHECK),
+    md("## 4. Verify the rasterizer"),
+    code("!python -m tools.verify_rasterizer\n"),
+    md("""## 5. Stage the dataset locally
+
+The loader reads every image at startup; from Drive that is markedly slower
+than one bulk copy.
+"""),
     code('''\
-# Copy the undistorted scenes to local disk. The loader reads every image at
-# startup; from Drive that is markedly slower than one bulk copy.
 import os, shutil, time
+missing = [s for s in SCENES if not os.path.isdir(f'{DATA_UNDIST}/{s}')]
+assert not missing, (
+    f'Undistorted scenes missing: {missing}. Run 00_setup.ipynb first — the '
+    f'scenes are OPENCV-model and will not load undistorted.')
+
 os.makedirs(LOCAL_DATA, exist_ok=True)
 t0 = time.time()
 for s in SCENES:
-    dst = f'{LOCAL_DATA}/{s}'
-    if not os.path.exists(dst):
-        shutil.copytree(f'{DATA_UNDIST}/{s}', dst)
-print(f'dataset staged locally in {time.time()-t0:.0f}s')
+    if not os.path.exists(f'{LOCAL_DATA}/{s}'):
+        shutil.copytree(f'{DATA_UNDIST}/{s}', f'{LOCAL_DATA}/{s}')
+print(f'staged in {time.time()-t0:.0f}s')
 !python -m tools.run_ledger status --output_root "$DRIVE_ROOT"
 '''),
-    md("""## 5. Work
+    md("""## 6. Work
 
-`--max_minutes` should sit **below** the session limit so the loop stops
-claiming new runs and exits cleanly rather than being killed mid-run.
+`--max_minutes` sits **below** the session limit so the loop stops claiming new
+runs and exits cleanly rather than being killed mid-run. Raise it if your
+sessions run longer.
 
-If the budget has not been set yet, every M2 cell is blocked and the queue will
-say so — that is expected until S1 (A0) completes."""),
+Until the budget is set, every M2 cell is blocked and the queue says so — that
+is expected during S1.
+"""),
     code('''\
 !python -m tools.run_queue \\
     --output_root "$DRIVE_ROOT" \\
     --data_root   "$LOCAL_DATA" \\
     --max_minutes 200
 '''),
-    md("""## 6. After S1 completes — set the budget
+    md("""## 7. After S1 (A0) completes — set the budget
 
 The primitive budget comes from A0's converged count, which no publication of
-the baseline reports. Until it is set, every M2 cell (A2, A4, A6, A7) stays
-blocked.
+the baseline reports. Until it is set, A2, A4, A6 and A7 stay blocked.
 
-A budget that does not bind makes A4 equivalent to A1 and A7 to A5, and a null
-interaction measured in that state is a configuration artifact rather than a
-finding — so check the counts before setting it."""),
+Pick a value **below** the counts below so the budget actually binds. A budget
+that does not bind makes A4 equivalent to A1 and A7 to A5, and a null
+interaction measured in that state is a configuration artifact, not a finding.
+"""),
     code('''\
-import glob, csv
+import glob, csv, statistics
 counts = []
 for f in sorted(glob.glob(f'{DRIVE_ROOT}/runs/A0/*/s*/diagnostics.csv')):
     rows = list(csv.DictReader(open(f)))
     if rows:
-        counts.append((f.split('/runs/')[1], int(rows[-1]['n_primitives'])))
+        counts.append((f.split('/runs/')[1].rsplit('/', 1)[0],
+                       int(rows[-1]['n_primitives'])))
 for name, n in counts:
-    print(f'{n:>10,}  {name}')
+    print(f'{n:>12,}  {name}')
 if counts:
-    import statistics
-    print(f'\\nmedian {statistics.median(n for _, n in counts):,.0f}')
-    print('Set a budget BELOW these, so it binds:')
+    med = statistics.median(n for _, n in counts)
+    print(f'\\nmedian {med:,.0f}   suggested budget ~{int(med*0.6):,} (60%)')
+    print('Then run:')
     print(f'  !python -m tools.run_ledger set-budget <count> --output_root "$DRIVE_ROOT"')
+else:
+    print('No A0 diagnostics yet.')
 '''),
     md("""---
-Re-run this notebook in a fresh session to continue. Nothing needs changing
-between sessions.
+Re-run this notebook in a fresh session to continue. Nothing changes between
+sessions.
 """),
 ])
 
@@ -322,24 +414,24 @@ ANALYSIS = notebook([
     md("""# 02 — Analysis
 
 Main effects in both directions, interactions against an explicit null, and
-dispersion across seeds.
+dispersion across seeds. No GPU needed.
 
-Two rules the tool enforces, worth remembering when reading the output: where
+Two rules the tool enforces, worth remembering when reading the output. Where
 the from-below and from-above estimates of a main effect **disagree**, neither
-may be quoted alone — the disagreement is the interaction. And nothing is
-quotable without dispersion, so a partial campaign will show `nan` error bars
-and `UNDETERMINED` rather than a confident-looking number.
+may be quoted alone — the disagreement *is* the interaction. And nothing is
+quotable without dispersion, so a partial campaign shows `nan` error bars and
+`UNDETERMINED` rather than a confident-looking number.
 """),
     md("## 1. Drive and repo"),
     code(DRIVE_HEADER),
-    code(CLONE_BUILD.replace("!bash tools/setup_colab.sh",
-                             "# no build needed: analysis is pure Python")),
+    code(CLONE),
     md("## 2. Campaign state"),
     code('!python -m tools.run_ledger status --output_root "$DRIVE_ROOT"\n'),
     md("""## 3. Contrasts
 
 Quality metrics combine additively; ratio measures (storage, primitive count,
-frame rate) combine multiplicatively, in log space."""),
+frame rate) combine multiplicatively, in log space.
+"""),
     code('''\
 !python -m tools.analyse \\
     --output_root "$DRIVE_ROOT" \\
@@ -347,8 +439,9 @@ frame rate) combine multiplicatively, in log space."""),
     --json "$ANALYSIS_DIR/analysis_unweighted.json"
 '''),
     code('''\
-# Scene image counts are unequal (21/29/20/18), so the two weightings differ.
-# Reporting both removes an easy source of disagreement.
+# Scene image counts are unequal (21/29/20/18), so the two weightings differ by
+# more than many ablation differences in this literature. Reporting both
+# removes an easy source of disagreement.
 !python -m tools.analyse \\
     --output_root "$DRIVE_ROOT" \\
     --weighting image_weighted \\
@@ -357,37 +450,42 @@ frame rate) combine multiplicatively, in log space."""),
     md("""## 4. The central hypothesis (H4)
 
 Not a between-cell comparison: the depth normalisation constants and the medium
-coefficients across the simplification boundary in A2. A large jump in β at
-15 000 is the signature of the identifiability failure; its absorption inside
-the re-identification burst is the signature of the fix."""),
+coefficients across the simplification boundary in A2. A jump in β at 15 000 is
+the signature of the identifiability failure; its absorption inside the
+re-identification burst is the signature of the fix.
+"""),
     code('''\
 import glob, csv
 import matplotlib.pyplot as plt
 
 paths = sorted(glob.glob(f'{DRIVE_ROOT}/runs/A2/*/s0/diagnostics.csv'))
 if not paths:
-    print('No A2 runs yet — this is the S2 stage.')
+    print('No A2 runs yet — that is stage S2.')
 for p in paths:
-    rows = [r for r in csv.DictReader(open(p)) if r['beta_att_r']]
+    rows  = [r for r in csv.DictReader(open(p)) if r['beta_att_r']]
     if not rows:
         continue
-    it  = [int(r['iteration']) for r in rows]
-    br  = [float(r['beta_att_r']) for r in rows]
-    zmx = [float(r['z_max']) if r['z_max'] else None for r in rows]
     scene = p.split('/runs/A2/')[1].split('/')[0]
+    it    = [int(r['iteration']) for r in rows]
+    beta  = [float(r['beta_att_r']) for r in rows]
+    zmax  = [float(r['z_max']) if r['z_max'] else float('nan') for r in rows]
 
     fig, ax = plt.subplots(1, 2, figsize=(11, 3.2))
-    ax[0].plot(it, br); ax[0].axvline(15000, ls='--', c='r')
-    ax[0].set_title(f'{scene}: beta_att (red)'); ax[0].set_xlabel('iteration')
-    ax[1].plot(it, [z for z in zmx if z is not None][:len(it)])
-    ax[1].axvline(15000, ls='--', c='r')
-    ax[1].set_title('z_max (depth normalisation)'); ax[1].set_xlabel('iteration')
-    plt.tight_layout(); plt.show()
+    ax[0].plot(it, beta);  ax[0].axvline(15000, ls='--', c='r')
+    ax[0].set_title(f'{scene}: beta_att (red channel)')
+    ax[1].plot(it, zmax);  ax[1].axvline(15000, ls='--', c='r')
+    ax[1].set_title('z_max — depth normalisation')
+    for a in ax: a.set_xlabel('iteration')
+    plt.tight_layout(); plt.savefig(f'{ANALYSIS_DIR}/h4_{scene}.png', dpi=140)
+    plt.show()
 '''),
-    md("## 5. Storage — per primitive as well as total"),
+    md("""## 5. Storage — per primitive as well as total
+
+The codebook is a fixed cost, so the compression ratio grows with primitive
+count. M2 reduces that count, so a ratio that fell because *N* fell would
+otherwise read as quantization performing worse.
+"""),
     code('''\
-# A ratio that fell because N fell would otherwise read as quantization
-# performing worse. The codebook is a fixed cost, so the ratio grows with N.
 !python -m tools.analyse --output_root "$DRIVE_ROOT" \\
     --metric bytes_per_primitive --metric total_bytes --metric n_primitives_final
 '''),
@@ -395,7 +493,6 @@ for p in paths:
 Outputs land in `analysis/` on Drive.
 """),
 ])
-
 
 def main() -> int:
     NB_DIR.mkdir(parents=True, exist_ok=True)
