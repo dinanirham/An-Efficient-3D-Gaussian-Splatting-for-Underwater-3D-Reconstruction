@@ -57,6 +57,16 @@ assert os.path.isdir(DRIVE_ROOT), (
 for d in (DATA_UNDIST, DENSE_DIR, f'{DRIVE_ROOT}/runs', ANALYSIS_DIR):
     os.makedirs(d, exist_ok=True)
 
+# Export them so the `!` cells below resolve "$DRIVE_ROOT" as a real shell
+# variable. Relying on IPython to substitute notebook variables into magics
+# works until it doesn't, and when it doesn't it substitutes nothing and the
+# command runs against a silently truncated path rather than failing.
+os.environ.update(
+    DRIVE_ROOT=DRIVE_ROOT, DATASET_DIR=DATASET_DIR, DATA_UNDIST=DATA_UNDIST,
+    DENSE_DIR=DENSE_DIR, ANALYSIS_DIR=ANALYSIS_DIR, LOCAL_DATA=LOCAL_DATA,
+    REPO_DIR=REPO_DIR, IMPL_DIR=IMPL_DIR,
+)
+
 
 def find_originals():
     """Locate the four scenes under dataset/, however they were arranged.
@@ -97,27 +107,60 @@ assert 'A100' in name, f'Expected an A100, got {name!r}. Restart the runtime.'
 CLONE = '''\
 import os, subprocess
 
-# If the repository is private, create a fine-grained token with read access
-# and set it here (or in Colab's Secrets). Leave as None for a public repo.
+# Private repo? Add a Colab secret named GITHUB_TOKEN (key icon in the left
+# sidebar) with a fine-grained read token, and toggle notebook access on.
+# Read from Secrets rather than pasted into the cell: a pasted token is saved
+# inside the .ipynb, which then travels wherever the notebook does.
 GITHUB_TOKEN = None
+try:
+    from google.colab import userdata
+    GITHUB_TOKEN = userdata.get('GITHUB_TOKEN') or None
+    print('GITHUB_TOKEN: loaded from Colab Secrets')
+except ImportError:
+    pass                                  # not running under Colab
+except Exception as e:                    # secret absent, or access not granted
+    print(f'GITHUB_TOKEN: not available ({type(e).__name__}) -- '
+          'fine for a public repo')
 
 url = REPO_URL
 if GITHUB_TOKEN:
     url = REPO_URL.replace('https://', f'https://{GITHUB_TOKEN}@')
 
+# Never let git fall back to an interactive credential prompt: in a notebook it
+# hangs the cell indefinitely with nothing on screen to say why.
+env = {**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
+
+
+def _redact(s):
+    """Strip the token from git output -- git echoes the remote URL on failure,
+    and notebook outputs are saved to the file and shared with it."""
+    return s.replace(GITHUB_TOKEN, '***') if GITHUB_TOKEN else s
+
+
 if not os.path.exists(REPO_DIR):
     r = subprocess.run(['git','clone','--depth','1',url,REPO_DIR],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=env)
     if r.returncode != 0:
         raise RuntimeError(
-            'clone failed. If the repository is private, set GITHUB_TOKEN '
-            f'above.\\n{r.stderr[-800:]}')
+            'clone failed. If the repository is private, add a GITHUB_TOKEN '
+            'secret in Colab and grant this notebook access.\\n'
+            f'{_redact(r.stderr)[-800:]}')
 else:
-    subprocess.run(['git','-C',REPO_DIR,'pull','--ff-only'], check=True)
+    r = subprocess.run(['git','-C',REPO_DIR,'pull','--ff-only'],
+                       capture_output=True, text=True, env=env)
+    if r.returncode != 0:
+        raise RuntimeError(f'pull failed:\\n{_redact(r.stderr)[-800:]}')
+
+# Fail here, naming the directory, rather than letting a later cell run from
+# whatever the working directory happened to be.
+assert os.path.isdir(IMPL_DIR), (
+    f'clone produced no {IMPL_DIR}. Contents of {REPO_DIR}: '
+    f'{sorted(os.listdir(REPO_DIR)) if os.path.isdir(REPO_DIR) else "missing"}')
 
 os.chdir(IMPL_DIR)
 print(subprocess.run(['git','-C',REPO_DIR,'log','--oneline','-1'],
                      capture_output=True, text=True).stdout.strip())
+print('cwd:', os.getcwd())
 '''
 
 BUILD = '''\
@@ -125,7 +168,16 @@ BUILD = '''\
 # Colab ships -- deliberately NOT installing our own, which would risk a
 # mismatch between torch's CUDA and the toolkit the extensions compile with.
 # Takes a few minutes; must be repeated each session.
-%cd $IMPL_DIR
+#
+# chdir explicitly rather than via `%cd $IMPL_DIR`: a magic whose variable fails
+# to expand reports the *current* directory and continues, so the build then
+# runs from the wrong place and fails two steps later with a bare
+# "tools/setup_colab.sh: No such file or directory".
+import os
+assert os.path.isdir(IMPL_DIR), (
+    f'{IMPL_DIR} not found -- run the "Clone the repository" cell above first.')
+os.chdir(IMPL_DIR)
+print('building in', os.getcwd())
 !bash tools/setup_colab.sh
 '''
 
