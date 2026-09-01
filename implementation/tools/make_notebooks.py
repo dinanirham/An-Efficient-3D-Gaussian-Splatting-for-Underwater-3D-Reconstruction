@@ -57,6 +57,16 @@ assert os.path.isdir(DRIVE_ROOT), (
 for d in (DATA_UNDIST, DENSE_DIR, f'{DRIVE_ROOT}/runs', ANALYSIS_DIR):
     os.makedirs(d, exist_ok=True)
 
+# Export them so the `!` cells below resolve "$DRIVE_ROOT" as a real shell
+# variable. Relying on IPython to substitute notebook variables into magics
+# works until it doesn't, and when it doesn't it substitutes nothing and the
+# command runs against a silently truncated path rather than failing.
+os.environ.update(
+    DRIVE_ROOT=DRIVE_ROOT, DATASET_DIR=DATASET_DIR, DATA_UNDIST=DATA_UNDIST,
+    DENSE_DIR=DENSE_DIR, ANALYSIS_DIR=ANALYSIS_DIR, LOCAL_DATA=LOCAL_DATA,
+    REPO_DIR=REPO_DIR, IMPL_DIR=IMPL_DIR,
+)
+
 
 def find_originals():
     """Locate the four scenes under dataset/, however they were arranged.
@@ -115,9 +125,16 @@ if not os.path.exists(REPO_DIR):
 else:
     subprocess.run(['git','-C',REPO_DIR,'pull','--ff-only'], check=True)
 
+# Fail here, naming the directory, rather than letting a later cell run from
+# whatever the working directory happened to be.
+assert os.path.isdir(IMPL_DIR), (
+    f'clone produced no {IMPL_DIR}. Contents of {REPO_DIR}: '
+    f'{sorted(os.listdir(REPO_DIR)) if os.path.isdir(REPO_DIR) else "missing"}')
+
 os.chdir(IMPL_DIR)
 print(subprocess.run(['git','-C',REPO_DIR,'log','--oneline','-1'],
                      capture_output=True, text=True).stdout.strip())
+print('cwd:', os.getcwd())
 '''
 
 BUILD = '''\
@@ -125,7 +142,16 @@ BUILD = '''\
 # Colab ships -- deliberately NOT installing our own, which would risk a
 # mismatch between torch's CUDA and the toolkit the extensions compile with.
 # Takes a few minutes; must be repeated each session.
-%cd $IMPL_DIR
+#
+# chdir explicitly rather than via `%cd $IMPL_DIR`: a magic whose variable fails
+# to expand reports the *current* directory and continues, so the build then
+# runs from the wrong place and fails two steps later with a bare
+# "tools/setup_colab.sh: No such file or directory".
+import os
+assert os.path.isdir(IMPL_DIR), (
+    f'{IMPL_DIR} not found -- run the "Clone the repository" cell above first.')
+os.chdir(IMPL_DIR)
+print('building in', os.getcwd())
 !bash tools/setup_colab.sh
 '''
 
