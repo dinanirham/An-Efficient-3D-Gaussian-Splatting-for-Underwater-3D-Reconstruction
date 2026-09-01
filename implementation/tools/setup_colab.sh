@@ -70,13 +70,17 @@ echo
 echo "--- python deps Colab does not ship ---"
 # Present on Colab already: torch, torchvision, numpy, pillow, matplotlib,
 # tqdm, tensorboard (via torch), scipy.
+#
+# open3d is deliberately absent. It is in SeaSplat's requirements.txt, but no
+# module we execute imports it, and it publishes no wheel for the Python Colab
+# now runs -- so listing it aborted this whole script under `set -e`, before
+# either CUDA extension was built.
 pip install -q \
     jaxtyping \
     kornia \
     plyfile \
     splines \
-    scikit-learn \
-    open3d
+    scikit-learn
 
 echo
 echo "--- building diff_gaussian_rasterization_ms (Mini-Splatting fork) ---"
