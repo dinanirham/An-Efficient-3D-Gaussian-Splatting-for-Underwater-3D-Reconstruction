@@ -82,6 +82,26 @@ pip install -q \
     splines \
     scikit-learn
 
+# RoMa, the dense matcher behind M1 (source/roma_init.py). Only the M1 cells
+# (A1, A4, A5, A7) need it, so a failure here is a warning rather than fatal:
+# A0, A2, A3 and A6 can all still run.
+#
+# --no-deps is deliberate. RoMa's own requirements pin torch/torchvision, and
+# letting pip act on them would downgrade the torch we have just compiled both
+# CUDA extensions against -- trading a missing matcher for a broken rasterizer.
+# Its runtime imports beyond Colab's stack are einops and timm; kornia,
+# opencv, matplotlib and h5py are already present.
+echo "--- RoMa (M1 only) ---"
+pip install -q einops timm
+pip install -q --no-deps "git+https://github.com/Parskatt/RoMa.git" || true
+
+if python -c "import romatch" 2>/dev/null; then
+    echo "    romatch ok"
+else
+    echo "    WARNING: romatch unavailable -- the M1 cells (A1/A4/A5/A7) and"
+    echo "             source/roma_init.py will not run. A0/A2/A3/A6 are fine."
+fi
+
 # Quiet on success, but show the compiler output on failure. With `pip -q` a
 # failed build prints "See above for output" pointing at output that -q has
 # already discarded, which leaves nothing to diagnose from.

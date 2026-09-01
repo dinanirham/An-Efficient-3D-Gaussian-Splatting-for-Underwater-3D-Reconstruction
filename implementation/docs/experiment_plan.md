@@ -24,8 +24,10 @@ The image directory is resolved case-insensitively by the queue. A hard-coded
 `images_wb` silently drops IUI3-RedSea on a case-sensitive filesystem, and a
 scene that fails to load is a scene missing from the results, not an error.
 
-**Split:** every 8th frame held out (`llffhold = 8`), giving 3 test frames per
-scene, 12 in total. This rule is inherited unchanged and coincides with the
+**Split:** every 8th frame held out (`llffhold = 8`), giving **3/4/3/3 test
+frames — 13 in total**, not 3 per scene: IUI3-RedSea's 29 images yield four
+held-out frames where the other three scenes yield three. Train counts are
+18/25/17/15. Measured from the run, not assumed. This rule is inherited unchanged and coincides with the
 held-out frames of every published method on these scenes, so a fidelity number
 produced here is measured on the same pixels as a published one.
 

@@ -85,6 +85,14 @@ def find_originals():
 
 
 DATA_ORIG = find_originals()
+
+# verify_undistort's T1 -- the check that would catch the undistortion gap --
+# reads the *original* dataset. Point it at wherever it actually landed on
+# Drive, or T1 reports "dataset not found" and the one check that matters here
+# quietly stops testing anything.
+if DATA_ORIG:
+    os.environ['E3DGSUW_DATASET'] = DATA_ORIG
+
 print('drive root :', DRIVE_ROOT)
 print('originals  :', DATA_ORIG or 'NOT FOUND')
 print('undistorted:', DATA_UNDIST)
@@ -342,6 +350,7 @@ alongside, or A1's cost is understated relative to A0's.
 """),
     code('''\
 import subprocess, time
+failures = []
 for s in SCENES:
     out = f'{DENSE_DIR}/{s}.ply'
     if os.path.exists(out):
@@ -355,8 +364,29 @@ for s in SCENES:
                         '--preset',      'sparse',
                         '--seed',        '0'],
                        capture_output=True, text=True)
-    print((r.stdout or r.stderr)[-900:], flush=True)
-    print(f'{s}: {(time.time()-t0)/60:.1f} min')
+    print(r.stdout[-900:], flush=True)
+
+    # Check the exit code, and print stderr on its own. `r.stdout or r.stderr`
+    # hides the traceback whenever stdout is non-empty -- and it always is
+    # here, because the scene reader chatters before anything can fail. That
+    # combination reported four crashed runs as four successes.
+    if r.returncode != 0:
+        print(f'!!! {s} FAILED (exit {r.returncode})', flush=True)
+        print(r.stderr[-1500:], flush=True)
+        failures.append(s)
+    elif not os.path.exists(out):
+        print(f'!!! {s} exited 0 but wrote no {out}', flush=True)
+        failures.append(s)
+    else:
+        n = os.path.getsize(out) / 1e6
+        print(f'{s}: {(time.time()-t0)/60:.1f} min   {out}  {n:.1f} MB')
+
+if failures:
+    raise RuntimeError(
+        f'dense-cloud generation failed for {failures}. The M1 cells '
+        f'(A1/A4/A5/A7) cannot run without these. A0/A2/A3/A6 are unaffected, '
+        f'so S1 can still proceed.')
+print('\\nall dense clouds present')
 '''),
     md("""## 10. Initialise the ledger
 
