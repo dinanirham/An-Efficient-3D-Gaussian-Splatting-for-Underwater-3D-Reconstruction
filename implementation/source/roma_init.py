@@ -34,6 +34,7 @@ dataset differs from the one the source method was tuned on:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
 import random
@@ -250,8 +251,25 @@ def main() -> int:
     matcher.upsample_preds = args.upsample_preds
     matcher.symmetric = args.symmetric
     matcher.sample_thresh = certainty_thresh
+
+    # `local_corr` is RoMa's optional fused CUDA kernel (the `fused-local-corr`
+    # extra). Its refiner blocks reach for it whenever use_custom_corr is set,
+    # and the import failure surfaces mid-forward rather than at construction.
+    # Fall back to the pure-torch correlation, which is the reference path the
+    # kernel optimises rather than a different computation.
+    custom_corr = importlib.util.find_spec("local_corr") is not None
+    if not custom_corr:
+        n_disabled = 0
+        for module in matcher.modules():
+            if getattr(module, "use_custom_corr", False):
+                module.use_custom_corr = False
+                n_disabled += 1
+        print(f"[roma-init] local_corr unavailable; using the pure-torch "
+              f"correlation on {n_disabled} refiner blocks (slower, same result)")
+
     print(f"[roma-init] matcher={args.roma_model} tau_corr={certainty_thresh} "
-          f"upsample_preds={args.upsample_preds} symmetric={args.symmetric}")
+          f"upsample_preds={args.upsample_preds} symmetric={args.symmetric} "
+          f"fused_local_corr={custom_corr}")
 
     all_pts: list[np.ndarray] = []
     all_rgb: list[np.ndarray] = []
@@ -364,6 +382,10 @@ def main() -> int:
             "roma_model": args.roma_model,
             "upsample_preds": args.upsample_preds,
             "symmetric": args.symmetric,
+            # Records which correlation path ran. Not a correctness flag --
+            # both compute the same thing -- but it moves preprocessing
+            # wall-clock, which is reported alongside A1's training cost.
+            "fused_local_corr": custom_corr,
             "triangulated": n_raw,
             "kept": n_kept,
             "preprocessing_seconds": round(elapsed, 1),

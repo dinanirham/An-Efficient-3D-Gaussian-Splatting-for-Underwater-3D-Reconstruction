@@ -104,6 +104,15 @@ just compiled against. So those two are excluded and the rest installed by
 name. A romatch failure is a warning rather than fatal: only the M1 cells
 (A1/A4/A5/A7) need it, so A0/A2/A3/A6 are unaffected.
 
+**`fused-local-corr` is optional and may be absent.** RoMa's refiner blocks
+call a fused CUDA correlation kernel whenever `use_custom_corr` is set, and the
+import failure surfaces mid-forward rather than at construction. `roma_init`
+probes for it and, if missing, clears the flag on every refiner block and uses
+the pure-torch correlation — the reference path the kernel optimises, not a
+different computation. Whether the fused kernel was used is printed and
+recorded as `fused_local_corr` in the cloud's sidecar, since it affects
+preprocessing wall-clock, which is reported alongside A1's training cost.
+
 **Windows build note.** `torch/include/ATen/ops/…` header paths overrun the
 260-character limit from a deep working directory, producing a misleading
 `cannot open include file` error. Build through a short path (a junction is

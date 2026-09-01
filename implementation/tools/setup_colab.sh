@@ -106,6 +106,14 @@ pip install -q \
     wandb
 pip install -q --no-deps "git+https://github.com/Parskatt/RoMa.git" || true
 
+# RoMa's optional fused correlation kernel (Linux only). Worth having -- the
+# refiner blocks call it per scale, per image pair -- but strictly a speed
+# optimisation: roma_init falls back to the pure-torch correlation it
+# optimises, so a failure here costs wall clock, not correctness.
+pip install -q fused-local-corr || \
+    echo "    note: fused-local-corr unavailable; roma_init will use the" \
+         "pure-torch correlation (slower, same result)"
+
 if python -c "import romatch" 2>/dev/null; then
     echo "    romatch ok"
 else
