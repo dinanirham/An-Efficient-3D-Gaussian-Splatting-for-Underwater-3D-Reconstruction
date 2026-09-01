@@ -81,6 +81,23 @@ of the first A100 session anyway. It costs seconds.
 `cannot open include file` error. Build through a short path (a junction is
 enough) and set a short `TMP`.
 
+## 3b. The dataset is preprocessed, and must be
+
+Training and `roma_init` both read the **undistorted** copy, not the
+distributed one. All four scenes ship as COLMAP **OPENCV** with real distortion
+coefficients; the reader accepts only PINHOLE/SIMPLE_PINHOLE. This is a hard
+prerequisite rather than a refinement — an un-undistorted scene fails at load,
+every time.
+
+`source/undistort.py` writes an `undistort.json` sidecar per scene recording
+the camera model before and after, the image counts in and out, and whether the
+`sparse/` → `sparse/0/` relocation was needed. Preflight re-checks the model at
+startup, so a scene that slipped through fails with a message naming the fix
+rather than a bare assertion inside the loader.
+
+Note the image directory changes: the originals use `images_wb` (and
+`Images_wb` for IUI3-RedSea), while COLMAP's undistorter writes `images`.
+
 ## 4. The dense cloud is an experimental condition
 
 For A1/A4/A5/A7 the cloud, not just the configuration, determines the result:
@@ -141,7 +158,7 @@ with one reported in steps.
 
 ## 8. Self-checks
 
-Nine suites, **69 checks**, no GPU required except the first:
+Ten suites, **76 checks**, no GPU required except the first:
 
 ```bash
 python -m tools.verify_rasterizer     # 7  -- needs CUDA; T3 is decisive
@@ -150,6 +167,7 @@ python -m tools.verify_ledger         # 11
 python -m tools.verify_metrics        # 7
 python -m tools.verify_storage        # 8
 python -m tools.verify_analysis       # 9
+python -m tools.verify_undistort      # 7  -- T1 runs against the real dataset
 python -m tools.verify_dense_init     # 6
 python -m tools.verify_simplify       # 6
 python -m tools.verify_quantize       # 9
