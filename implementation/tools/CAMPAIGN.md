@@ -1,5 +1,10 @@
 # Running the campaign
 
+> **Following the steps?** Use [`../RUNBOOK.md`](../RUNBOOK.md) — it is the
+> ordered procedure, with expected output and troubleshooting. This file
+> explains *how the harness behaves* and why, which is what you want when
+> something surprises you.
+
 8 cells × 4 scenes × 3 seeds = **96 runs**, roughly 145 GPU-hours, on sessions
 that terminate long before that. The ledger holds the campaign's state on
 Drive; every session is disposable.
