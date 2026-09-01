@@ -54,15 +54,28 @@ def gpu_name() -> str:
 def find_images_dir(scene_dir: Path) -> str:
     """Resolve the image directory, case-insensitively.
 
-    Three scenes ship `images_wb`; IUI3-RedSea ships `Images_wb` with a capital
-    I.  On a case-sensitive filesystem a hard-coded name silently fails for
-    that one scene -- and a scene that fails to load is a scene missing from
-    the results, not an error anyone sees.
+    Training reads the *undistorted* scene, where COLMAP's image_undistorter
+    writes plain `images` -- so that is what is normally found here. The
+    `images_wb` spellings are the original, still-distorted layout, accepted
+    only as a fallback: three scenes ship `images_wb` and IUI3-RedSea ships
+    `Images_wb` with a capital I, and on a case-sensitive filesystem a
+    hard-coded name silently drops that one scene. A scene that fails to load
+    is a scene missing from the results, not an error anyone sees.
+
+    Preferring `images` matters because looking only for `images_wb` blocks
+    every run against a correctly preprocessed dataset. If the fallback does
+    match, preflight's camera-model check still refuses the run -- the
+    distributed scenes are OPENCV and the reader accepts only PINHOLE.
     """
-    for child in sorted(scene_dir.iterdir()):
-        if child.is_dir() and child.name.lower() == "images_wb":
-            return child.name
-    raise FileNotFoundError(f"no images_wb directory under {scene_dir}")
+    names = {c.name.lower(): c.name for c in scene_dir.iterdir() if c.is_dir()}
+    for candidate in ("images", "images_wb"):
+        if candidate in names:
+            return names[candidate]
+    raise FileNotFoundError(
+        f"no images/ or images_wb/ directory under {scene_dir}. Training reads "
+        f"the undistorted scene -- run source/undistort.py, and point "
+        f"--data_root at the undistorted copy."
+    )
 
 
 def build_command(
