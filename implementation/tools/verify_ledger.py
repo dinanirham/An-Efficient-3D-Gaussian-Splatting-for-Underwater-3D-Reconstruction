@@ -276,6 +276,61 @@ def t11_images_dir_resolution():
     return True, "images / images_wb / Images_wb resolved; images wins; empty raises"
 
 
+def t12_exhausted_runs_are_visible_and_resettable():
+    """A run at the attempt cap must be distinguishable from a queued one.
+
+    It still carries status "pending", so the counts read pending=N while the
+    queue reports nothing eligible to claim -- a stuck campaign that looks
+    like an idle one. And once the environmental cause is fixed, there has to
+    be a way back into the queue that does not discard completed runs.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        led = fresh(tmp)
+
+        # Burn A0/Curasao/s0's attempts the way a broken harness would.
+        row = led.by_id("A0/Curasao/s0")
+        row["attempts"] = 3
+        row["error"] = "cannot build command: no images_wb directory"
+        led.save()
+
+        if not any(r["id"] == row["id"] for r in led.exhausted()):
+            return False, "exhausted() did not report a run at the cap"
+        if "OUT OF ATTEMPTS" not in led.summary():
+            return False, "summary() does not flag exhausted runs"
+
+        # It must not be claimable while spent...
+        for _ in range(12):
+            got = led.claim()
+            if got is None:
+                break
+            if got["id"] == row["id"]:
+                return False, "claimed a run that was out of attempts"
+            got["status"] = "done"
+
+        n = led.reset()
+        if n < 1:
+            return False, f"reset returned {n}, expected at least 1"
+        again = led.by_id("A0/Curasao/s0")
+        if again["attempts"] != 0 or again["status"] != "pending":
+            return False, f"after reset: attempts={again['attempts']} status={again['status']}"
+
+    # Blocked runs must survive reset untouched: their problem is a missing
+    # prerequisite, not a spent attempt, and claiming one would run a cell
+    # whose budget or dense cloud still does not exist.
+    with tempfile.TemporaryDirectory() as tmp2:
+        led = fresh(tmp2)
+        blocked = led.by_id("A2/Curasao/s0")
+        blocked["status"] = "blocked"
+        blocked["error"] = "no primitive budget recorded"
+        blocked["attempts"] = 3
+        led.save()
+        led.reset(all_failed=True)
+        if led.by_id("A2/Curasao/s0")["status"] != "blocked":
+            return False, "reset flipped a blocked run to pending"
+
+    return True, "cap is visible in summary, reset restores it, blocked untouched"
+
+
 def main() -> int:
     check("T1 init creates the full 8x4x3 matrix", t1_init_shape)
     check("T2 stage order is enforced  <-- decisive", t2_stage_order_enforced)
@@ -290,6 +345,8 @@ def main() -> int:
     check("T10 ledger writes atomically and reloads", t10_save_is_atomic_and_reloadable)
     check("T11 image dir resolves for undistorted scenes  <-- decisive",
           t11_images_dir_resolution)
+    check("T12 exhausted runs are visible and resettable  <-- decisive",
+          t12_exhausted_runs_are_visible_and_resettable)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

@@ -51,6 +51,12 @@ STAGE_ORDER = list(STAGES)
 M1_CELLS = {"A1", "A4", "A5", "A7"}
 M2_CELLS = {"A2", "A4", "A6", "A7"}
 
+# Attempts before a run stops being claimed, so a broken configuration cannot
+# loop for a whole session. One source of truth: claim(), preview() and the
+# summary all have to agree on it, or the queue silently skips runs the status
+# output still calls pending.
+MAX_ATTEMPTS = 3
+
 
 def _utc() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -184,7 +190,53 @@ class Ledger:
             self.save()
         return n
 
-    def claim(self, max_attempts: int = 3) -> Optional[dict]:
+    def exhausted(self, max_attempts: int = MAX_ATTEMPTS) -> list[dict]:
+        """Runs that are out of attempts and will never be claimed again."""
+        return [
+            r for r in self.runs
+            if r["status"] == "pending" and r["attempts"] >= max_attempts
+        ]
+
+    def reset(
+        self,
+        cells: Optional[list[str]] = None,
+        all_failed: bool = False,
+        max_attempts: int = MAX_ATTEMPTS,
+    ) -> int:
+        """Return exhausted runs to the queue by clearing their attempts.
+
+        A run that hits the cap for an *environmental* reason -- a wrong path,
+        a missing package, a harness bug -- stays unclaimable forever once the
+        cause is fixed, because nothing clears `attempts`. The queue then
+        reports "nothing eligible to claim" while the status output still
+        calls those runs pending, which reads as a campaign that is idle
+        rather than one that is stuck.
+
+        Without this the only remedies are re-initialising the ledger, which
+        discards completed runs, or editing the JSON by hand.
+        """
+        targets = self.runs if all_failed else self.exhausted(max_attempts)
+        n = 0
+        for r in targets:
+            # Never touch finished or in-flight work, and leave `blocked`
+            # alone: that state is about an unmet prerequisite, not a failed
+            # attempt, and flipping it to pending would claim a run whose
+            # budget or dense cloud still does not exist.
+            if r["status"] not in ("pending", "failed"):
+                continue
+            if cells and r["cell"] not in cells:
+                continue
+            if r["attempts"] == 0 and not r["error"]:
+                continue
+            r["attempts"] = 0
+            r["error"] = ""
+            r["status"] = "pending"
+            n += 1
+        if n:
+            self.save()
+        return n
+
+    def claim(self, max_attempts: int = MAX_ATTEMPTS) -> Optional[dict]:
         """Take the next eligible run, honouring stage order. None if nothing.
 
         Ordering policy, which is deliberately not "never descend":
@@ -255,7 +307,8 @@ class Ledger:
         self.save()
         return None
 
-    def preview(self, limit: int = 10, max_attempts: int = 3) -> list[dict]:
+    def preview(self, limit: int = 10,
+                max_attempts: int = MAX_ATTEMPTS) -> list[dict]:
         """What `claim` would hand out next, WITHOUT mutating anything.
 
         A dry run that consumed attempts or flipped statuses would be worse
@@ -348,11 +401,25 @@ class Ledger:
                     f"{k}={v}" for k, v in sorted(st.items())
                 )
             )
+        # An exhausted run still reads as "pending" in the counts above, which
+        # is how a stuck campaign comes to look like an idle one: the queue
+        # says "nothing eligible to claim" while the stage line says pending=12.
+        spent = self.exhausted()
+        if spent:
+            lines += [
+                "",
+                f"  !! {len(spent)} run(s) OUT OF ATTEMPTS -- counted as pending "
+                f"above, but the queue will not claim them.",
+                "     Fix the cause, then: run_ledger reset --output_root <root>",
+            ]
+
         problems = [r for r in self.runs if r["status"] == "blocked" or r["error"]]
         if problems:
             lines += ["", "  attention:"]
+            spent_ids = {r["id"] for r in spent}
             for r in problems[:10]:
-                lines.append(f"    {r['id']:<24} {r['status']:<8} {r['error']}")
+                mark = "spent" if r["id"] in spent_ids else r["status"]
+                lines.append(f"    {r['id']:<24} {mark:<8} {r['error']}")
         return "\n".join(lines)
 
 
@@ -361,7 +428,8 @@ class Ledger:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="campaign run ledger")
-    ap.add_argument("command", choices=["init", "status", "set-budget", "reap"])
+    ap.add_argument("command",
+                    choices=["init", "status", "set-budget", "reap", "reset"])
     ap.add_argument("value", nargs="?", help="budget count for set-budget")
     ap.add_argument("--output_root", required=True)
     ap.add_argument("--scenes", nargs="+",
@@ -370,6 +438,9 @@ def main() -> int:
     ap.add_argument("--cells", nargs="+", default=None)
     ap.add_argument("--stale_minutes", type=int, default=45)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--all", action="store_true",
+                    help="reset: include runs that failed but still have "
+                         "attempts left, not only exhausted ones")
     args = ap.parse_args()
 
     ledger = Ledger(args.output_root)
@@ -388,6 +459,10 @@ def main() -> int:
     elif args.command == "reap":
         n = ledger.reap_stale(args.stale_minutes)
         print(f"reclaimed {n} stale run(s)")
+    elif args.command == "reset":
+        n = ledger.reset(cells=args.cells, all_failed=args.all)
+        print(f"reset {n} run(s) -- attempts cleared, back in the queue")
+        print(ledger.summary())
     return 0
 
 
