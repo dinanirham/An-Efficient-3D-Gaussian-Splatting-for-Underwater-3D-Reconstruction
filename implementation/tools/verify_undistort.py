@@ -14,6 +14,7 @@ accepts only PINHOLE.
 
 from __future__ import annotations
 
+import os
 import struct
 import sys
 import tempfile
@@ -31,7 +32,22 @@ from source.undistort import (  # noqa: E402
 )
 
 REPO = Path(__file__).resolve().parent.parent.parent
-DATASET = REPO / "dataset" / "SeathruNeRF_dataset"
+
+# T1 needs the *original*, still-distorted dataset. Its location is not fixed:
+# beside the repo on a workstation, on Drive under Colab, and the distributed
+# folder name varies in case (SeaThruNeRF_dataset / SeathruNeRF_dataset). Take
+# an override, then try the plausible spellings, so the one check that would
+# catch the undistortion gap does not silently go missing on the machine the
+# campaign actually runs on.
+_DATASET_ENV = os.environ.get("E3DGSUW_DATASET")
+if _DATASET_ENV:
+    DATASET = Path(_DATASET_ENV)
+else:
+    _candidates = [
+        REPO / "dataset" / name
+        for name in ("SeathruNeRF_dataset", "SeaThruNeRF_dataset")
+    ]
+    DATASET = next((p for p in _candidates if p.exists()), _candidates[0])
 SCENES = ["Curasao", "IUI3-RedSea", "JapaneseGradens-RedSea", "Panama"]
 
 _results: list[tuple[str, bool, str]] = []
@@ -170,7 +186,10 @@ def main() -> int:
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
     if failed:
-        print(f"UNDISTORTION: FAILED ({len(failed)}/{len(_results)})")
+        # Report passes, matching the PASSED branch and every other suite.
+        # "FAILED (1/7)" read as one check passing when it meant one failing.
+        print(f"UNDISTORTION: FAILED ({len(_results) - len(failed)}/"
+              f"{len(_results)} passed, {len(failed)} failed)")
         for n in failed:
             print(f"  - {n}")
         return 1

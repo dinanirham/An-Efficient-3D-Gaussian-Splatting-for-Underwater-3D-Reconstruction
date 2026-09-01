@@ -60,21 +60,45 @@ non-A100 unless `--allow_any_gpu` is passed, because every conclusion is a
 between-cell contrast and cells on different devices are not comparable. If the
 override is used, those runs must be reported as not comparable with the rest.
 
-### Verified environment
+### Verified environments
 
-| Component | Value |
-|---|---|
-| torch | 2.6.0+cu124 |
-| CUDA toolkit | 12.4 |
-| Host compiler | MSVC 2019 (14.29) — CUDA 12.4 rejects newer hosts |
-| Rasterizer | `diff_gaussian_rasterization_ms`, built from `mini-splatting/submodules` |
-| kNN | `simple_knn`, same source |
-| Matcher | `romatch` — **pin this**; it is the only import absent from `requirements.txt` |
+Two, and the campaign runs on the second.
 
-The rasterizer merge has been verified on **sm_86**, not the campaign's sm_80.
-The probe-channel argument is arithmetic rather than architecture-specific, so
-it should transfer — but re-run `tools/verify_rasterizer.py` as the first action
-of the first A100 session anyway. It costs seconds.
+| Component | Development (Windows) | **Campaign (Colab A100)** |
+|---|---|---|
+| GPU | RTX 3050 Ti, sm_86 | **A100-SXM4-40GB, sm_80** |
+| Python | 3.11 | **3.13** |
+| torch | 2.6.0+cu124 | **2.11.0+cu128** |
+| CUDA toolkit | 12.4 | **12.8** |
+| Host compiler | MSVC 2019 (14.29) — CUDA 12.4 rejects newer hosts | gcc (Colab default) |
+
+Same in both: `diff_gaussian_rasterization_ms` and `simple_knn` built from
+`mini-splatting/submodules`, and `romatch` as the matcher.
+
+The gap between the two is wider than intended — the campaign stack is three
+torch minors and a CUDA minor ahead of where the code was written. It builds
+and passes, but that is a measured fact rather than a designed one, and it is
+why the acceptance test is re-run every session rather than trusted.
+
+**The rasterizer merge is verified on both.** `tools/verify_rasterizer.py`
+reports 7/7 on sm_80, with T3 — `Z_raw/α` recovering true depth — at 0.00e+00
+for opacity 0.3 and 0.7, and 2.38e-07 at 0.95. Identical to the sm_86 figures,
+as the arithmetic argument predicted. Re-run it at the start of every session
+regardless; it costs seconds and the whole merge rests on that identity.
+
+**Two build fixes were needed for the newer toolkit**, both in-tree:
+
+- `simple_knn.cu` uses `FLT_MAX` without including `<float.h>`. Up to CUDA
+  ~11.x the CUDA headers supplied it transitively; under 12.x they do not.
+- `open3d` has no wheel for Python 3.13 and is not imported by anything we
+  run. It is in SeaSplat's `requirements.txt`, which is how it reached the
+  install list; under `set -e` it aborted the build script entirely.
+
+**`romatch` installs with `--no-deps`.** Its requirements pin torch and
+torchvision, and letting pip act on them downgrades the torch both CUDA
+extensions were just compiled against. Its runtime imports beyond Colab's stack
+are `einops` and `timm`, installed separately. A romatch failure is a warning
+rather than fatal: only the M1 cells (A1/A4/A5/A7) need it.
 
 **Windows build note.** `torch/include/ATen/ops/…` header paths overrun the
 260-character limit from a deep working directory, producing a misleading
