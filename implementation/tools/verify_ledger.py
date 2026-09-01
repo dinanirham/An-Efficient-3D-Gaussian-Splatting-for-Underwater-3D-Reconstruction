@@ -233,6 +233,49 @@ def t10_save_is_atomic_and_reloadable():
         )
 
 
+def t11_images_dir_resolution():
+    """The queue must find the undistorted layout, not only the original.
+
+    Training reads the undistorted scene, where COLMAP writes `images`. A
+    resolver that accepts only `images_wb` blocks every run against a
+    correctly preprocessed dataset -- and does it as a per-run "cannot build
+    command" note, which looks like a data problem rather than a harness bug.
+    """
+    from tools.run_queue import find_images_dir
+
+    cases = [
+        ("images", "images", "undistorted layout"),
+        ("images_wb", "images_wb", "original layout"),
+        ("Images_wb", "Images_wb", "original, capital I"),
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        for made, expected, label in cases:
+            scene = Path(tmp) / label.replace(" ", "_")
+            (scene / made).mkdir(parents=True)
+            (scene / "sparse" / "0").mkdir(parents=True)
+            got = find_images_dir(scene)
+            if got != expected:
+                return False, f"{label}: expected {expected!r}, got {got!r}"
+
+        # Both present: the undistorted copy must win, or a scene staged over
+        # an earlier one would silently train on distorted images.
+        both = Path(tmp) / "both"
+        (both / "images").mkdir(parents=True)
+        (both / "images_wb").mkdir(parents=True)
+        if find_images_dir(both) != "images":
+            return False, f"both present: got {find_images_dir(both)!r}, want 'images'"
+
+        empty = Path(tmp) / "empty"
+        (empty / "sparse").mkdir(parents=True)
+        try:
+            find_images_dir(empty)
+            return False, "a scene with no image directory did not raise"
+        except FileNotFoundError:
+            pass
+
+    return True, "images / images_wb / Images_wb resolved; images wins; empty raises"
+
+
 def main() -> int:
     check("T1 init creates the full 8x4x3 matrix", t1_init_shape)
     check("T2 stage order is enforced  <-- decisive", t2_stage_order_enforced)
@@ -245,6 +288,8 @@ def main() -> int:
     check("T8 dead sessions are reclaimed", t8_stale_reclaimed)
     check("T9 repeated failure is capped", t9_attempt_cap)
     check("T10 ledger writes atomically and reloads", t10_save_is_atomic_and_reloadable)
+    check("T11 image dir resolves for undistorted scenes  <-- decisive",
+          t11_images_dir_resolution)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
