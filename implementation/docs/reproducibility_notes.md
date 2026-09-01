@@ -200,7 +200,7 @@ Ten suites, **77 checks**, no GPU required except the first:
 ```bash
 python -m tools.verify_rasterizer     # 7  -- needs CUDA; T3 is decisive
 python -m tools.verify_config_layer   # 6
-python -m tools.verify_ledger         # 11
+python -m tools.verify_ledger         # 12 -- T11 covers image-dir resolution
 python -m tools.verify_metrics        # 7
 python -m tools.verify_storage        # 8
 python -m tools.verify_analysis       # 9
