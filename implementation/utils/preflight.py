@@ -170,6 +170,29 @@ def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
             f"but it means the run is not the cell it claims to be."
         )
 
+    # -- the scene must already be undistorted -------------------------------
+    # All four SeaThru-NeRF scenes ship as COLMAP OPENCV with real distortion,
+    # and the scene reader accepts only PINHOLE/SIMPLE_PINHOLE.  Caught here so
+    # the message names the fix, rather than surfacing as a bare assert several
+    # frames deep in the loader after the manifest has already been written.
+    source_path = getattr(dataset, "source_path", "") or ""
+    if source_path:
+        try:
+            from source.undistort import find_sparse_dir, read_camera_model
+            info = read_camera_model(find_sparse_dir(source_path) / "cameras.bin")
+            if info["needs_undistortion"]:
+                fail.append(
+                    f"scene uses the {info['model']} camera model; the reader "
+                    f"supports only PINHOLE/SIMPLE_PINHOLE, so this run would "
+                    f"fail at scene load. Preprocess it first:\n"
+                    f"      python -m source.undistort --source {source_path} "
+                    f"--output <undistorted>/<scene>"
+                )
+        except FileNotFoundError as exc:
+            fail.append(f"no COLMAP reconstruction found: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            warn.append(f"could not verify the camera model ({exc})")
+
     # -- M1 cannot run without its cloud ------------------------------------
     if flags[0]:
         pcd = getattr(dataset, "pcd_path", "") or ""

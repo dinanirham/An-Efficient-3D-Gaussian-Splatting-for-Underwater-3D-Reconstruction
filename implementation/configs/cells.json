@@ -47,7 +47,38 @@
     "kmeans_st_iter": 22000,
     "kmeans_k": 4096,
     "kmeans_freq": 100,
-    "kmeans_iters": 1
+    "kmeans_iters": 1,
+
+    "_storage_note": [
+      "The inherited save schedule writes the model at 4 iterations and a",
+      "checkpoint at 4 more. At ~1M primitives that is roughly 900 MB per run,",
+      "or ~86 GB across 96 runs -- more than a normal Drive holds.",
+      "",
+      "Checkpoints in particular have NO operational value here: interrupted",
+      "runs are restarted rather than resumed (CD-18), because the checkpoint",
+      "omits the medium model, the codebooks and the loop's schedule flags.",
+      "Writing 4 per run to support a resume path that is deliberately unused",
+      "is pure cost.",
+      "",
+      "Keeping only the final model brings a run to roughly 60-120 MB and the",
+      "campaign to ~6-12 GB. Everything the analysis needs -- diagnostics,",
+      "eval_metrics, the compressed artifact, run_config -- is unaffected."
+    ],
+    "save_iterations": [30000],
+    "checkpoint_iterations": [30000],
+
+    "_test_iterations_note": [
+      "Upstream evaluates every 1000 iterations -- 30 full evaluations per run,",
+      "each rendering every train and test view and running VGG-LPIPS over",
+      "them. That is real wall-clock inside the figure this study reports as",
+      "training time. Four checkpoints are enough to see the trajectory, and",
+      "the final evaluation is what the results use.",
+      "",
+      "What matters most is that this is identical across cells: an evaluation",
+      "schedule that varied between them would put a confound straight into",
+      "the timing contrast."
+    ],
+    "test_iterations": [7000, 15000, 22000, 30000]
   },
 
   "cells": {
