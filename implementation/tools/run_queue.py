@@ -26,8 +26,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -103,12 +105,34 @@ def build_command(
 
 
 def execute(cmd: list[str], log_path: Path, ledger: Ledger, run_id: str) -> int:
-    """Run to completion, heartbeating so a death is detectable as stale."""
+    """Run to completion, heartbeating so a death is detectable as stale.
+
+    The log is written to local disk and mirrored to Drive on each heartbeat,
+    rather than written to Drive directly. A file held open on Drive's FUSE
+    mount is not published to other sessions or the Drive UI until it is
+    closed -- so a log written there is unreadable for precisely as long as it
+    is useful, and vanishes entirely if the session is killed mid-run.
+    """
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "a", encoding="utf-8") as log:
+    local_log = Path(tempfile.gettempdir()) / f"{run_id.replace('/', '_')}.log"
+
+    # Seed from Drive so the append history of earlier attempts survives: the
+    # mirror is a whole-file copy, and a fresh local file would otherwise
+    # overwrite the record of why the previous attempt failed.
+    if log_path.exists():
+        shutil.copyfile(log_path, local_log)
+
+    def mirror() -> None:
+        try:
+            shutil.copyfile(local_log, log_path)
+        except OSError:
+            pass  # a failed mirror must never take down a run
+
+    with open(local_log, "a", encoding="utf-8") as log:
         log.write(f"\n{'=' * 70}\n{datetime.now(timezone.utc).isoformat()}\n")
         log.write(" ".join(cmd) + "\n" + "=" * 70 + "\n")
         log.flush()
+        mirror()
 
         proc = subprocess.Popen(
             cmd, stdout=log, stderr=subprocess.STDOUT, text=True
@@ -121,8 +145,11 @@ def execute(cmd: list[str], log_path: Path, ledger: Ledger, run_id: str) -> int:
                     ledger.heartbeat(run_id)
                 except Exception:  # noqa: BLE001 - never kill a run over a heartbeat
                     pass
+                mirror()
                 last = time.time()
-        return proc.returncode
+
+    mirror()  # final state, including whatever the failure was
+    return proc.returncode
 
 
 def tail(path: Path, n: int = 25) -> str:
