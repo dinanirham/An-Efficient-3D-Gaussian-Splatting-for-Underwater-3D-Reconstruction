@@ -17,6 +17,10 @@
 #include <cub/cub.cuh>
 #include <cub/device/device_radix_sort.cuh>
 #include <vector>
+// FLT_MAX (used below) came in transitively via the CUDA headers up to ~11.x.
+// It no longer does under CUDA 12.x, so the build fails with "identifier
+// FLT_MAX is undefined" unless this is included explicitly.
+#include <float.h>
 #include <cuda_runtime_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/sequence.h>

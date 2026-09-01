@@ -82,12 +82,24 @@ pip install -q \
     splines \
     scikit-learn
 
-echo
-echo "--- building diff_gaussian_rasterization_ms (Mini-Splatting fork) ---"
-pip install -q "$RASTERIZER"
+# Quiet on success, but show the compiler output on failure. With `pip -q` a
+# failed build prints "See above for output" pointing at output that -q has
+# already discarded, which leaves nothing to diagnose from.
+build_ext() {
+    local name="$1" path="$2" out
+    echo "--- building $name ---"
+    if ! out="$(pip install "$path" 2>&1)"; then
+        echo "$out" | tail -50
+        echo
+        echo "!!! $name failed to build -- see the compiler output above."
+        return 1
+    fi
+    echo "    ok"
+}
 
-echo "--- building simple_knn ---"
-pip install -q "$SIMPLE_KNN"
+echo
+build_ext "diff_gaussian_rasterization_ms (Mini-Splatting fork)" "$RASTERIZER"
+build_ext "simple_knn" "$SIMPLE_KNN"
 
 echo
 echo "--- import check ---"
