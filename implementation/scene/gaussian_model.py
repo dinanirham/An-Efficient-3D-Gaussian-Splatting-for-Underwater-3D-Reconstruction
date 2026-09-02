@@ -502,6 +502,20 @@ class GaussianModel:
         self.densify_and_split(grads, max_grad, extent)
         n_split = self._xyz.shape[0] - n_before - n_cloned
 
+        # Opacity distribution, because the residual gap after CD-23 traces to
+        # the first densification after an opacity reset: upstream pruned
+        # 214,311 there where we pruned 135,915, and having pruned harder it
+        # then cloned at 7.7% against our 5.3%, which compounds.  reset_opacity
+        # is byte-identical and fires on the same iterations, so the question
+        # is why more of upstream's opacities fall below min_opacity in the 100
+        # steps after a reset -- which is a statement about the distribution,
+        # not about the reset.
+        _op = self.get_opacity.detach().squeeze()
+        _q = torch.quantile(
+            _op.float(), torch.tensor([0.05, 0.25, 0.5], device=_op.device)
+        ).tolist()
+        _frac_lt_01 = float((_op < 0.01).float().mean())
+
         low_opacity = (self.get_opacity < min_opacity).squeeze()
         prune_mask = low_opacity
         n_big_vs = n_big_ws = 0
@@ -520,7 +534,9 @@ class GaussianModel:
             f"clone=+{n_cloned} split=+{n_split} "
             f"prune=-{n_pruned} (alpha={int(low_opacity.sum().item())} "
             f"screen={n_big_vs} world={n_big_ws}) "
-            f"after={self._xyz.shape[0]}",
+            f"after={self._xyz.shape[0]} "
+            f"op_p05={_q[0]:.5f} op_p25={_q[1]:.5f} op_med={_q[2]:.5f} "
+            f"op_lt01={100.0 * _frac_lt_01:.2f}%",
             flush=True,
         )
 

@@ -43,9 +43,16 @@ LINE = re.compile(
     r"prune=-(?P<prune>\d+)\s+"
     r"\(alpha=(?P<alpha>\d+)\s+screen=(?P<screen>\d+)\s+world=(?P<world>\d+)\)\s+"
     r"after=(?P<after>\d+)"
+    # Opacity distribution, added after the CD-23 run localised the residual to
+    # the first densification following an opacity reset. Optional, so logs
+    # written before the instrumentation still parse instead of silently
+    # yielding zero events.
+    r"(?:\s+op_p05=(?P<op_p05>[\d.]+)\s+op_p25=(?P<op_p25>[\d.]+)"
+    r"\s+op_med=(?P<op_med>[\d.]+)\s+op_lt01=(?P<op_lt01>[\d.]+)%)?"
 )
 
 FIELDS = ("before", "over", "clone", "split", "prune", "alpha", "screen", "world", "after")
+OPACITY = ("op_p05", "op_p25", "op_med", "op_lt01")
 DENSIFY_FROM_ITER = 500
 DENSIFICATION_INTERVAL = 100
 
@@ -58,6 +65,9 @@ def parse(path: Path) -> dict[int, dict[str, int]]:
         if not m:
             continue
         d = {k: int(m.group(k)) for k in FIELDS}
+        for k in OPACITY:
+            if m.group(k) is not None:
+                d[k] = float(m.group(k))
         key = int(m.group("key"))
         # An event index is small and monotonic from 1; an iteration is >= 600.
         it = key if key >= DENSIFY_FROM_ITER else DENSIFY_FROM_ITER + DENSIFICATION_INTERVAL * key
@@ -123,6 +133,25 @@ def main() -> int:
               f"{o['after'] / max(1, r['after']):>7.3f}   "
               f"{net_o:>+8,} ({pct(o['over'], o['before'])}) "
               f"{net_r:>+8,} ({pct(r['over'], r['before'])})")
+
+    # 4. Opacity distribution. After CD-23 the residual traced to the first
+    #    densification following an opacity reset -- upstream pruned 214,311
+    #    there against our 135,915 -- and reset_opacity is byte-identical on
+    #    both sides. So the question is not the reset but the distribution it
+    #    acts on, and how far it drifts in the 100 steps before the prune.
+    if all("op_med" in ours[it] and "op_med" in ref[it] for it in common):
+        print("\nopacity distribution  (reset fires every 3000 iterations)")
+        print(f"  {'iter':>7} {'ours med':>9} {'ref med':>9} "
+              f"{'ours <0.01':>11} {'ref <0.01':>10}")
+        for it in common:
+            if it % 1000 and it not in (3100, 6100, 9100, 12100, common[-1]):
+                continue
+            o, r = ours[it], ref[it]
+            mark = "  <-- first prune after reset" if it in (3100, 6100, 9100, 12100) else ""
+            print(f"  {it:>7} {o['op_med']:>9.5f} {r['op_med']:>9.5f} "
+                  f"{o['op_lt01']:>10.2f}% {r['op_lt01']:>9.2f}%{mark}")
+    else:
+        print("\n(no opacity fields -- logs predate that instrumentation)")
 
     print("\n" + "=" * 70)
     if not verdicts:

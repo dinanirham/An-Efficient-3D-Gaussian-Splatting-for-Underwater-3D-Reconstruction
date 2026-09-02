@@ -218,6 +218,15 @@ class OptimizationParams(ParamGroup):
         # no shared buffer, so this removes the third rasterization CD-23 added
         # rather than costing one.
         self.detach_alpha_gradient = False
+
+        # Storage.  At 4.4M primitives a run writes ~300 MB of .ply and ~1 GB
+        # of Adam checkpoint; across 114 runs that is well past what a Drive
+        # holds.  Neither is read by the analysis -- model_size.json comes from
+        # compressed_*/, and CD-18 restarts rather than resumes -- so both are
+        # off by default and both are recorded in the manifest, because "which
+        # artifacts exist" is something a later reader will need to know.
+        self.save_gaussian_checkpoint = False
+        self.save_ply_all_seeds = False
         self.do_z_score = False               # z threshold direct image to +/- 5 stdevs
 
         # ------------------------------------------------------------------

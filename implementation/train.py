@@ -73,7 +73,7 @@ from metrics import readImages, read_image
 from render_uw import estimate_atmospheric_light, render_set
 from utils.sh_utils import SH2RGB
 
-def training(model_params, opt_params, pipe_params, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+def training(model_params, opt_params, pipe_params, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, args_seed=0):
     if model_params.do_scene_bb:
         scene_bounds_xxyyzz = [
             model_params.bb_xlo,
@@ -862,8 +862,18 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                     bg_optimizer.step()
 
             if (iteration in saving_iterations):
-                print(f"\n[ITER {iteration}] Saving Gaussians")
-                scene.save(iteration)
+                # The .ply is for rendering figures and visual inspection;
+                # nothing in analyse.py reads it, and model_size.json comes
+                # from compressed_*/ instead.  At 4.4M primitives it is ~300 MB,
+                # so one seed per cell is kept and the other two are not:
+                # figures are illustrative, and two thirds of 114 of them is
+                # ~30 GB of a Drive that holds 15.
+                if opt_params.save_ply_all_seeds or args_seed == 0:
+                    print(f"\n[ITER {iteration}] Saving Gaussians")
+                    scene.save(iteration)
+                else:
+                    print(f"\n[ITER {iteration}] point cloud not written "
+                          f"(seed {args_seed}; --save_ply_all_seeds to keep it)")
 
                 # Model size, measured rather than asserted.  Written for EVERY
                 # cell, not only the quantized ones: a compression ratio is only
@@ -908,8 +918,22 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                             f"and should be reported, not silently dropped."
                         )
             if (iteration in checkpoint_iterations):
-                print(f"\n[ITER {iteration}] Saving Checkpoint in {scene.model_path}")
-                torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+                # The Gaussian checkpoint is ~1 GB at 4.4M primitives, because
+                # `capture` carries Adam's two moment tensors per parameter
+                # group -- roughly 3x the model itself.  It exists to support
+                # resume, and CD-18 does not resume: an interrupted run is
+                # restarted, because the checkpoint omits the medium model
+                # saved below, the codebooks and the loop's schedule flags, so
+                # resuming would silently reinitialise beta and produce a
+                # different experiment.  Across 114 runs that is >100 GB bought
+                # for a path deliberately never taken.
+                if opt_params.save_gaussian_checkpoint:
+                    print(f"\n[ITER {iteration}] Saving Checkpoint in {scene.model_path}")
+                    torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+
+                # The medium model is kept unconditionally: three small tensors
+                # holding beta_att, beta_bs and B_inf, which are the physically
+                # interpretable output of the whole method.  Kilobytes.
                 if opt_params.do_seathru:
                     torch.save(bs_model.state_dict(), f"{scene.model_path}/backscatter_{iteration}.pth")
                     torch.save(at_model.state_dict(), f"{scene.model_path}/attenuate_{iteration}.pth")
@@ -1492,7 +1516,8 @@ if __name__ == "__main__":
         args.save_iterations,
         args.checkpoint_iterations,
         args.start_checkpoint,
-        args.debug_from
+        args.debug_from,
+        args.seed,
     )
 
     # All done
