@@ -280,7 +280,18 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
         # the colour pass, so the depth pass doubles as an alpha probe (see
         # gaussian_renderer/__init__.py).  This pass ran unconditionally
         # upstream as well -- it has only moved earlier, it is not an extra one.
-        render_depth_pkg = render_depth(viewpoint_cam, gaussians, pipe_params, bg)
+        #
+        # CD-22: share the colour pass's gradient buffer.  Upstream reads alpha
+        # from the colour pass, so alpha-loss gradients land in the tensor
+        # add_densification_stats consumes; a probe pass with its own buffer
+        # reproduces alpha's value and drops its gradient from density control.
+        # Measured cost of getting this wrong: 743k primitives against
+        # vanilla's 4.46M on Curasao.  Note this also admits the depth losses'
+        # gradients, which upstream excludes -- a known, measured deviation.
+        render_depth_pkg = render_depth(
+            viewpoint_cam, gaussians, pipe_params, bg,
+            screenspace_points=viewspace_point_tensor,
+        )
         image_alpha = render_depth_pkg["alpha"]
 
         if opt_params.learn_background:

@@ -81,10 +81,50 @@ and passes, but that is a measured fact rather than a designed one, and it is
 why the acceptance test is re-run every session rather than trusted.
 
 **The rasterizer merge is verified on both.** `tools/verify_rasterizer.py`
-reports 7/7 on sm_80, with T3 — `Z_raw/α` recovering true depth — at 0.00e+00
+reported 7/7 on sm_80 before T7 was added, with T3 — `Z_raw/α` recovering true depth — at 0.00e+00
 for opacity 0.3 and 0.7, and 2.38e-07 at 0.95. Identical to the sm_86 figures,
 as the arithmetic argument predicted. Re-run it at the start of every session
 regardless; it costs seconds and the whole merge rests on that identity.
+
+### CD-22: the alpha gradient must reach density control
+
+The rasterizer substitution changed more than the forward pass, and the
+difference went undetected for the whole build.
+
+Upstream SeaSplat reads `alpha` from the **colour pass** — dxyang's fork emits
+it natively — so every alpha-derived loss backpropagates into the same
+`viewspace_point_tensor` that `add_densification_stats` consumes. The `_ms`
+fork cannot emit alpha, so CD-13 recovered it from the probe pass, which
+allocated its own gradient buffer. Alpha's *value* was exact; its *gradient*
+was silently removed from the densification signal.
+
+Measured on Curasao at 30 000 iterations:
+
+| | vanilla SeaSplat | before CD-22 |
+|---|---|---|
+| primitives | 4,462,668 | 743,457 |
+| model on disk | 303.5 MB | 48.2 MB |
+| test PSNR (per-channel) | 30.375 | 30.268 |
+
+The trajectories agree to iteration 5000 (665,106 against 652,416) and diverge
+after, which is the signature of a *missing* gradient term rather than a
+mis-scaled one: early on the photometric gradient clears the threshold
+unaided, and only later does the alpha contribution decide.
+
+The fix threads one `screenspace_points` buffer through both rasterizations,
+so the accumulated gradient equals upstream's by linearity. **A known
+deviation remains**: our probe emits depth and alpha from a single
+rasterization, so depth-loss gradients now also reach density control, where
+upstream excludes them. Separating them would need a third pass per iteration,
+inflating the wall-clock this study reports as an efficiency result. The
+two-pass form is used deliberately and is re-checked against vanilla's
+trajectory rather than assumed equivalent.
+
+**None of T0–T6 could have caught this.** Every one inspects a returned
+tensor, and alpha was correct in both versions. `verify_rasterizer` T7 now
+asserts the gradient's *destination* in both directions — non-zero when the
+buffer is shared, and untouched when it is not, so the check still fails if
+the sharing is ever quietly dropped.
 
 **Two build fixes were needed for the newer toolkit**, both in-tree:
 
@@ -195,10 +235,10 @@ with one reported in steps.
 
 ## 8. Self-checks
 
-Ten suites, **78 checks**, no GPU required except the first:
+Ten suites, **79 checks**, no GPU required except the first:
 
 ```bash
-python -m tools.verify_rasterizer     # 7  -- needs CUDA; T3 is decisive
+python -m tools.verify_rasterizer     # 8  -- needs CUDA; T3 and T7 decisive
 python -m tools.verify_config_layer   # 6
 python -m tools.verify_ledger         # 13 -- T11 image dirs, T12 attempt cap
 python -m tools.verify_metrics        # 7

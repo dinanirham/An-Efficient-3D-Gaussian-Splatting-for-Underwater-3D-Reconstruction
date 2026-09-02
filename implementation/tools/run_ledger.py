@@ -236,6 +236,41 @@ class Ledger:
             self.save()
         return n
 
+    def invalidate(self, cells: list[str], reason: str) -> int:
+        """Return *completed* runs to the queue after a code change.
+
+        Distinct from `reset`, which recovers runs that failed. This discards
+        work that succeeded, because a fix changed what the cell means -- the
+        results are still on disk and still valid measurements, they are simply
+        no longer measurements of this cell.
+
+        Deliberately narrow. It requires an explicit cell list, so it cannot be
+        aimed at the whole campaign by accident, and a reason, which is written
+        into each row: six weeks later "why was A0 re-run?" needs an answer
+        that lives with the data rather than in someone's memory.
+        """
+        if not cells:
+            raise ValueError("invalidate requires an explicit list of cells")
+        if not reason or not reason.strip():
+            raise ValueError("invalidate requires a reason; it is recorded per run")
+
+        n = 0
+        for r in self.runs:
+            if r["cell"] not in cells or r["status"] != "done":
+                continue
+            r["status"] = "pending"
+            r["attempts"] = 0
+            r["error"] = f"invalidated: {reason.strip()}"
+            r["finished_at"] = None
+            r["wall_seconds"] = None
+            n += 1
+        if n:
+            self.data.setdefault("invalidations", []).append({
+                "at": _utc(), "cells": sorted(cells), "reason": reason.strip(), "runs": n,
+            })
+            self.save()
+        return n
+
     def claim(self, max_attempts: int = MAX_ATTEMPTS) -> Optional[dict]:
         """Take the next eligible run, honouring stage order. None if nothing.
 
@@ -429,7 +464,8 @@ class Ledger:
 def main() -> int:
     ap = argparse.ArgumentParser(description="campaign run ledger")
     ap.add_argument("command",
-                    choices=["init", "status", "set-budget", "reap", "reset"])
+                    choices=["init", "status", "set-budget", "reap", "reset",
+                             "invalidate"])
     ap.add_argument("value", nargs="?", help="budget count for set-budget")
     ap.add_argument("--output_root", required=True)
     ap.add_argument("--scenes", nargs="+",
@@ -438,6 +474,9 @@ def main() -> int:
     ap.add_argument("--cells", nargs="+", default=None)
     ap.add_argument("--stale_minutes", type=int, default=45)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--reason", default="",
+                    help="invalidate: why these completed runs are being "
+                         "discarded; recorded on every affected row")
     ap.add_argument("--all", action="store_true",
                     help="reset: include runs that failed but still have "
                          "attempts left, not only exhausted ones")
@@ -459,6 +498,16 @@ def main() -> int:
     elif args.command == "reap":
         n = ledger.reap_stale(args.stale_minutes)
         print(f"reclaimed {n} stale run(s)")
+    elif args.command == "invalidate":
+        if not args.cells:
+            raise SystemExit(
+                "invalidate needs --cells (e.g. --cells A0). Refusing to act "
+                "on the whole campaign.")
+        n = ledger.invalidate(cells=args.cells, reason=args.reason)
+        print(f"invalidated {n} completed run(s) in {sorted(args.cells)}")
+        print("their output directories are untouched -- archive them if the "
+              "results are still wanted")
+        print(ledger.summary())
     elif args.command == "reset":
         n = ledger.reset(cells=args.cells, all_failed=args.all)
         print(f"reset {n} run(s) -- attempts cleared, back in the queue")

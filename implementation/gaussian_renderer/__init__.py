@@ -63,6 +63,7 @@ def render(
     bg_color: torch.Tensor,
     scaling_modifier: float = 1.0,
     override_color: Optional[torch.Tensor] = None,
+    screenspace_points: Optional[torch.Tensor] = None,
 ) -> dict[str, torch.Tensor]:
     """Rasterize the scene.
 
@@ -75,16 +76,27 @@ def render(
     Note: unlike upstream SeaSplat this does NOT return `alpha` -- the `_ms`
     fork does not produce it.  Use `render_depth_alpha` for alpha; see the
     module docstring.
+
+    CD-22.  `screenspace_points` lets a caller supply the gradient buffer
+    rather than have one allocated here, so that two rasterizations accumulate
+    into a single `means2D.grad`.  That is not a convenience: upstream SeaSplat
+    obtains alpha from *this* pass, so alpha-loss gradients reach the tensor
+    `add_densification_stats` reads.  Recovering alpha from a probe pass with
+    its own buffer reproduces alpha's value exactly and silently drops its
+    gradient from density control -- measured at 6x fewer primitives on
+    Curasao.  Passing the buffer through restores the upstream total by
+    linearity.
     """
     # Zero tensor used to make PyTorch return gradients of the 2D
     # (screen-space) means.
-    screenspace_points = torch.zeros_like(
-        pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda"
-    ) + 0
-    try:
-        screenspace_points.retain_grad()
-    except Exception:
-        pass
+    if screenspace_points is None:
+        screenspace_points = torch.zeros_like(
+            pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda"
+        ) + 0
+        try:
+            screenspace_points.retain_grad()
+        except Exception:
+            pass
 
     tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
     tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
@@ -178,6 +190,7 @@ def render_depth_alpha(
     pc: GaussianModel,
     pipe: Any,
     scaling_modifier: float = 1.0,
+    screenspace_points: Optional[torch.Tensor] = None,
 ) -> dict[str, torch.Tensor]:
     """Recover blended depth and accumulated alpha in a single pass.
 
@@ -219,6 +232,7 @@ def render_depth_alpha(
         bg_color=zero_bg,
         scaling_modifier=scaling_modifier,
         override_color=probe_color,
+        screenspace_points=screenspace_points,
     )
 
     probe = pkg["render"]
@@ -233,6 +247,7 @@ def render_depth(
     pipe: Any,
     bg_color: torch.Tensor,
     scaling_modifier: float = 1.0,
+    screenspace_points: Optional[torch.Tensor] = None,
 ) -> dict[str, torch.Tensor]:
     """Backwards-compatible alias for `render_depth_alpha`.
 
@@ -240,6 +255,9 @@ def render_depth(
     because channel 0 of the probe is unchanged.  `bg_color` is accepted and
     ignored -- see `render_depth_alpha` for why the probe pass forces a zero
     background.
+
+    Pass `screenspace_points` to route this pass's `means2D` gradient into the
+    caller's buffer; see CD-22 in `render`.
     """
     del bg_color  # intentionally unused; probe pass forces a zero background
     return render_depth_alpha(
@@ -247,4 +265,5 @@ def render_depth(
         pc=pc,
         pipe=pipe,
         scaling_modifier=scaling_modifier,
+        screenspace_points=screenspace_points,
     )
