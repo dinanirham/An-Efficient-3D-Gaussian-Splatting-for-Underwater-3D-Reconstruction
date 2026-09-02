@@ -19,7 +19,6 @@
     "length, ...) are added to this file as each mechanism lands, so that the",
     "cell definition and the manifest always describe the same run."
   ],
-
   "_n_bud_note": [
     "n_bud (the M2 primitive budget) is deliberately NOT set here.",
     "It must be derived from A0's converged primitive count, which no",
@@ -29,26 +28,22 @@
     "does not bind makes A4 equivalent to A1 and A7 to A5 -- and a null",
     "interaction measured in that state is a configuration artifact."
   ],
-
   "defaults": {
     "iterations": 30000,
     "eval": true,
     "do_seathru": true,
     "seathru_from_iter": 10000,
     "diag_interval": 500,
-
     "simp_iteration1": 15000,
     "simp_iteration2": 20000,
     "imp_metric": "outdoor",
     "cdf_thres": 0.99,
     "m2_rewarm_steps": 200,
     "m2_lr_rewind": false,
-
     "kmeans_st_iter": 22000,
     "kmeans_k": 4096,
     "kmeans_freq": 100,
     "kmeans_iters": 1,
-
     "_storage_note": [
       "The inherited save schedule writes the model at 4 iterations and a",
       "checkpoint at 4 more. At ~1M primitives that is roughly 900 MB per run,",
@@ -64,9 +59,12 @@
       "campaign to ~6-12 GB. Everything the analysis needs -- diagnostics,",
       "eval_metrics, the compressed artifact, run_config -- is unaffected."
     ],
-    "save_iterations": [30000],
-    "checkpoint_iterations": [30000],
-
+    "save_iterations": [
+      30000
+    ],
+    "checkpoint_iterations": [
+      30000
+    ],
     "_test_iterations_note": [
       "Upstream evaluates every 1000 iterations -- 30 full evaluations per run,",
       "each rendering every train and test view and running VGG-LPIPS over",
@@ -78,41 +76,86 @@
       "schedule that varied between them would put a confound straight into",
       "the timing contrast."
     ],
-    "test_iterations": [7000, 15000, 22000, 30000]
+    "test_iterations": [
+      7000,
+      15000,
+      22000,
+      30000
+    ]
   },
-
   "cells": {
     "A0": {
       "description": "Baseline. SeaSplat unmodified. Reference for every contrast, and the run that supplies the primitive budget the other cells need.",
-      "set": { "m1_dense_init": false, "m2_simplify": false, "m3_quantize": false }
+      "set": {
+        "m1_dense_init": false,
+        "m2_simplify": false,
+        "m3_quantize": false
+      }
     },
     "A1": {
       "description": "M1 only. Dense correspondence initialization; densification disabled, alpha-pruning and opacity reset retained (R-4).",
-      "set": { "m1_dense_init": true, "m2_simplify": false, "m3_quantize": false }
+      "set": {
+        "m1_dense_init": true,
+        "m2_simplify": false,
+        "m3_quantize": false
+      }
     },
     "A2": {
       "description": "M2 only. Importance-weighted stochastic simplification to the primitive budget, with the medium re-identification burst (CD-6). Carries the study's central hypothesis.",
-      "set": { "m1_dense_init": false, "m2_simplify": true, "m3_quantize": false }
+      "set": {
+        "m1_dense_init": false,
+        "m2_simplify": true,
+        "m3_quantize": false
+      }
     },
     "A3": {
       "description": "M3 only. Quantization-aware VQ over three codebooks. Expected to show ~no frame-rate gain, because CompGS-VQ's opacity regulariser is disabled (CD-8).",
-      "set": { "m1_dense_init": false, "m2_simplify": false, "m3_quantize": true }
+      "set": {
+        "m1_dense_init": false,
+        "m2_simplify": false,
+        "m3_quantize": true
+      }
     },
     "A4": {
       "description": "M1+M2. Degeneracy risk: if M1 converges below the budget the prune is a no-op and A4 collapses onto A1. Whether the budget bound is reported per run (G-2).",
-      "set": { "m1_dense_init": true, "m2_simplify": true, "m3_quantize": false }
+      "set": {
+        "m1_dense_init": true,
+        "m2_simplify": true,
+        "m3_quantize": false
+      }
     },
     "A5": {
       "description": "M1+M3. The least-coupled pair: no shared pipeline stage, and quantization touches neither position nor opacity. Predicted additive.",
-      "set": { "m1_dense_init": true, "m2_simplify": false, "m3_quantize": true }
+      "set": {
+        "m1_dense_init": true,
+        "m2_simplify": false,
+        "m3_quantize": true
+      }
     },
     "A6": {
       "description": "M2+M3. The one interaction with external theory behind it: a sparser primitive set is predicted to be more sensitive to lossy attribute compression. Informative in both directions.",
-      "set": { "m1_dense_init": false, "m2_simplify": true, "m3_quantize": true }
+      "set": {
+        "m1_dense_init": false,
+        "m2_simplify": true,
+        "m3_quantize": true
+      }
     },
     "A7": {
       "description": "Fully stacked. Source of the effect-from-above contrasts; inherits every integration decision and both degeneracy risks.",
-      "set": { "m1_dense_init": true, "m2_simplify": true, "m3_quantize": true }
+      "set": {
+        "m1_dense_init": true,
+        "m2_simplify": true,
+        "m3_quantize": true
+      }
+    },
+    "A0D": {
+      "description": "A0 + D, the supplementary contrast. Alpha-loss gradients detached from density control. Not a corner of the 2^3 -- read only against A0, never differenced with the factorial cells.",
+      "set": {
+        "m1_dense_init": false,
+        "m2_simplify": false,
+        "m3_quantize": false,
+        "detach_alpha_gradient": true
+      }
     }
   }
 }

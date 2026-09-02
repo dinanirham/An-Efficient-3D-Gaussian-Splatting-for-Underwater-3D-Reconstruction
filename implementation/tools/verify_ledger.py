@@ -59,9 +59,13 @@ def finish_stage(led: Ledger, cells: set[str]) -> int:
 def t1_init_shape():
     with tempfile.TemporaryDirectory() as tmp:
         led = fresh(tmp)
+        from tools.run_ledger import STAGES
+        expect_cells = {c for cs in STAGES.values() for c in cs}
         cells = {r["cell"] for r in led.runs}
-        ok = len(led.runs) == 8 * 4 * 3 and len(cells) == 8
-        return ok, f"{len(led.runs)} runs across {len(cells)} cells (expect 96/8)"
+        n = len(expect_cells) * len(SCENES) * len(SEEDS)
+        ok = len(led.runs) == n and cells == expect_cells
+        return ok, (f"{len(led.runs)} runs across {len(cells)} cells "
+                    f"(expect {n}/{len(expect_cells)})")
 
 
 def t2_stage_order_enforced():
@@ -224,7 +228,7 @@ def t10_save_is_atomic_and_reloadable():
         leftovers = list(Path(tmp).glob("*.tmp"))
         ok = (
             reopened.data["n_bud"] == 999
-            and len(parsed["runs"]) == 96
+            and len(parsed["runs"]) == len(led.runs)
             and not leftovers
         )
         return ok, (
