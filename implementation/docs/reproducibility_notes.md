@@ -126,6 +126,37 @@ asserts the gradient's *destination* in both directions — non-zero when the
 buffer is shared, and untouched when it is not, so the check still fails if
 the sharing is ever quietly dropped.
 
+#### Outcome: CD-22 did not close the density gap
+
+The first post-fix run converged to **635,038** primitives against vanilla's
+4,462,668 — **0.142×**, essentially unchanged. The alpha gradient path was a
+real divergence from upstream and is worth having corrected, but it is **not**
+the cause of the 6× gap. The hypothesis is refuted.
+
+One caveat on the numbers: the pre-fix run was seed 0 and the post-fix run
+seed 2, so 743,457 → 635,038 confounds the change with the seed. CD-22's own
+effect is therefore unquantified. It does not affect the verdict, since
+neither figure is near 4.46M, but "CD-22 reduced the count" is not a claim
+this supports.
+
+CD-22 is kept regardless: it makes the gradient routing structurally match
+upstream, and reverting would trade one known deviation for another. It is
+simply no longer described as a fix for the density gap.
+
+**Where the evidence now points.** Vanilla grows 6.7× between iterations 5000
+and 15000. Across 100 densification events that is only ~1.9% growth per
+event, so the cause is a *small* per-event difference that compounds, not a
+structural one. Two quantities decide each event and both come out of the
+rasterizer backward, where no forward-output test can reach them:
+`means2D.grad`, whose norm `add_densification_stats` accumulates and
+`densify_grad_threshold` filters, and `radii`, which `size_threshold` prunes
+against. Mini-Splatting exists to replace 3DGS densification, so a modified
+densification signal in its fork is plausible.
+
+`tools/compare_rasterizers.py` feeds both forks identical Gaussians, camera
+and loss and reports the ratios directly. It needs SeaSplat's reference
+rasterizer built alongside ours — the module names differ, so they coexist.
+
 **Two build fixes were needed for the newer toolkit**, both in-tree:
 
 - `simple_knn.cu` uses `FLT_MAX` without including `<float.h>`. Up to CUDA
