@@ -4,3 +4,28 @@ dataset/
 draft-repo-output/
 .claude/seasplat-efficiency-adaptation/audit-output/
 seasplat-efficient-3dgs-underwater/
+
+# ---------------------------------------------------------------------------
+# Run artifacts pulled down from Drive for the CD-22 investigation.
+#
+# ~980 MB of evidence, kept locally and deliberately not versioned: git stores
+# every revision forever, so one commit of these would bloat the repo
+# permanently even after a later deletion. The findings they support live in
+# docs/reproducibility_notes.md; the files themselves stay on Drive, which is
+# where the campaign's outputs belong.
+# ---------------------------------------------------------------------------
+*.ply
+events.out.tfevents.*
+cfg_args*
+diagnostics.csv
+eval_metrics.json
+run_config.json
+
+# The earlier hand-written Colab notebook, kept for reference. 25 MB, almost
+# all of it embedded output cells.
+typical-expected-execution-on-colab.ipynb
+
+# Executed notebooks downloaded from Colab. The generated sources under
+# implementation/notebooks/ are the versioned artifact; these carry outputs.
+*-run-result.ipynb
+*-run-colab.ipynb
