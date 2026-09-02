@@ -476,19 +476,53 @@ class GaussianModel:
 
         torch.cuda.empty_cache()
 
-    def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size):
+    def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size,
+                          iteration=None):
+        """Upstream's clone/split/prune, with a per-event breakdown printed.
+
+        The breakdown exists because the aggregate trajectory could not
+        localise a 6x density gap against vanilla SeaSplat.  Vanilla grows
+        6.7x between iterations 5000 and 15000, which over 100 events is only
+        ~1.9% growth apiece -- far too small to read off a curve, and it says
+        nothing about *which* of the three mechanisms differs.  Clone, split
+        and each prune reason are therefore counted separately, so the two
+        implementations can be compared event by event instead of endpoint to
+        endpoint.
+
+        Behaviour is unchanged: every count is observed, none is acted on.
+        """
         grads = self.xyz_gradient_accum / self.denom
         grads[grads.isnan()] = 0.0
 
-        self.densify_and_clone(grads, max_grad, extent)
-        self.densify_and_split(grads, max_grad, extent)
+        n_before = self._xyz.shape[0]
+        n_over = int((torch.norm(grads, dim=-1) >= max_grad).sum().item())
 
-        prune_mask = (self.get_opacity < min_opacity).squeeze()
+        self.densify_and_clone(grads, max_grad, extent)
+        n_cloned = self._xyz.shape[0] - n_before
+        self.densify_and_split(grads, max_grad, extent)
+        n_split = self._xyz.shape[0] - n_before - n_cloned
+
+        low_opacity = (self.get_opacity < min_opacity).squeeze()
+        prune_mask = low_opacity
+        n_big_vs = n_big_ws = 0
         if max_screen_size:
             big_points_vs = self.max_radii2D > max_screen_size
             big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
+            n_big_vs = int(big_points_vs.sum().item())
+            n_big_ws = int(big_points_ws.sum().item())
             prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
+        n_pruned = int(prune_mask.sum().item())
         self.prune_points(prune_mask)
+
+        print(
+            f"[densify] it={iteration} before={n_before} "
+            f"over_grad={n_over} ({100.0 * n_over / max(1, n_before):.1f}%) "
+            f"clone=+{n_cloned} split=+{n_split} "
+            f"prune=-{n_pruned} (alpha={int(low_opacity.sum().item())} "
+            f"screen={n_big_vs} world={n_big_ws}) "
+            f"after={self._xyz.shape[0]}",
+            flush=True,
+        )
 
         torch.cuda.empty_cache()
 

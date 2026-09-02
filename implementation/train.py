@@ -719,7 +719,8 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                             if iteration >= opt_params.unfreeze_gs_from_iter:
                                 grad_threshold *= opt_params.scale_grad_threshold
                             gaussians.densify_and_prune(
-                                grad_threshold, 0.005, scene.cameras_extent, size_threshold
+                                grad_threshold, 0.005, scene.cameras_extent,
+                                size_threshold, iteration=iteration
                             )
 
                     # CD-3: retained even under dense initialization.  It is a
