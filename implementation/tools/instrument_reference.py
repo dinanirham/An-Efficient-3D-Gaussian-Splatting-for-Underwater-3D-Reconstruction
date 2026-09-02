@@ -54,6 +54,12 @@ INSTRUMENTED = """    def densify_and_prune(self, max_grad, min_opacity, extent,
         self.densify_and_split(grads, max_grad, extent)
         _n_split = self._xyz.shape[0] - _n_before - _n_cloned
 
+        _op = self.get_opacity.detach().squeeze()
+        _q = torch.quantile(
+            _op.float(), torch.tensor([0.05, 0.25, 0.5], device=_op.device)
+        ).tolist()
+        _flt = float((_op < 0.01).float().mean())
+
         _low = (self.get_opacity < min_opacity).squeeze()
         prune_mask = _low
         _n_vs = _n_ws = 0
@@ -73,7 +79,9 @@ INSTRUMENTED = """    def densify_and_prune(self, max_grad, min_opacity, extent,
             f"clone=+{_n_cloned} split=+{_n_split} "
             f"prune=-{_n_pruned} (alpha={int(_low.sum().item())} "
             f"screen={_n_vs} world={_n_ws}) "
-            f"after={self._xyz.shape[0]}",
+            f"after={self._xyz.shape[0]} "
+            f"op_p05={_q[0]:.5f} op_p25={_q[1]:.5f} op_med={_q[2]:.5f} "
+            f"op_lt01={100.0 * _flt:.2f}%",
             flush=True,
         )
 
@@ -91,7 +99,7 @@ def main() -> int:
         return 2
 
     src = target.read_text(encoding="utf-8")
-    if "[densify] ev=" in src:
+    if "op_lt01" in src:
         print(f"already instrumented: {target}")
         return 0
     if ORIGINAL not in src:
