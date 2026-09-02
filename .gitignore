@@ -29,3 +29,6 @@ typical-expected-execution-on-colab.ipynb
 # implementation/notebooks/ are the versioned artifact; these carry outputs.
 *-run-result.ipynb
 *-run-colab.ipynb
+
+# Densification diagnostic logs, copied down from Drive.
+diag_*.txt

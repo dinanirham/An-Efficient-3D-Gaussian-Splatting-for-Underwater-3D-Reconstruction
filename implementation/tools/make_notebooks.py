@@ -1,4 +1,4 @@
-"""Generate the three Colab notebooks.
+"""Generate the Colab notebooks.
 
     python -m tools.make_notebooks           # writes into notebooks/
 
@@ -7,12 +7,17 @@ with embedded outputs: it diffs badly, merges worse, and invites drift between
 near-identical copies. This script is the reviewable source of truth; the
 notebooks are build artifacts.
 
-**Three notebooks, by role -- not one per ablation.** A notebook per cell would
+**By role, not one per ablation.** A notebook per cell would
 mean eight copies of the same setup, preprocessing and aggregation code, each
 free to drift, which is exactly the failure the configuration layer was built
 to eliminate. It also cannot express "S1 must finish before S2", because no
 notebook can see the others. The ledger sequences the campaign globally, so the
 worker notebook is identical every session and the cell comes from the ledger.
+
+04 is the exception to the role rule: it is a one-off diagnostic, kept apart
+because running it inside the worker produced a notebook carrying outputs
+from four sessions in an order that no longer matched the execution counts.
+A diagnostic whose provenance is unclear is not evidence.
 """
 
 from __future__ import annotations
@@ -589,11 +594,163 @@ Outputs land in `analysis/` on Drive.
 """),
 ])
 
+# ---------------------------------------------------------------------------
+# 04 -- the densification diagnostic.  Self-contained on purpose.
+#
+# This lives apart from the worker because running it there produced a notebook
+# carrying outputs from four different sessions, in an order that no longer
+# matched the execution counts.  A diagnostic whose provenance is unclear is
+# not evidence.  Nothing here touches the ledger or writes into runs/.
+# ---------------------------------------------------------------------------
+
+DIAG_ITERS = 16000
+
+DIAGNOSTIC = notebook([
+    md("""# 04 — Densification diagnostic
+
+**Why this exists.** A0 converges to ~635k primitives where vanilla SeaSplat
+reaches 4,462,668 on the same scene — a 6× gap with no known cause. Three
+hypotheses have been eliminated by static comparison:
+
+| Eliminated | How |
+|---|---|
+| the rasterizer | identical forward *and* backward on identical inputs |
+| densification constants | zero changed lines against the pinned baseline |
+| upstream drift | `dxyang/seasplat` HEAD **is** `ddc6259` |
+
+Everything comparable agrees and the outcomes still differ sixfold. So this
+notebook stops diffing and watches both implementations densify, event by
+event.
+
+**It runs `train.py` directly, never the queue.** These are truncated runs and
+must not be recorded as completed cells.
+
+Run top to bottom. Roughly an hour: two 16,000-iteration runs, sequentially.
+"""),
+    md("## 1. Drive and paths"),
+    code(DRIVE_HEADER),
+    md("## 2. GPU — must be an A100"),
+    code(GPU_CHECK),
+    md("## 3. Clone and build"),
+    code(CLONE),
+    code(BUILD),
+    code(BUILD_CHECK),
+    md("""## 4. Stage the dataset locally
+
+**Not optional, and the step that has already been missed once.** Colab
+recycles the VM, so `/content/data` is empty in a fresh session and both
+trainings die at scene load — ours with a preflight message naming the missing
+file, the reference with `Could not recognize scene type!`.
+"""),
+    code('''\
+import os, shutil, time
+t0 = time.time()
+os.makedirs(LOCAL_DATA, exist_ok=True)
+for s in SCENES:
+    src, dst = f'{DATA_UNDIST}/{s}', f'{LOCAL_DATA}/{s}'
+    if not os.path.isdir(dst):
+        shutil.copytree(src, dst)
+print(f'staged in {time.time() - t0:.0f}s')
+
+scene = f'{LOCAL_DATA}/Curasao'
+for sub in ('images', 'sparse/0'):
+    print(f'  {sub:<10} {os.path.isdir(f"{scene}/{sub}")}')
+assert os.path.isfile(f'{scene}/sparse/0/cameras.bin'), 'staging incomplete'
+'''),
+    md("""## 5. Build and instrument the reference
+
+`dxyang/seasplat` at its own HEAD, with its own rasterizer. The module names
+differ (`diff_gaussian_rasterization` vs `..._ms`), so both coexist.
+
+`instrument_reference` refuses to patch unless `densify_and_prune` matches the
+expected upstream text exactly — so a mismatch here means the checkout is not
+what we think it is, rather than a silently instrumented something-else.
+"""),
+    code('''\
+import os
+if not os.path.isdir('/content/seasplat_ref'):
+    !git clone -q --recursive https://github.com/dxyang/seasplat.git /content/seasplat_ref
+    !pip install -q /content/seasplat_ref/submodules/diff-gaussian-rasterization
+!cd /content/seasplat_ref && git log -1 --format="reference at %H  %ad" --date=short
+!python -m tools.instrument_reference /content/seasplat_ref
+'''),
+    md("""## 6. Confirm the rasterizers still agree
+
+Cheap, and it guards the comparison below: if the two forks ever stop matching
+here, every event-level difference downstream is explained by that instead.
+"""),
+    code("!python -m tools.compare_rasterizers\n"),
+    md(f"""## 7. Ours — {DIAG_ITERS:,} iterations
+
+Past `densify_until_iter` (15000), so the whole densification phase is
+captured. Scratch output directory; the ledger is untouched.
+
+The `grep` deliberately has **no `^` anchor**: tqdm writes its progress bar
+with `\\r` and no trailing newline, so our line is appended to it and an
+anchored pattern silently matches nothing.
+"""),
+    code(f'''\
+!cd "$IMPL_DIR" && python train.py \\
+  -s "$LOCAL_DATA"/Curasao --images images \\
+  --model_path /content/diag_ours --cell A0 --seed 2 \\
+  --iterations {DIAG_ITERS} --test_iterations {DIAG_ITERS} \\
+  --save_iterations {DIAG_ITERS} --checkpoint_iterations {DIAG_ITERS} \\
+  2>&1 | tee /content/diag_ours_full.txt \\
+       | grep --line-buffered -a "\\[densify\\]" | tee /content/diag_ours.txt
+'''),
+    md(f"""## 8. The reference — {DIAG_ITERS:,} iterations
+
+Same scene, same seed, same schedule. Its `train.py` overwrites `model_path`
+with `<source>/experiments/<date>/<exp>` regardless of `-m`, so its output
+lands under the staged dataset — expected, and ephemeral.
+"""),
+    code(f'''\
+!cd /content/seasplat_ref && python train.py \\
+  -s "$LOCAL_DATA"/Curasao --images images --exp diag \\
+  --iterations {DIAG_ITERS} --do_seathru --seathru_from_iter 10000 --eval --seed 2 \\
+  --test_iterations {DIAG_ITERS} --save_iterations {DIAG_ITERS} \\
+  --checkpoint_iterations {DIAG_ITERS} \\
+  2>&1 | tee /content/diag_ref_full.txt \\
+       | grep --line-buffered -a "\\[densify\\]" | tee /content/diag_ref.txt
+'''),
+    md("""## 9. Compare
+
+Aligns the two event streams — ours labels by iteration, the reference by
+event index — and reports the first quantity to diverge. That names the
+mechanism: `over_grad` means the signal differs, `clone`/`split` at equal
+`over_grad` means the decision boundary differs, `prune` means pruning, with
+the alpha/screen/world split saying which reason.
+"""),
+    code('''\
+!wc -l /content/diag_ours.txt /content/diag_ref.txt
+!python -m tools.compare_densification /content/diag_ours.txt /content/diag_ref.txt
+'''),
+    md("""## 10. Keep the evidence
+
+`/content` dies with the session. Copy to Drive so the diagnostic survives and
+can be re-read without re-running an hour of training.
+"""),
+    code('''\
+import os, shutil
+out = f'{DRIVE_ROOT}/analysis/densify_diagnostic'
+os.makedirs(out, exist_ok=True)
+for f in ('diag_ours.txt', 'diag_ref.txt',
+          'diag_ours_full.txt', 'diag_ref_full.txt'):
+    p = f'/content/{f}'
+    if os.path.exists(p):
+        shutil.copy(p, f'{out}/{f}')
+        print(f'{f:<24} {os.path.getsize(p) / 1024:8.1f} KB')
+print('\\nsaved to', out)
+'''),
+])
+
+
 def main() -> int:
     NB_DIR.mkdir(parents=True, exist_ok=True)
     for name, nb in (("00_setup.ipynb", SETUP),
                      ("01_worker.ipynb", WORKER),
-                     ("02_analysis.ipynb", ANALYSIS)):
+                     ("02_analysis.ipynb", ANALYSIS),
+                     ("04_densify_diagnostic.ipynb", DIAGNOSTIC)):
         path = NB_DIR / name
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(nb, fh, indent=1, ensure_ascii=False)
