@@ -207,6 +207,17 @@ class OptimizationParams(ParamGroup):
         # wall clock is a reported result -- so it is a config value, recorded
         # in every manifest, rather than a constant.
         self.separate_alpha_probe = True
+
+        # Mechanism D, the supplementary contrast.  Detaching alpha from the
+        # densification signal is what our pipeline did by accident before
+        # CD-22/CD-23; measured against a broken baseline it looked like 6x
+        # fewer primitives for -0.1 dB.  As a deliberate mechanism it needs a
+        # faithful baseline to be measured against, which is what A0 now is.
+        #
+        # Free, and then some: with the gradient detached the alpha probe needs
+        # no shared buffer, so this removes the third rasterization CD-23 added
+        # rather than costing one.
+        self.detach_alpha_gradient = False
         self.do_z_score = False               # z threshold direct image to +/- 5 stdevs
 
         # ------------------------------------------------------------------

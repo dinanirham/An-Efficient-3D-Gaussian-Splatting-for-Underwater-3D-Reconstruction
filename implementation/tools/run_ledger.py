@@ -44,6 +44,7 @@ STAGES: dict[str, list[str]] = {
     "S3": ["A1", "A3"],          # remaining main effects
     "S4": ["A4", "A5", "A6"],    # the three two-way interactions
     "S5": ["A7"],                # three-way term, effect-from-above contrasts
+    "S6": ["A0D"],               # supplementary: mechanism D against A0
 }
 CELL_STAGE = {c: s for s, cells in STAGES.items() for c in cells}
 STAGE_ORDER = list(STAGES)

@@ -295,7 +295,10 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
             # means2D, so depth rides along and cancels the alpha term.
             alpha_pkg = render_alpha(
                 viewpoint_cam, gaussians, pipe_params,
-                screenspace_points=viewspace_point_tensor,
+                screenspace_points=(
+                    None if opt_params.detach_alpha_gradient
+                    else viewspace_point_tensor
+                ),
             )
             image_alpha = alpha_pkg["alpha"]
             render_depth_pkg = render_depth(viewpoint_cam, gaussians, pipe_params, bg)
