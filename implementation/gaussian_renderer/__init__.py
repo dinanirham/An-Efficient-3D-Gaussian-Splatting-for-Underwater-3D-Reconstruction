@@ -241,6 +241,46 @@ def render_depth_alpha(
     return pkg
 
 
+def render_alpha(
+    viewpoint_camera: Any,
+    pc: GaussianModel,
+    pipe: Any,
+    scaling_modifier: float = 1.0,
+    screenspace_points: Optional[torch.Tensor] = None,
+) -> dict[str, torch.Tensor]:
+    """Accumulated alpha alone, from a probe that carries no depth (CD-23).
+
+    `render_depth_alpha` emits depth and alpha from one rasterization, so their
+    gradients are inseparable in a single `means2D` buffer. Upstream's
+    composition is image + alpha and excludes depth -- its depth pass has its
+    own buffer -- so routing the combined probe into the shared buffer adds a
+    term upstream never had.
+
+    Measured: routing image-only gave 743k primitives, image+alpha+depth gave
+    635k, and upstream's image+alpha reaches 4.79M on the same data. The depth
+    term is not neutral; it cancels.
+
+    The probe colour is [0, 1, 0]: channel 1 accumulates 1 - prod(1 - a_i) = a
+    exactly as before, and channel 0 carries no depth, so nothing but alpha can
+    reach the caller's buffer.
+    """
+    zeros = torch.zeros_like(pc.get_xyz[:, :1])
+    probe_color = torch.cat([zeros, torch.ones_like(zeros), zeros], dim=-1)
+    zero_bg = torch.zeros(3, dtype=torch.float32, device=probe_color.device)
+
+    pkg = render(
+        viewpoint_camera=viewpoint_camera,
+        pc=pc,
+        pipe=pipe,
+        bg_color=zero_bg,
+        scaling_modifier=scaling_modifier,
+        override_color=probe_color,
+        screenspace_points=screenspace_points,
+    )
+    pkg["alpha"] = pkg["render"][1].unsqueeze(0)
+    return pkg
+
+
 def render_depth(
     viewpoint_camera: Any,
     pc: GaussianModel,

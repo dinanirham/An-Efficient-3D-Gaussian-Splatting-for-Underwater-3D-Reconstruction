@@ -266,10 +266,10 @@ with one reported in steps.
 
 ## 8. Self-checks
 
-Ten suites, **79 checks**, no GPU required except the first:
+Ten suites, **80 checks**, no GPU required except the first:
 
 ```bash
-python -m tools.verify_rasterizer     # 8  -- needs CUDA; T3 and T7 decisive
+python -m tools.verify_rasterizer     # 9  -- needs CUDA; T3, T7, T8 decisive
 python -m tools.verify_config_layer   # 6
 python -m tools.verify_ledger         # 13 -- T11 image dirs, T12 attempt cap
 python -m tools.verify_metrics        # 7

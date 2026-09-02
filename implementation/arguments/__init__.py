@@ -200,6 +200,13 @@ class OptimizationParams(ParamGroup):
         self.update_bs_at_count = 50          # update bs and at models this many times
 
         self.scale_grad_threshold = 1.0
+
+        # CD-23.  Route alpha through its own probe so density control sees
+        # image + alpha, which is what upstream sees, and not depth.  Costs a
+        # third rasterization per iteration; that shows up in wall clock, and
+        # wall clock is a reported result -- so it is a config value, recorded
+        # in every manifest, rather than a constant.
+        self.separate_alpha_probe = True
         self.do_z_score = False               # z threshold direct image to +/- 5 stdevs
 
         # ------------------------------------------------------------------

@@ -260,7 +260,7 @@ def t7_alpha_gradient_reaches_densification() -> Result:
     Both directions are asserted, because a test that only confirms the fix
     would still pass if the sharing were quietly dropped again.
     """
-    from gaussian_renderer import render, render_depth_alpha
+    from gaussian_renderer import render, render_alpha, render_depth_alpha
 
     cam, pipe = make_camera(), FakePipe()
     bg = torch.zeros(3, device="cuda")
@@ -283,6 +283,39 @@ def t7_alpha_gradient_reaches_densification() -> Result:
     return ok, (
         f"shared buffer: sum|d(alpha)/d(means2D)| = {shared_grad:.4e} (must be > 0); "
         f"unshared: {separate_grad:.4e} (must be 0)"
+    )
+
+
+def t8_alpha_probe_carries_no_depth() -> Result:
+    """CD-23.  The alpha-only probe must match alpha exactly and carry no depth.
+
+    Sharing the combined [z,1,0] probe's buffer routes depth-loss gradients
+    into density control, which upstream excludes -- and measurement says that
+    term cancels rather than helping: image-only reached 743k primitives,
+    image+alpha+depth 635k, upstream's image+alpha 4.79M.
+
+    Two things have to hold for [0,1,0] to be the fix. Its alpha must equal the
+    combined probe's alpha, or we have changed what L_op sees; and its channel
+    0 must be identically zero, or depth is still riding along.
+    """
+    from gaussian_renderer import render_alpha, render_depth_alpha
+
+    cam, pipe = make_camera(), FakePipe()
+    g = FakeGaussians(
+        torch.tensor([[0.0, 0.0, 2.0], [0.3, 0.1, 2.4]]),
+        torch.tensor([[0.6], [0.4]]),
+    )
+
+    combined = render_depth_alpha(cam, g, pipe)
+    alpha_only = render_alpha(cam, g, pipe)
+
+    da = (combined["alpha"] - alpha_only["alpha"]).abs().max().item()
+    depth_channel = alpha_only["render"][0].abs().max().item()
+
+    ok = da < 1e-6 and depth_channel == 0.0
+    return ok, (
+        f"max|alpha_combined - alpha_only|={da:.3e} (must be ~0); "
+        f"probe channel 0 max={depth_channel:.3e} (must be exactly 0)"
     )
 
 
@@ -341,6 +374,8 @@ def main() -> int:
     check("T6 zero background does not leak into probe", t6_background_isolation)
     check("T7 alpha gradient reaches density control  <-- decisive",
           t7_alpha_gradient_reaches_densification)
+    check("T8 alpha-only probe carries no depth  <-- decisive",
+          t8_alpha_probe_carries_no_depth)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
