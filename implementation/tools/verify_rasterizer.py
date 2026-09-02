@@ -244,6 +244,48 @@ def t4_alpha_gradient() -> Result:
     return ok, f"d(sum alpha)/d(opacity_logit) = {None if grad is None else grad.flatten().tolist()}"
 
 
+def t7_alpha_gradient_reaches_densification() -> Result:
+    """CD-22.  Alpha's gradient must land in the buffer density control reads.
+
+    This is the check that would have caught the defect T0-T6 could not see:
+    every one of them inspects a *returned tensor*, and alpha's value was
+    correct throughout.  What was wrong was the gradient's destination.
+
+    Upstream SeaSplat takes alpha from the colour pass, so alpha-loss gradients
+    accumulate into the same `means2D` that `add_densification_stats` reads.
+    Our probe pass allocates its own buffer unless one is supplied -- which
+    reproduces alpha exactly and silently removes it from the densification
+    signal.  Measured consequence: 743k primitives against vanilla's 4.46M.
+
+    Both directions are asserted, because a test that only confirms the fix
+    would still pass if the sharing were quietly dropped again.
+    """
+    from gaussian_renderer import render, render_depth_alpha
+
+    cam, pipe = make_camera(), FakePipe()
+    bg = torch.zeros(3, device="cuda")
+    xyz = torch.tensor([[0.0, 0.0, 2.0], [0.3, 0.1, 2.4]])
+
+    # Shared buffer: alpha's gradient must arrive.
+    g = FakeGaussians(xyz.clone(), torch.tensor([[0.5], [0.5]]))
+    shared = render(cam, g, pipe, bg)["viewspace_points"]
+    render_depth_alpha(cam, g, pipe, screenspace_points=shared)["alpha"].sum().backward()
+    shared_grad = 0.0 if shared.grad is None else shared.grad.abs().sum().item()
+
+    # Own buffer (the pre-fix path): the caller's tensor must stay untouched,
+    # confirming the defect is real rather than the sharing being a no-op.
+    g2 = FakeGaussians(xyz.clone(), torch.tensor([[0.5], [0.5]]))
+    separate = render(cam, g2, pipe, bg)["viewspace_points"]
+    render_depth_alpha(cam, g2, pipe)["alpha"].sum().backward()
+    separate_grad = 0.0 if separate.grad is None else separate.grad.abs().sum().item()
+
+    ok = shared_grad > 0.0 and separate_grad == 0.0
+    return ok, (
+        f"shared buffer: sum|d(alpha)/d(means2D)| = {shared_grad:.4e} (must be > 0); "
+        f"unshared: {separate_grad:.4e} (must be 0)"
+    )
+
+
 def t5_importance_accumulators() -> Result:
     """A2 needs accum_weights / area_proj / area_max from the colour pass."""
     from gaussian_renderer import render
@@ -297,6 +339,8 @@ def main() -> int:
     check("T4 alpha is differentiable w.r.t. opacity", t4_alpha_gradient)
     check("T5 importance accumulators present and sane", t5_importance_accumulators)
     check("T6 zero background does not leak into probe", t6_background_isolation)
+    check("T7 alpha gradient reaches density control  <-- decisive",
+          t7_alpha_gradient_reaches_densification)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
