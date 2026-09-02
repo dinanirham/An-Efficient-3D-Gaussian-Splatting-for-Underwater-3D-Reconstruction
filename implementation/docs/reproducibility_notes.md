@@ -81,7 +81,7 @@ and passes, but that is a measured fact rather than a designed one, and it is
 why the acceptance test is re-run every session rather than trusted.
 
 **The rasterizer merge is verified on both.** `tools/verify_rasterizer.py`
-reports 7/7 on sm_80, with T3 — `Z_raw/α` recovering true depth — at 0.00e+00
+reported 7/7 on sm_80 before T7 was added, with T3 — `Z_raw/α` recovering true depth — at 0.00e+00
 for opacity 0.3 and 0.7, and 2.38e-07 at 0.95. Identical to the sm_86 figures,
 as the arithmetic argument predicted. Re-run it at the start of every session
 regardless; it costs seconds and the whole merge rests on that identity.
