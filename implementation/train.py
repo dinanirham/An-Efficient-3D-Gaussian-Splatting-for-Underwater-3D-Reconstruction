@@ -19,7 +19,7 @@ import torch
 from typing import List
 from random import randint
 from utils.loss_utils import l1_loss, ssim, depth_weighted_l1_loss, depth_weighted_l2_loss
-from gaussian_renderer import render, render_depth, network_gui
+from gaussian_renderer import render, render_alpha, render_depth, network_gui
 import sys
 from scene import Scene, GaussianModel
 from utils.general_utils import safe_state
@@ -288,11 +288,23 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
         # Measured cost of getting this wrong: 743k primitives against
         # vanilla's 4.46M on Curasao.  Note this also admits the depth losses'
         # gradients, which upstream excludes -- a known, measured deviation.
-        render_depth_pkg = render_depth(
-            viewpoint_cam, gaussians, pipe_params, bg,
-            screenspace_points=viewspace_point_tensor,
-        )
-        image_alpha = render_depth_pkg["alpha"]
+        if opt_params.separate_alpha_probe:
+            # CD-23. Three passes, reproducing upstream's gradient composition
+            # exactly: image + alpha reach density control, depth does not.
+            # The combined probe cannot do this -- one rasterization means one
+            # means2D, so depth rides along and cancels the alpha term.
+            alpha_pkg = render_alpha(
+                viewpoint_cam, gaussians, pipe_params,
+                screenspace_points=viewspace_point_tensor,
+            )
+            image_alpha = alpha_pkg["alpha"]
+            render_depth_pkg = render_depth(viewpoint_cam, gaussians, pipe_params, bg)
+        else:
+            render_depth_pkg = render_depth(
+                viewpoint_cam, gaussians, pipe_params, bg,
+                screenspace_points=viewspace_point_tensor,
+            )
+            image_alpha = render_depth_pkg["alpha"]
 
         if opt_params.learn_background:
             if opt_params.bg_from_bs and opt_params.do_seathru and iteration > opt_params.seathru_from_iter:
