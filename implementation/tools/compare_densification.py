@@ -53,6 +53,13 @@ LINE = re.compile(
 
 FIELDS = ("before", "over", "clone", "split", "prune", "alpha", "screen", "world", "after")
 OPACITY = ("op_p05", "op_p25", "op_med", "op_lt01")
+
+# The noise floor, measured. tools/replicate_baseline puts the run-to-run
+# spread of the converged count at ~21% for both implementations, so a per-event
+# difference below this says nothing, and one that does not persist says little
+# more. Without these two, this tool reported 1.001 as a divergence.
+TOLERANCE = 0.20
+RUN_LENGTH = 3
 DENSIFY_FROM_ITER = 500
 DENSIFICATION_INTERVAL = 100
 
@@ -94,16 +101,39 @@ def main() -> int:
     common = sorted(set(ours) & set(ref))
     print(f"ours: {len(ours)} events   ref: {len(ref)} events   aligned: {len(common)}\n")
 
-    # 1. First divergence, per quantity. This is the whole answer.
-    print("first divergence by quantity")
+    # 1. First MATERIAL divergence, per quantity.
+    #
+    # Exact inequality is useless here. Replication puts the run-to-run spread
+    # of the final count at ~21% on both implementations, so two runs differing
+    # by 3,357 against 3,353 at iteration 600 -- a ratio of 1.001 -- is noise
+    # being reported as a finding. That is how a single paired run showed 0.68x
+    # for two implementations the replication then called indistinguishable.
+    #
+    # A divergence is only interesting if it is large enough to survive that
+    # floor, and only if it persists: one loud event proves nothing, three
+    # consecutive ones are a trend.
+    print(f"first material divergence  (>{TOLERANCE:.0%}, sustained "
+          f"{RUN_LENGTH} consecutive events)")
     print(f"  {'quantity':<10} {'iter':>7} {'ours':>10} {'ref':>10}  ratio")
     verdicts: list[str] = []
     for f in ("over", "clone", "split", "prune", "alpha", "screen", "world"):
-        first: Optional[int] = next(
-            (it for it in common if ours[it][f] != ref[it][f]), None
-        )
+        run_start: Optional[int] = None
+        run_len = 0
+        first: Optional[int] = None
+        for it in common:
+            a, b = ours[it][f], ref[it][f]
+            big = max(a, b)
+            diverged = big > 0 and abs(a - b) / big > TOLERANCE
+            if diverged:
+                run_start = it if run_len == 0 else run_start
+                run_len += 1
+                if run_len >= RUN_LENGTH:
+                    first = run_start
+                    break
+            else:
+                run_len = 0
         if first is None:
-            print(f"  {f:<10} {'-':>7} {'identical throughout':>22}")
+            print(f"  {f:<10} {'-':>7} {'within tolerance throughout':>22}")
             continue
         a, b = ours[first][f], ref[first][f]
         r = "inf" if b == 0 else f"{a / b:.3f}"
@@ -155,11 +185,15 @@ def main() -> int:
 
     print("\n" + "=" * 70)
     if not verdicts:
-        print("VERDICT: the two densify identically at every aligned event.")
-        print("  Whatever separates the final counts is NOT in densify_and_prune.")
-        print("  Next suspect: reset_opacity, or the optimiser state it acts on.")
+        print("VERDICT: no material divergence at any aligned event.")
+        print("  The two densify the same way to within the measured noise")
+        print("  floor. If their final counts still differ, that difference is")
+        print("  not evidence on its own -- run tools/replicate_baseline and")
+        print("  compare distributions, not a single pair.")
     else:
-        print(f"VERDICT: first quantities to diverge -> {', '.join(verdicts)}")
+        print(f"VERDICT: sustained divergence in -> {', '.join(verdicts)}")
+        print("  This is a single pair of runs. It says WHERE they differ, not")
+        print("  WHETHER they do; replicate_baseline answers whether.")
         if "over" in verdicts:
             print("  The gradient signal differs. The rasterizer is identical on")
             print("  identical inputs, so the inputs differ -- look at what reaches")

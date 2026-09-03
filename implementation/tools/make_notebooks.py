@@ -663,21 +663,32 @@ PAIRED_REF = R"""!cd /content/seasplat_ref && python train.py \
        | grep --line-buffered -a "\[densify\]" | tee /content/diag_ref.txt
 """
 
-SAVE_EVIDENCE = R"""import os, shutil
+SAVE_EVIDENCE = R"""import glob, os, shutil
+
+# Copy the evidence, not the artifacts.  Each replication run is a real
+# training run with --model_path under /content/replication, so it leaves
+# rendered eval images there -- ~2 MB each, hundreds of them.  A copytree of
+# the whole directory put several GB of PNGs on Drive last time.  What is worth
+# keeping is the summary and the logs.
 out = f'{DRIVE_ROOT}/analysis/baseline_replication'
 os.makedirs(out, exist_ok=True)
-if os.path.isdir('/content/replication'):
-    shutil.copytree('/content/replication', f'{out}/replication', dirs_exist_ok=True)
-for f in ('diag_ours.txt', 'diag_ref.txt',
-          'diag_ours_full.txt', 'diag_ref_full.txt'):
-    p = f'/content/{f}'
-    if os.path.exists(p):
-        shutil.copy(p, f'{out}/{f}')
+
+kept = []
+for src in (glob.glob('/content/replication/*.json')
+            + glob.glob('/content/replication/*.log')
+            + [f'/content/{f}' for f in ('diag_ours.txt', 'diag_ref.txt',
+                                         'diag_ours_full.txt', 'diag_ref_full.txt')]):
+    if os.path.isfile(src):
+        shutil.copy(src, f'{out}/{os.path.basename(src)}')
+        kept.append(os.path.basename(src))
+
 print('saved to', out)
-for root, _, files in os.walk(out):
-    for f in sorted(files):
-        full = os.path.join(root, f)
-        print(f'  {full.replace(out + "/", ""):<44} {os.path.getsize(full) / 1024:8.1f} KB')
+total = 0
+for f in sorted(kept):
+    n = os.path.getsize(f'{out}/{f}')
+    total += n
+    print(f'  {f:<30} {n / 1024:8.1f} KB')
+print(f'  {"total":<30} {total / 1024:8.1f} KB')
 """
 
 
