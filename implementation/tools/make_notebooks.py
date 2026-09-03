@@ -603,29 +603,114 @@ Outputs land in `analysis/` on Drive.
 # not evidence.  Nothing here touches the ledger or writes into runs/.
 # ---------------------------------------------------------------------------
 
+STAGE_ONE_SCENE = R"""import os, shutil, time
+t0 = time.time()
+os.makedirs(LOCAL_DATA, exist_ok=True)
+for s in SCENES:
+    src, dst = f'{DATA_UNDIST}/{s}', f'{LOCAL_DATA}/{s}'
+    if not os.path.isdir(dst):
+        shutil.copytree(src, dst)
+print(f'staged in {time.time() - t0:.0f}s')
+
+scene = f'{LOCAL_DATA}/Curasao'
+assert os.path.isfile(f'{scene}/sparse/0/cameras.bin'), 'staging incomplete'
+print('scene ok:', scene)
+"""
+
+REF_SETUP = R"""!rm -rf /content/seasplat_ref
+!git clone -q --recursive https://github.com/dxyang/seasplat.git /content/seasplat_ref
+!pip install -q /content/seasplat_ref/submodules/diff-gaussian-rasterization
+!cd /content/seasplat_ref && git log -1 --format="reference at %H  %ad" --date=short
+!python -m tools.instrument_reference /content/seasplat_ref
+"""
+
+REPLICATE = R"""!python -m tools.replicate_baseline \
+  --data_root "$LOCAL_DATA" --ref_root /content/seasplat_ref \
+  --out /content/replication --repeats 3 --iterations 16000
+"""
+
+READ_VERDICT = R"""import json
+r = json.load(open('/content/replication/replication.json'))
+for side in ('ours', 'ref'):
+    d = r[side]
+    if not d.get('n'):
+        print(f"{d['name']}: no successful runs")
+        continue
+    sd = f"{d['sd']:,.0f}" if d['sd'] is not None else '-'
+    print(f"{d['name']:<20} n={d['n']}  mean={d['mean']:>12,.0f}  sd={sd:>10}"
+          f"  spread={d['spread_pct']:.1f}%")
+    print(f"{'':<20} {', '.join(f'{x:,}' for x in d['runs'])}")
+print('\nverdict:', r['verdict'])
+if r['failures']:
+    print('failures:', r['failures'])
+"""
+
+PAIRED_OURS = R"""!cd "$IMPL_DIR" && python train.py \
+  -s "$LOCAL_DATA"/Curasao --images images \
+  --model_path /content/diag_ours --cell A0 --seed 2 \
+  --iterations 16000 --test_iterations 16000 \
+  --save_iterations 16000 --checkpoint_iterations 16000 \
+  2>&1 | tee /content/diag_ours_full.txt \
+       | grep --line-buffered -a "\[densify\]" | tee /content/diag_ours.txt
+"""
+
+PAIRED_REF = R"""!cd /content/seasplat_ref && python train.py \
+  -s "$LOCAL_DATA"/Curasao --images images --exp diag \
+  --iterations 16000 --do_seathru --seathru_from_iter 10000 --eval --seed 2 \
+  --test_iterations 16000 --save_iterations 16000 \
+  --checkpoint_iterations 16000 \
+  2>&1 | tee /content/diag_ref_full.txt \
+       | grep --line-buffered -a "\[densify\]" | tee /content/diag_ref.txt
+"""
+
+SAVE_EVIDENCE = R"""import os, shutil
+out = f'{DRIVE_ROOT}/analysis/baseline_replication'
+os.makedirs(out, exist_ok=True)
+if os.path.isdir('/content/replication'):
+    shutil.copytree('/content/replication', f'{out}/replication', dirs_exist_ok=True)
+for f in ('diag_ours.txt', 'diag_ref.txt',
+          'diag_ours_full.txt', 'diag_ref_full.txt'):
+    p = f'/content/{f}'
+    if os.path.exists(p):
+        shutil.copy(p, f'{out}/{f}')
+print('saved to', out)
+for root, _, files in os.walk(out):
+    for f in sorted(files):
+        full = os.path.join(root, f)
+        print(f'  {full.replace(out + "/", ""):<44} {os.path.getsize(full) / 1024:8.1f} KB')
+"""
+
+
 DIAG_ITERS = 16000
+REPEATS = 3
 
 DIAGNOSTIC = notebook([
-    md("""# 04 — Densification diagnostic
+    md("""# 04 — Baseline replication and densification diagnostic
 
-**Why this exists.** A0 converges to ~635k primitives where vanilla SeaSplat
-reaches 4,462,668 on the same scene — a 6× gap with no known cause. Three
-hypotheses have been eliminated by static comparison:
+**The question.** Is A0 distinguishable from vanilla SeaSplat?
 
-| Eliminated | How |
-|---|---|
-| the rasterizer | identical forward *and* backward on identical inputs |
-| densification constants | zero changed lines against the pinned baseline |
-| upstream drift | `dxyang/seasplat` HEAD **is** `ddc6259` |
+It was chased through four hypotheses using one run per side. Two of the fixes
+were real — CD-22 routed alpha's gradient into density control, CD-23 kept
+depth out of it — and the count moved 636k → 3.0M → 4.5M. Then a second run of
+each, with nothing functional changed, came back:
 
-Everything comparable agrees and the outcomes still differ sixfold. So this
-notebook stops diffing and watches both implementations densify, event by
-event.
+| | runs | spread |
+|---|---|---|
+| vanilla SeaSplat | 4,788,960 / 4,085,219 | 17% |
+| ours (A0) | 3,025,374 / 4,510,298 | 49% |
 
-**It runs `train.py` directly, never the queue.** These are truncated runs and
-must not be recorded as completed cells.
+`n_primitives` is a high-variance outcome. The rasterizer backward accumulates
+atomically, so a primitive lands either side of `densify_grad_threshold` from
+run to run, and that changes the population feeding the next event — 144 times
+over. So **a single-run ratio carries no information at this scale**, and the
+residual still being chased after CD-23 sat inside the noise.
 
-Run top to bottom. Roughly an hour: two 16,000-iteration runs, sequentially.
+This notebook measures the spread on both sides instead.
+
+**It never touches the ledger.** These are truncated single-scene runs; the
+campaign must not record them as cells.
+
+Budget: ~2.5 hours. Run top to bottom.
 """),
     md("## 1. Drive and paths"),
     code(DRIVE_HEADER),
@@ -637,111 +722,79 @@ Run top to bottom. Roughly an hour: two 16,000-iteration runs, sequentially.
     code(BUILD_CHECK),
     md("""## 4. Stage the dataset locally
 
-**Not optional, and the step that has already been missed once.** Colab
-recycles the VM, so `/content/data` is empty in a fresh session and both
-trainings die at scene load — ours with a preflight message naming the missing
-file, the reference with `Could not recognize scene type!`.
+**Not optional.** Colab recycles the VM, so `/content/data` is empty in a fresh
+session and every run below dies at scene load — ours naming the missing file,
+the reference with `Could not recognize scene type!`.
 """),
-    code('''\
-import os, shutil, time
-t0 = time.time()
-os.makedirs(LOCAL_DATA, exist_ok=True)
-for s in SCENES:
-    src, dst = f'{DATA_UNDIST}/{s}', f'{LOCAL_DATA}/{s}'
-    if not os.path.isdir(dst):
-        shutil.copytree(src, dst)
-print(f'staged in {time.time() - t0:.0f}s')
+    code(STAGE_ONE_SCENE),
+    md("""## 5. Reference: clean checkout, build, instrument
 
-scene = f'{LOCAL_DATA}/Curasao'
-for sub in ('images', 'sparse/0'):
-    print(f'  {sub:<10} {os.path.isdir(f"{scene}/{sub}")}')
-assert os.path.isfile(f'{scene}/sparse/0/cameras.bin'), 'staging incomplete'
-'''),
-    md("""## 5. Build and instrument the reference
-
-`dxyang/seasplat` at its own HEAD, with its own rasterizer. The module names
-differ (`diff_gaussian_rasterization` vs `..._ms`), so both coexist.
-
-`instrument_reference` refuses to patch unless `densify_and_prune` matches the
-expected upstream text exactly — so a mismatch here means the checkout is not
-what we think it is, rather than a silently instrumented something-else.
+**The `rm -rf` is deliberate.** `instrument_reference` refuses to patch a tree
+whose `densify_and_prune` does not match pristine upstream byte-for-byte — so a
+tree instrumented in an earlier session is rejected, correctly, and the
+reference then runs without the breakdown. That happened once and cost a
+25-minute run. Starting clean every session is cheaper than diagnosing it
+again.
 """),
-    code('''\
-import os
-if not os.path.isdir('/content/seasplat_ref'):
-    !git clone -q --recursive https://github.com/dxyang/seasplat.git /content/seasplat_ref
-    !pip install -q /content/seasplat_ref/submodules/diff-gaussian-rasterization
-!cd /content/seasplat_ref && git log -1 --format="reference at %H  %ad" --date=short
-!python -m tools.instrument_reference /content/seasplat_ref
-'''),
+    code(REF_SETUP),
     md("""## 6. Confirm the rasterizers still agree
 
-Cheap, and it guards the comparison below: if the two forks ever stop matching
-here, every event-level difference downstream is explained by that instead.
+Seconds, and it guards everything below: if the two forks ever stop matching
+here, any difference downstream is explained by that instead.
 """),
     code("!python -m tools.compare_rasterizers\n"),
-    md(f"""## 7. Ours — {DIAG_ITERS:,} iterations
+    md("""## 7. Replication — the main event, ~2.2 h
 
-Past `densify_until_iter` (15000), so the whole densification phase is
-captured. Scratch output directory; the ledger is untouched.
+Both implementations, same scene, same schedule, three repeats each, reporting
+both distributions.
 
-The `grep` deliberately has **no `^` anchor**: tqdm writes its progress bar
-with `\\r` and no trailing newline, so our line is appended to it and an
+Split across sessions with `--skip_ours` / `--skip_ref` if your session limit
+is tight; `replication.json` is written either way.
+
+The reference accepts `--seed` but seeds only the CPU generator —
+`torch.cuda.manual_seed_all` is our addition — so its GPU draws vary
+regardless. That is not a flaw in the experiment; it is the quantity being
+measured.
+"""),
+    code(REPLICATE),
+    md("""## 8. Read the verdict
+
+**Overlapping ranges** → A0 and vanilla SeaSplat are not distinguishable by
+primitive count, CD-22 and CD-23 did their job, and baseline fidelity is
+closed.
+
+**Disjoint ranges** → a real difference remains, and section 9 is where to look
+for it.
+
+Either way the two `spread` figures matter beyond this question: every
+efficiency contrast in the thesis has to clear that dispersion.
+"""),
+    code(READ_VERDICT),
+    md("""## 9. Optional — one paired run, event by event
+
+Worth running only if section 8 says **DISTINGUISHABLE**. It compares a single
+pair of runs at every densification event and reports the first quantity to
+diverge: `over_grad` means the gradient signal differs, `clone`/`split` at
+equal `over_grad` means the decision boundary does, `prune` means pruning —
+with the alpha/screen/world split naming the reason and the opacity
+percentiles alongside.
+
+Single runs of a noisy quantity, so read it as *where* they differ, never as
+*whether*. Section 8 answers whether.
+
+The `grep` has no `^` anchor and passes `-a`: tqdm writes its bar with a
+carriage return and no trailing newline, so our line is appended to it and an
 anchored pattern silently matches nothing.
 """),
-    code(f'''\
-!cd "$IMPL_DIR" && python train.py \\
-  -s "$LOCAL_DATA"/Curasao --images images \\
-  --model_path /content/diag_ours --cell A0 --seed 2 \\
-  --iterations {DIAG_ITERS} --test_iterations {DIAG_ITERS} \\
-  --save_iterations {DIAG_ITERS} --checkpoint_iterations {DIAG_ITERS} \\
-  2>&1 | tee /content/diag_ours_full.txt \\
-       | grep --line-buffered -a "\\[densify\\]" | tee /content/diag_ours.txt
-'''),
-    md(f"""## 8. The reference — {DIAG_ITERS:,} iterations
-
-Same scene, same seed, same schedule. Its `train.py` overwrites `model_path`
-with `<source>/experiments/<date>/<exp>` regardless of `-m`, so its output
-lands under the staged dataset — expected, and ephemeral.
-"""),
-    code(f'''\
-!cd /content/seasplat_ref && python train.py \\
-  -s "$LOCAL_DATA"/Curasao --images images --exp diag \\
-  --iterations {DIAG_ITERS} --do_seathru --seathru_from_iter 10000 --eval --seed 2 \\
-  --test_iterations {DIAG_ITERS} --save_iterations {DIAG_ITERS} \\
-  --checkpoint_iterations {DIAG_ITERS} \\
-  2>&1 | tee /content/diag_ref_full.txt \\
-       | grep --line-buffered -a "\\[densify\\]" | tee /content/diag_ref.txt
-'''),
-    md("""## 9. Compare
-
-Aligns the two event streams — ours labels by iteration, the reference by
-event index — and reports the first quantity to diverge. That names the
-mechanism: `over_grad` means the signal differs, `clone`/`split` at equal
-`over_grad` means the decision boundary differs, `prune` means pruning, with
-the alpha/screen/world split saying which reason.
-"""),
-    code('''\
-!wc -l /content/diag_ours.txt /content/diag_ref.txt
-!python -m tools.compare_densification /content/diag_ours.txt /content/diag_ref.txt
-'''),
+    code(PAIRED_OURS),
+    code(PAIRED_REF),
+    code("!python -m tools.compare_densification /content/diag_ours.txt /content/diag_ref.txt\n"),
     md("""## 10. Keep the evidence
 
-`/content` dies with the session. Copy to Drive so the diagnostic survives and
-can be re-read without re-running an hour of training.
+`/content` dies with the session, and section 7 is over two hours of
+measurement.
 """),
-    code('''\
-import os, shutil
-out = f'{DRIVE_ROOT}/analysis/densify_diagnostic'
-os.makedirs(out, exist_ok=True)
-for f in ('diag_ours.txt', 'diag_ref.txt',
-          'diag_ours_full.txt', 'diag_ref_full.txt'):
-    p = f'/content/{f}'
-    if os.path.exists(p):
-        shutil.copy(p, f'{out}/{f}')
-        print(f'{f:<24} {os.path.getsize(p) / 1024:8.1f} KB')
-print('\\nsaved to', out)
-'''),
+    code(SAVE_EVIDENCE),
 ])
 
 
