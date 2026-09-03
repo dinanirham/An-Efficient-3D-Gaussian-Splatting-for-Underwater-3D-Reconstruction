@@ -110,9 +110,28 @@ pip install -q --no-deps "git+https://github.com/Parskatt/RoMa.git" || true
 # refiner blocks call it per scale, per image pair -- but strictly a speed
 # optimisation: roma_init falls back to the pure-torch correlation it
 # optimises, so a failure here costs wall clock, not correctness.
-pip install -q fused-local-corr || \
-    echo "    note: fused-local-corr unavailable; roma_init will use the" \
-         "pure-torch correlation (slower, same result)"
+#
+# Installing it is not the same as it working. The published wheel carries a
+# compiled extension linked against a specific CUDA runtime, and the one on
+# PyPI wants libcudart.so.13 while Colab ships 12.8 -- so it imports as a
+# module, satisfies any "is it installed" check, and then dies inside the
+# forward pass with a missing shared object. Verify by importing, and remove it
+# if it cannot load: a broken extension left in place is worse than an absent
+# one, because it makes the fallback look unnecessary.
+if pip install -q fused-local-corr 2>/dev/null; then
+    if python -c "import local_corr" 2>/dev/null; then
+        echo "    fused-local-corr ok"
+    else
+        echo "    fused-local-corr installed but will not load:"
+        python -c "import local_corr" 2>&1 | tail -2 | sed 's/^/        /'
+        pip uninstall -q -y fused-local-corr || true
+        echo "    removed it; roma_init uses the pure-torch correlation"
+        echo "    (slower, same result)"
+    fi
+else
+    echo "    note: fused-local-corr unavailable; roma_init will use the"
+    echo "          pure-torch correlation (slower, same result)"
+fi
 
 if python -c "import romatch" 2>/dev/null; then
     echo "    romatch ok"

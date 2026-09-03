@@ -34,7 +34,6 @@ dataset differs from the one the source method was tuned on:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import math
 import random
@@ -254,18 +253,33 @@ def main() -> int:
 
     # `local_corr` is RoMa's optional fused CUDA kernel (the `fused-local-corr`
     # extra). Its refiner blocks reach for it whenever use_custom_corr is set,
-    # and the import failure surfaces mid-forward rather than at construction.
-    # Fall back to the pure-torch correlation, which is the reference path the
+    # and the failure surfaces mid-forward rather than at construction. Fall
+    # back to the pure-torch correlation, which is the reference path the
     # kernel optimises rather than a different computation.
-    custom_corr = importlib.util.find_spec("local_corr") is not None
+    #
+    # Import it rather than asking whether it is findable. `find_spec` says the
+    # module exists; it does not say the module loads. The published wheel is
+    # compiled against a CUDA runtime that need not be the one installed --
+    # observed on Colab as `ImportError: libcudart.so.13` under CUDA 12.8, with
+    # find_spec cheerfully reporting the module present, the fallback therefore
+    # skipped, and every scene dying inside the forward pass.
+    custom_corr_error = ""
+    try:
+        import local_corr  # noqa: F401
+        custom_corr = True
+    except Exception as exc:  # noqa: BLE001 -- any failure means unusable
+        custom_corr = False
+        custom_corr_error = f"{type(exc).__name__}: {exc}"
+
     if not custom_corr:
         n_disabled = 0
         for module in matcher.modules():
             if getattr(module, "use_custom_corr", False):
                 module.use_custom_corr = False
                 n_disabled += 1
-        print(f"[roma-init] local_corr unavailable; using the pure-torch "
-              f"correlation on {n_disabled} refiner blocks (slower, same result)")
+        print(f"[roma-init] local_corr unusable ({custom_corr_error or 'not installed'}); "
+              f"using the pure-torch correlation on {n_disabled} refiner blocks "
+              f"(slower, same result)")
 
     print(f"[roma-init] matcher={args.roma_model} tau_corr={certainty_thresh} "
           f"upsample_preds={args.upsample_preds} symmetric={args.symmetric} "
@@ -386,6 +400,10 @@ def main() -> int:
             # both compute the same thing -- but it moves preprocessing
             # wall-clock, which is reported alongside A1's training cost.
             "fused_local_corr": custom_corr,
+            # Why, when it is False -- a wheel built against the wrong
+            # CUDA runtime is indistinguishable from "not installed"
+            # in the timing, and preprocessing wall-clock is reported.
+            "fused_local_corr_error": custom_corr_error or None,
             "triangulated": n_raw,
             "kept": n_kept,
             "preprocessing_seconds": round(elapsed, 1),
