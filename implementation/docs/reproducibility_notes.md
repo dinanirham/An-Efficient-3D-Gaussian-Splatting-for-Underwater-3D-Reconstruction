@@ -240,6 +240,16 @@ that way once.
 package if it cannot load: a broken extension left in place is worse than an
 absent one, because it makes the fallback look unnecessary.
 
+That diagnostic then broke the build. The script runs under `set -euo
+pipefail`, and the line printing *why* the import failed is a `python -c` that
+exits non-zero by design; the pipeline inherited its status and `set -e`
+aborted the script before either CUDA extension was compiled. The failure
+surfaced one cell later as `ModuleNotFoundError: diff_gaussian_rasterization_ms`
+— a missing extension, with nothing to connect it to the message above it. Any
+command that is *expected* to fail needs `|| true` under these flags, and the
+script now carries an `ERR` trap that names the line it died on, so an aborted
+build says so instead of stopping quietly.
+
 Whether the kernel was used is printed and recorded as `fused_local_corr` in
 the cloud's sidecar, with `fused_local_corr_error` giving the reason when it
 was not — a wheel built against the wrong CUDA is indistinguishable from "not
