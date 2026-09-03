@@ -484,17 +484,21 @@ is expected during S1.
     --data_root   "$LOCAL_DATA" \\
     --max_minutes 200
 '''),
-    md("""## 7. After S1 (A0) completes — set the budget
+    md("""## 7. After S1 — check the budget against what A0 actually built
 
-The primitive budget comes from A0's converged count, which no publication of
-the baseline reports. Until it is set, A2, A4, A6 and A7 stay blocked.
+**There is nothing to set here.** `n_bud` is fixed ahead of the campaign by the
+binding rule — it must lie below the smallest count any other enabled mechanism
+produces — and `run_ledger init` reads it from `configs/cells.json`. It is not
+derived from A0.
 
-Pick a value **below** the counts below so the budget actually binds. A budget
-that does not bind makes A4 equivalent to A1 and A7 to A5, and a null
-interaction measured in that state is a configuration artifact, not a finding.
+This cell is a check, because the rule was applied to *estimated* cloud sizes.
+A0's realised counts tell you how much room M2 actually has, and section 9 of
+`00_setup` reports the clouds. If the budget no longer sits below them, lower
+it and re-run the affected cells — the rule holds, the number follows the
+measurement.
 """),
     code('''\
-import glob, csv, statistics
+import glob, csv, json, os, statistics
 counts = []
 for f in sorted(glob.glob(f'{DRIVE_ROOT}/runs/A0/*/s*/diagnostics.csv')):
     rows = list(csv.DictReader(open(f)))
@@ -505,9 +509,21 @@ for name, n in counts:
     print(f'{n:>12,}  {name}')
 if counts:
     med = statistics.median(n for _, n in counts)
-    print(f'\\nmedian {med:,.0f}   suggested budget ~{int(med*0.6):,} (60%)')
-    print('Then run:')
-    print(f'  !python -m tools.run_ledger set-budget <count> --output_root "$DRIVE_ROOT"')
+    led = json.load(open(f'{DRIVE_ROOT}/run_ledger.json'))
+    bud = led.get('n_bud')
+    print(f'\\nA0 median {med:,.0f}')
+    if bud:
+        print(f'n_bud     {bud:,}  (from {led.get("n_bud_source") or "set-budget"})')
+        print(f'M2 would remove {100 * (1 - bud / med):.1f}% of A0')
+        for path in sorted(glob.glob(f'{DENSE_DIR}/*.json')):
+            side = json.load(open(path))
+            pts = side.get('kept')
+            if pts:
+                ok = 'binds' if bud < pts else 'DOES NOT BIND -- lower n_bud'
+                print(f'  {os.path.basename(path)[:-5]:<26} cloud={pts:>9,}  {ok}')
+    else:
+        print('n_bud NOT SET -- configs/cells.json has no defaults.n_bud, so '
+              'every m2 cell is blocked.')
 else:
     print('No A0 diagnostics yet.')
 '''),

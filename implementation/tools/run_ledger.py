@@ -59,6 +59,30 @@ M2_CELLS = {"A2", "A4", "A6", "A7"}
 MAX_ATTEMPTS = 3
 
 
+def config_n_bud() -> Optional[int]:
+    """The M2 budget from `configs/cells.json`, or None if it is not fixed there.
+
+    `n_bud` used to be derived from A0's converged count, which made it
+    unknowable before S1 and left the ledger as its home. It is now fixed ahead
+    of the campaign by the binding rule -- it must lie below the smallest count
+    any other enabled mechanism produces, or M2 is inert under M1 (see
+    docs/ablation_design.md). Two places holding a value that must agree is a
+    way for them to disagree, so `init` reads the config and records where the
+    number came from.
+
+    Returns None rather than raising if the file is missing or unreadable:
+    `set-budget` still works, and a ledger without a budget blocks the m2 cells
+    loudly, which is the correct failure.
+    """
+    path = Path(__file__).resolve().parent.parent / "configs" / "cells.json"
+    try:
+        with open(path, encoding="utf-8") as fh:
+            value = json.load(fh).get("defaults", {}).get("n_bud")
+        return int(value) if value and int(value) > 0 else None
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
 def _utc() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -137,7 +161,8 @@ class Ledger:
             "created": _utc(),
             "scenes": scenes,
             "seeds": seeds,
-            "n_bud": None,
+            "n_bud": config_n_bud(),
+            "n_bud_source": "configs/cells.json" if config_n_bud() else None,
             "runs": runs,
         }
         self.save()
@@ -488,6 +513,13 @@ def main() -> int:
     if args.command == "init":
         ledger.init(args.scenes, args.seeds, args.cells, force=args.force)
         print(f"initialised {len(ledger.runs)} runs")
+        n = ledger.data.get("n_bud")
+        if n:
+            print(f"budget  : {n:,} from {ledger.data.get('n_bud_source')} "
+                  f"-- no set-budget needed")
+        else:
+            print("budget  : NOT SET. configs/cells.json holds no defaults.n_bud, "
+                  "so every m2 cell is blocked until `set-budget` is run.")
         print(ledger.summary())
     elif args.command == "status":
         print(ledger.summary())
