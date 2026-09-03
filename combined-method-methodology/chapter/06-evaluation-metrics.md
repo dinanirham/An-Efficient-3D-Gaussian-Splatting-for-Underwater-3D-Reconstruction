@@ -162,11 +162,20 @@ the absolute figure is unambiguous and the ratio is not.
 Reported as **both** wall-clock time and **effective optimizer steps**. The two are decoupled
 in this system by a margin large enough to invalidate naive comparison: the baseline's
 alternating schedule advances its loop counter only on geometry steps, so a nominally
-thirty-thousand-iteration run performs roughly forty-three thousand optimizer steps, each
-paying the cost of two rasterization passes, and this study's medium re-identification bursts
-add further steps that likewise do not appear in the count. A figure reported only in
-iterations is not comparable with one reported in steps, and this study reports both so the
-question does not arise.
+thirty-thousand-iteration run performs roughly forty-three thousand optimizer steps, and this
+study's medium re-identification bursts add further steps that likewise do not appear in the
+count. A figure reported only in iterations is not comparable with one reported in steps, and
+this study reports both so the question does not arise.
+
+**Each step of this implementation pays three rasterization passes where the baseline pays
+two.** The baseline obtains the accumulated alpha channel from the same pass that produces the
+image; the rasterizer adopted here cannot, so alpha is recovered from a dedicated probe pass
+and depth from a second, for the reason given in §3.4 — combining them routes depth gradients
+into the densification signal, which the baseline excludes and which measurably suppresses the
+converged model. The cost is real, falls on every cell equally, and is therefore visible in
+absolute wall-clock while cancelling in every between-cell contrast. It is stated here rather
+than absorbed silently, because wall-clock is one of the efficiency measures this study
+reports.
 
 Wall-clock is device-dependent and is presented with the device named. Effective step count is
 device-independent and is the quantity to compare against a method that reports its own.

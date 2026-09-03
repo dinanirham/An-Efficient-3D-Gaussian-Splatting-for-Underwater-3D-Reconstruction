@@ -56,12 +56,28 @@ class DiagnosticLogger:
         self.path = Path(model_path) / "diagnostics.csv"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.interval = max(1, int(interval))
-        fresh = not self.path.exists()
-        self._fh = open(self.path, "a", newline="", encoding="utf-8")
+
+        # Rotate any previous attempt aside rather than appending to it.
+        # Interrupted runs are restarted, never resumed (CD-18), so a second
+        # attempt writing into the same file would concatenate two runs:
+        # iterations 0..N from the dead one followed by 0..30000 from this one,
+        # non-monotonic in iteration and silently wrong for any trajectory
+        # reading. The `n_primitives` of the last row would still be right,
+        # which is what makes the corruption easy to miss.
+        #
+        # The previous file is kept rather than deleted -- a run that died is
+        # evidence about why, and this costs a few hundred kilobytes.
+        if self.path.exists() and self.path.stat().st_size > 0:
+            n = 1
+            while (prev := self.path.with_name(f"diagnostics.attempt{n}.csv")).exists():
+                n += 1
+            self.path.rename(prev)
+            print(f"[diagnostics] previous attempt kept as {prev.name}")
+
+        self._fh = open(self.path, "w", newline="", encoding="utf-8")
         self._w = csv.DictWriter(self._fh, fieldnames=self.FIELDS)
-        if fresh:
-            self._w.writeheader()
-            self._fh.flush()
+        self._w.writeheader()
+        self._fh.flush()
         print(f"[diagnostics] {self.path}")
 
     # -- helpers -----------------------------------------------------------

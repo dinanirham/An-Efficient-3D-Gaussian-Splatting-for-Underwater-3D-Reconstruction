@@ -79,6 +79,7 @@ or `[proposed integration]`.
 | 10 | [`10-reproducibility.md`](10-reproducibility.md) | Protocol consistency across sources; the additive-vs-leave-one-out framing, stated explicitly |
 | 11 | [`11-paper-vs-repo-disagreements.md`](11-paper-vs-repo-disagreements.md) | Which inherited disagreements actually bite the combined method, and the combination-specific ones |
 | 12 | [`12-novelty-defensibility.md`](12-novelty-defensibility.md) | What a reviewer could not find elsewhere; the strongest counter-objection; the narrower contribution the evidence actually supports |
+| **13** | [**`13-campaign-addendum.md`**](13-campaign-addendum.md) | **What execution changed. Supersedes 01-12 wherever they disagree** — CD-22/CD-23, the verified baseline, mechanism D, `n_bud`, and the run-to-run variance that invalidates single-run comparisons |
 
 ## Deliverable set 2 — narrative methodology chapter
 
@@ -145,3 +146,12 @@ fix — supported by (a), a genuine prior-art gap. Claim (b), a measured non-add
 interaction effect, is *not* supported: no combined-method measurements exist in the
 evidence base available to this pass.** See `12-novelty-defensibility.md` for the reasoning
 and `open-questions.md` for what would close it.
+
+> **Read `13-campaign-addendum.md` first if you are reading this after implementation.**
+> Sections 01–12 are a synthesis pass written *before any code ran*. Section 13 records
+> what changed once it did, and supersedes them where they disagree. In particular: the
+> baseline is now empirically verified against vanilla SeaSplat, `n_bud` is fixed
+> pre-campaign rather than derived from A0, a fourth mechanism exists as a supplementary
+> contrast, and `n_primitives` turns out to carry ~21% run-to-run spread — which
+> invalidates any single-run comparison, including several made during the investigation
+> that produced these corrections.

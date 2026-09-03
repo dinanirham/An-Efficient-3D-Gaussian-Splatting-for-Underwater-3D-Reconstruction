@@ -489,7 +489,63 @@ depth-driven physical medium model and a midpoint depth estimator in the same sy
 
 ---
 
-## 3.4.10 Summary of the method's own technical content
+## 3.4.10 A second integration boundary, found by running it
+
+The analysis above was written before implementation. One integration boundary it did not
+anticipate was discovered only when the baseline configuration failed to reproduce the
+baseline, and it belongs in this section because it is the same kind of finding as §3.4.7: a
+property that lives at a seam between components and appears in no component's own
+documentation.
+
+**The observation.** With all three mechanisms disabled, the implementation converged to
+roughly a sixth of the primitive count of the unmodified baseline on the same scene — seven
+hundred thousand against four and a half million. Fidelity was almost unaffected, a tenth of a
+decibel, which is what made the discrepancy easy to miss and important to explain.
+
+**Where it came from.** Gaussian splatting decides which primitives to duplicate or subdivide
+from the gradient of the loss with respect to the projected two-dimensional means, accumulated
+over an interval and thresholded. Each rasterization call owns one such gradient buffer, so
+*whichever losses backpropagate through a given pass, their gradients land in that pass's
+buffer, and only there.*
+
+The baseline obtains the accumulated alpha channel from the same rasterization that produces
+the image, so every alpha-derived loss term contributes to the densification signal. The
+rasterizer adopted here — chosen for its per-primitive importance accumulators, which the
+pruning mechanism requires — does not emit alpha, so alpha was recovered from a separate probe
+pass. That pass held its own gradient buffer. Alpha's *value* was exact; its *gradient* was
+absent from the signal that decides how the model grows.
+
+**Why every check passed anyway.** The acceptance suite tests what the renderer *returns* —
+that alpha lies in range, composites correctly, and recovers depth to seven decimal places.
+All of it was correct. The defect was in where a gradient *went*, and no test of returned
+values can observe that. The suite now carries two checks that assert the gradient's
+destination directly, in both directions, so that removing the correction fails a test rather
+than silently changing a result.
+
+**The correction, and its cost.** Alpha is now recovered from a probe carrying no depth, whose
+gradient joins the colour pass's buffer, while depth keeps a separate pass. This reproduces
+the baseline's gradient composition — image and alpha, not depth — at the cost of a third
+rasterization per iteration. An intermediate attempt that shared the combined depth-and-alpha
+probe made matters *worse*, and that is what identified depth as the interfering term: the two
+gradients partially cancel, so the accumulated magnitude fell and fewer primitives crossed the
+densification threshold.
+
+**Verification.** Three runs of the corrected configuration and three of the unmodified
+baseline give overlapping ranges and a mean ratio of 1.036. The two are indistinguishable by
+this measure.
+
+**What the finding is worth.** Two things, of different kinds. As methodology, it is a second
+instance of §3.4.7's theme — an integration boundary carrying a property no component
+documents — and it suggests that the class is not exhausted by the one case identified
+analytically. As a *result*, the detached configuration is a candidate efficiency mechanism in
+its own right: a sixfold reduction in model size for a tenth of a decibel, obtained by removing
+a gradient term rather than adding machinery. It is measured as a supplementary contrast
+(§3.6.2) rather than folded into the factorial, because the dense-initialization mechanism
+disables densification and would render it inert in half of an extended design. Its figure
+comes from a single pair of runs against the defective baseline and is not claimed until that
+contrast completes.
+
+## 3.4.11 Summary of the method's own technical content
 
 Stripped of the borrowed mechanisms, the proposed method contributes:
 
@@ -512,3 +568,8 @@ Stripped of the borrowed mechanisms, the proposed method contributes:
 5. An analysis of why the compression ceiling on this baseline is structurally lower than the
    terrestrial literature's, arising from a single inherited configuration choice, together
    with the renormalisation required for any cross-paper comparison to be valid.
+6. A second, empirically discovered integration boundary (§3.4.10): that substituting a
+   rasterizer can preserve every forward value while silently changing which loss gradients
+   drive densification — together with the correction, the acceptance checks that now assert
+   gradient destination rather than returned value, and the candidate efficiency mechanism the
+   defect turned out to describe.

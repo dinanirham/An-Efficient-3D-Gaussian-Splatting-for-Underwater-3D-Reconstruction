@@ -96,15 +96,16 @@ The dataset supports fidelity claims within clear limits.
 
 Its principal strength is that the held-out evaluation frames are *the same frames* other
 published methods hold out. The convention throughout this lineage is to reserve every eighth
-image by index order, which yields three test frames per scene at these counts. Because the
+image by index order, which yields three test frames for three of these scenes and four for
+the twenty-nine-image scene — thirteen in total, not twelve. Because the
 baseline, its neural-radiance-field predecessor, and the competing underwater efficiency
 methods all use this rule on these scenes, the test frames coincide, and a fidelity number
 produced here is measured on the same pixels as a published one. That is a stronger form of
 comparability than most cross-paper comparisons in this literature enjoy, and it is worth
 protecting.
 
-Its principal weakness is that three test frames per scene, across four scenes, is twelve
-evaluation images in total. Differences of a few tenths of a decibel — the magnitude at which
+Its principal weakness is that thirteen evaluation images across four scenes is a very small
+sample. Differences of a few tenths of a decibel — the magnitude at which
 the source methods' own ablations operate — cannot be distinguished from run-to-run variation
 on that sample without repeated runs and reported dispersion. This is not a hypothetical
 concern: the baseline's published ablation table contains differences below half a decibel
@@ -131,7 +132,7 @@ is worth making explicit because it shapes which of this study's conclusions are
 Efficiency quantities — primitive count, model size on disk, training wall-clock, effective
 optimizer steps, rendering frame rate, peak memory — are measured per run rather than per
 test frame. A four-scene corpus therefore yields four independent measurements of each
-efficiency quantity per configuration per seed, not twelve pixel-level comparisons, and the
+efficiency quantity per configuration per seed, not thirteen pixel-level comparisons, and the
 effects under study are large. Where the fidelity differences of interest are fractions of a
 decibel, the efficiency differences are multiples: the pruning mechanism reports an
 eight-and-a-half-fold reduction in primitive count on terrestrial data, and quantization

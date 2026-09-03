@@ -53,7 +53,8 @@ diagnostic that makes the problem and the remedy measurable at negligible cost.
 
 The design is a complete two-level, three-factor factorial: eight configurations from the
 untreated baseline to the fully stacked system, on four underwater scenes, with three seeds
-each — ninety-six training runs.
+each — ninety-six training runs, with a ninth supplementary configuration and a four-run
+reference control bringing the campaign to one hundred and twelve.
 
 The choice of a factorial over the cumulative ladder every source method uses is the design's
 load-bearing decision. A ladder supports one direction of inference and cannot say what
