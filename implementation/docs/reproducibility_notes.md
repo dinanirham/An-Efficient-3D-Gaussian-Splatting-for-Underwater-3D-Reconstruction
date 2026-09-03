@@ -49,6 +49,28 @@ cell per scene, mean ± standard deviation. The realised `n_primitives_final` is
 reported per run, never the target budget — a budget that lands within a few
 per cent across seeds is a different experiment from one that scatters.
 
+### How large that variance actually is
+
+Measured on Curasao, 16 000 iterations, two runs per implementation:
+
+| | runs | spread |
+|---|---|---|
+| vanilla SeaSplat | 4,788,960 / 4,085,219 | 17% |
+| ours (A0, after CD-23) | 3,025,374 / 4,510,298 | 49% |
+
+Ours varies **despite** seeding both the CPU and CUDA generators. The mechanism
+is amplification, not sloppiness: the rasterizer backward accumulates
+atomically, so a primitive can land either side of `densify_grad_threshold`
+from run to run, which changes the population feeding the next densification
+event — 144 times over. The same compounding that turned a 2% per-event rate
+difference into a 6× gap operates on floating-point noise.
+
+**This has a direct methodological consequence.** A single-run ratio on
+`n_primitives` carries no information at this scale, and an earlier phase of
+the CD-22/CD-23 investigation spent effort chasing a 1.58× "residual" that sat
+inside this spread. Any contrast reported on primitive count must clear the
+dispersion, and `tools/replicate_baseline.py` is the tool for establishing it.
+
 ## 3. Versions and hardware
 
 Recorded automatically in every `run_config.json`: git SHA (with a `-dirty`
