@@ -267,6 +267,29 @@ rather than a bare assertion inside the loader.
 Note the image directory changes: the originals use `images_wb` (and
 `Images_wb` for IUI3-RedSea), while COLMAP's undistorter writes `images`.
 
+### Measured clouds, and the estimate they corrected
+
+`dense` preset, 20,000 matches per reference view, built in 0.5-0.7 min each:
+
+| scene | reference views | points kept | filtered |
+|---|---:|---:|---:|
+| Panama | 15 | 299,368 | 99.8% |
+| JapaneseGradens-RedSea | 17 | 334,931 | 98.5% |
+| Curasao | 18 | 356,674 | 99.1% |
+| IUI3-RedSea | 25 | 471,531 | 94.3% |
+
+The count is `num_refs × matches_per_ref`, filtered by cheirality and
+reprojection error. `nns_per_ref` selects *which* neighbouring views each
+reference is matched against; it does not multiply the count. An earlier
+estimate treated it as a multiplier, came out 3× high, and set `n_bud` above
+three of the four clouds — caught by the binding check before any run used it.
+
+All four were built on the **pure-torch correlation**, since
+`fused-local-corr`'s wheel is linked against CUDA 13 and this stack is 12.8.
+Recorded per cloud as `fused_local_corr: false` with the reason. Preprocessing
+wall-clock is reported alongside A1's training cost, so which path produced a
+cloud is part of that figure.
+
 ## 4. The dense cloud is an experimental condition
 
 For A1/A4/A5/A7 the cloud, not just the configuration, determines the result:

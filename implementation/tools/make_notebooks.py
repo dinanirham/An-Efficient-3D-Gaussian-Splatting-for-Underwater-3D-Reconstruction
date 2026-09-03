@@ -355,7 +355,9 @@ alongside, or A1's cost is understated relative to A0's.
 """),
     code('''\
 import subprocess, time
-N_BUD = 400_000          # configs/cells.json; see ablation_design.md 5
+import json as _j
+N_BUD = _j.load(open(f'{IMPL_DIR}/configs/cells.json'))['defaults']['n_bud']
+print(f'n_bud = {N_BUD:,} (from configs/cells.json)')
 failures = []
 for s in SCENES:
     out = f'{DENSE_DIR}/{s}.ply'

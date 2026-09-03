@@ -127,22 +127,41 @@ puts A0 near **4.4M** primitives (three runs, 21% spread), which makes that
 rule give ~2.6M — far above every dense cloud, so M2 would have been inert in
 all four M1 cells. The rule above replaces it.
 
+**The clouds, measured.** `dense` preset, 20,000 matches per reference view,
+all four built in under three minutes total:
+
+| scene | reference views | points kept | M2 removes |
+|---|---:|---:|---:|
+| **Panama** | 15 | **299,368** | **33%** — the binding scene |
+| JapaneseGradens-RedSea | 17 | 334,931 | 40% |
+| Curasao | 18 | 356,674 | 44% |
+| IUI3-RedSea | 25 | 471,531 | 58% |
+
 | | value | source |
 |---|---:|---|
 | A0 converged count | ~4.39M | measured, 3 runs |
-| M1 cloud, `sparse` preset | ~150–220k | 18 refs × 3 neighbours × 5,000 matches |
-| M1 cloud, `dense` preset | ~600–800k | same, 20,000 matches |
-| **`n_bud`** | **400,000** | below `dense` with margin; 11× reduction from A0 |
+| smallest cloud | 299,368 | measured, Panama |
+| **`n_bud`** | **200,000** | 67% of the binding cloud; 22× reduction from A0 |
 
-`dense` is chosen over `sparse` for two reasons beyond the budget: a 150k cloud
-makes M1 read as aggressive subsampling rather than informed initialisation,
-and the wider margin keeps the budget binding across scene-to-scene variation
-in cloud size. It costs ~4× the RoMa preprocessing time — minutes, once, per
-scene.
+200,000 clears preflight's 90% warning with room, and gives every scene a
+substantial reduction rather than a token one — a budget that binds only in
+Panama by a few per cent would measure the M1×M2 interaction against almost
+nothing.
 
-The cloud counts are arithmetic estimates until section 9 of `00_setup` reports
-the real ones. If `dense` returns lower, **`n_bud` follows the measurement**:
-the rule holds and the number moves.
+**The first value was wrong, and the rule caught it.** `n_bud` was initially
+set to 400,000 from an estimate of 600–800k points, derived as
+`refs × neighbours × matches`. The cloud is actually `refs × matches_per_ref`
+— `nns_per_ref` selects *which* neighbours to match against rather than
+multiplying the count — so the estimate was 3× high and three of four scenes
+would have had a non-binding budget. Section 9 of `00_setup` prints each cloud
+against the budget, and preflight refuses any M1+M2 run where it does not bind;
+the error surfaced before a single training run consumed it.
+
+`dense` is chosen over `sparse` for two reasons beyond the budget: a ~90k
+cloud makes M1 read as aggressive subsampling rather than informed
+initialisation, and the wider margin keeps the budget binding across
+scene-to-scene variation. It costs ~4× the RoMa preprocessing — which is
+0.5–0.7 minutes per scene, so the difference is seconds.
 
 **Preflight enforces it.** Any run with both M1 and M2 enabled reads the vertex
 count from the cloud's PLY header and refuses to start if `n_bud` is not below

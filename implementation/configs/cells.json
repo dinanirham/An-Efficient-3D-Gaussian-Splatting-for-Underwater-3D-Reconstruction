@@ -82,7 +82,7 @@
       22000,
       30000
     ],
-    "n_bud": 400000,
+    "n_bud": 200000,
     "_n_bud_note": [
       "The M2 budget. Set BEFORE S1, from a stated rule, not fitted to A0's",
       "result afterwards:",
@@ -95,16 +95,20 @@
       "be an exact duplicate of A1, A7 of A5, and the interaction they exist to",
       "measure would read as a null result rather than as a missing cell.",
       "",
-      "A0 converges near 4.4M (measured, three runs, 21% spread), so the old",
-      "60%-of-A0 rule would give ~2.6M -- far above the clouds. 400k sits under",
-      "the `dense` preset's 600-800k with margin for scene-to-scene variation,",
-      "and gives M2 an 11x reduction from A0, which is a credible compression",
-      "claim rather than a collapse.",
+      "Measured clouds, `dense` preset, 20000 matches per reference view:",
+      "  Panama                    299,368   <- the binding scene",
+      "  JapaneseGradens-RedSea    334,931",
+      "  Curasao                   356,674",
+      "  IUI3-RedSea               471,531",
       "",
-      "The cloud counts are estimates until section 9 of 00_setup reports them.",
-      "If `dense` comes back lower, n_bud follows the measurement -- the rule",
-      "holds, the number moves. Preflight refuses any M1+M2 run where the budget",
-      "does not bind."
+      "200,000 is 67% of the binding cloud, so it clears preflight's 90% warning",
+      "and M2 removes 33-58% depending on scene rather than a token slice. From",
+      "A0's ~4.4M that is 22x compression.",
+      "",
+      "An earlier value of 400,000 was derived from an estimate of 600-800k",
+      "points, which was 3x high: the cloud is refs x matches_per_ref, and",
+      "nns_per_ref selects which neighbours to match against rather than",
+      "multiplying the count. Preflight caught it before any run consumed it."
     ]
   },
   "cells": {
