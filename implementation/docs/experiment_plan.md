@@ -109,6 +109,11 @@ python -m source.roma_init \
 
 `--preset sparse` = 5000 matches/ref, τ_corr 0.05; `dense` = 20000, 0.02.
 
+**Use `dense`.** `n_bud` is 400,000 and the binding rule requires the
+cloud to exceed it (see `ablation_design.md` §5); `sparse` lands near
+150-220k, below the budget, which makes M2 inert under M1 and collapses
+A4 onto A1 and A7 onto A5.
+
 **The preset is a real experimental choice, not a performance knob.** With
 densification disabled the primitive count can never grow, so if the cloud
 lands below the budget then A4 collapses onto A1 and A7 onto A5. Check the
@@ -170,7 +175,7 @@ From `configs/cells.json`, applied to every cell.
 | `kmeans_k` | **4096** | not 256: at `sh_degree = 0` the grouping machinery is inert, so `k` is the only quality dial |
 | `kmeans_freq` | 100 | assignment refresh interval |
 | `kmeans_iters` | 1 | the source method's value |
-| `n_bud` | **from A0** | deliberately absent from the cell file — not knowable before S1 |
+| `n_bud` | **400 000** | set before S1 from the binding rule, not fitted to A0 afterwards — it must lie below the dense cloud or M2 is inert under M1 |
 | `save_iterations` | **[30000]** | upstream saves at 4 iterations; at ~1M primitives that is ~86 GB across 96 runs |
 | `checkpoint_iterations` | **[30000]** | checkpoints have no operational value here — interrupted runs restart rather than resume (CD-18) |
 | `test_iterations` | **[7000, 15000, 22000, 30000]** | upstream evaluates every 1000 iterations — 30 full evaluations per run, each rendering every view and running VGG-LPIPS, all of it inside the reported training time |

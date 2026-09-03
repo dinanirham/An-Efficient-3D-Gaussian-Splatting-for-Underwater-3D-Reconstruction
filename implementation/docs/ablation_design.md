@@ -109,9 +109,46 @@ quantization performing worse.
 
 **A non-binding budget.** If M1 converges below the budget, the simplification
 step is a no-op and **A4 collapses onto A1, A7 onto A5**. A null interaction
-measured in that state is a configuration artifact, not a finding. Controlled
-by deriving the budget from A0 so it binds everywhere; the run prints a loud
-warning and records `budget_bound=false` if it does not.
+measured in that state is a configuration artifact, not a finding — and the
+worst kind, because the two cells simply agree and nothing in the results table
+distinguishes "no interaction" from "no experiment".
+
+### The binding rule
+
+> **`n_bud` must lie below the smallest primitive count any other enabled
+> mechanism produces.**
+
+This is a precondition for measuring M2 in combination, not a tuning choice,
+and it is fixed **before S1** rather than derived from A0's result afterwards.
+Deriving it after the fact would be fitting the design to the data.
+
+An earlier draft set the budget at 60% of A0's converged count. Replication
+puts A0 near **4.4M** primitives (three runs, 21% spread), which makes that
+rule give ~2.6M — far above every dense cloud, so M2 would have been inert in
+all four M1 cells. The rule above replaces it.
+
+| | value | source |
+|---|---:|---|
+| A0 converged count | ~4.39M | measured, 3 runs |
+| M1 cloud, `sparse` preset | ~150–220k | 18 refs × 3 neighbours × 5,000 matches |
+| M1 cloud, `dense` preset | ~600–800k | same, 20,000 matches |
+| **`n_bud`** | **400,000** | below `dense` with margin; 11× reduction from A0 |
+
+`dense` is chosen over `sparse` for two reasons beyond the budget: a 150k cloud
+makes M1 read as aggressive subsampling rather than informed initialisation,
+and the wider margin keeps the budget binding across scene-to-scene variation
+in cloud size. It costs ~4× the RoMa preprocessing time — minutes, once, per
+scene.
+
+The cloud counts are arithmetic estimates until section 9 of `00_setup` reports
+the real ones. If `dense` returns lower, **`n_bud` follows the measurement**:
+the rule holds and the number moves.
+
+**Preflight enforces it.** Any run with both M1 and M2 enabled reads the vertex
+count from the cloud's PLY header and refuses to start if `n_bud` is not below
+it, naming the collapse it would have produced. Within 10% it warns instead —
+the budget binds, but over so short a lever that the interaction is measured
+against almost nothing. The run also records `budget_bound` either way.
 
 **A confounded factor.** The quantization method ships its own ℓ1-opacity
 regulariser, which its authors credit for their 2–3× rendering speedup rather

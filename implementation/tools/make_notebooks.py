@@ -355,6 +355,7 @@ alongside, or A1's cost is understated relative to A0's.
 """),
     code('''\
 import subprocess, time
+N_BUD = 400_000          # configs/cells.json; see ablation_design.md 5
 failures = []
 for s in SCENES:
     out = f'{DENSE_DIR}/{s}.ply'
@@ -366,7 +367,7 @@ for s in SCENES:
                         '--source_path', f'{DATA_UNDIST}/{s}',
                         '--output',      out,
                         '--images',      'images',
-                        '--preset',      'sparse',
+                        '--preset',      'dense',
                         '--seed',        '0'],
                        capture_output=True, text=True)
     print(r.stdout[-900:], flush=True)
@@ -385,6 +386,16 @@ for s in SCENES:
     else:
         n = os.path.getsize(out) / 1e6
         print(f'{s}: {(time.time()-t0)/60:.1f} min   {out}  {n:.1f} MB')
+        # The budget must lie below this, or M2 is inert under M1 and A4
+        # collapses onto A1 (ablation_design.md 5). Preflight refuses such a
+        # run, but seeing it here costs nothing and saves a wasted queue entry.
+        import json as _json
+        _side = out.replace('.ply', '.json')
+        if os.path.exists(_side):
+            _n = _json.load(open(_side)).get('kept')
+            if _n:
+                _ok = 'ok' if N_BUD < _n else 'TOO HIGH -- lower n_bud'
+                print(f'    points={_n:,}   n_bud={N_BUD:,}   {_ok}')
 
 if failures:
     raise RuntimeError(
