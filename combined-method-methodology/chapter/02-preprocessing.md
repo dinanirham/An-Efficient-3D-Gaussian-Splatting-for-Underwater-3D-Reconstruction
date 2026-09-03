@@ -211,5 +211,5 @@ Write this alongside the fully resolved configuration for each run.
 *Rationale.* Three of the four codebases involved contain parameters that are set in
 configuration files but contradicted by their own documentation, or read from the command
 line and then ignored, or defaulted to values that silently disable the mechanism entirely.
-The only defence that scales to ninety-six runs is to have each run write down what it
+The only defence that scales to a campaign of this size is to have each run write down what it
 actually did.

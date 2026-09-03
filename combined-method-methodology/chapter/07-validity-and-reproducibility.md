@@ -36,11 +36,32 @@ views, the correspondence sampler, the importance-weighted survival draw, and th
 initialisation. Knowing which are controlled and which are not is more useful than a false
 claim of determinism.
 
+**The magnitude of that non-determinism was measured, and it is larger than the design
+assumed.** Three repetitions of each implementation on one scene give a spread in converged
+primitive count of **twenty-one per cent**, and the figure is the same for this
+implementation, which seeds both host and device generators, as for the unmodified baseline,
+which seeds neither. Seeding is therefore not the operative variable. The mechanism is
+amplification: a primitive lands either side of the densification gradient threshold from run
+to run, which changes the population that feeds the next densification event, and the schedule
+performs that event one hundred and forty-four times. Floating-point noise at the first event
+is compounded into a twenty-one per cent difference at the last.
+
+Two consequences follow, and both are load-bearing. **Any contrast reported on primitive count
+must clear that dispersion**; main effects are expected to, and interaction terms may not, in
+which case the analysis reports the term as undetermined rather than as a null result. And **a
+single-run ratio on this quantity carries no information at all** — a fact established the
+expensive way, during the investigation described in §3.4, where a paired comparison showed a
+thirty-two per cent deficit between two configurations later shown to be indistinguishable
+across three runs each. Comparisons in this study are between distributions, never between
+pairs of runs.
+
 ## 3.8.2 Run repetition and variance reporting
 
-**Three seeds per configuration per scene**: eight configurations, four scenes, three seeds,
-ninety-six training runs. Results are reported as mean and standard deviation across seeds,
-at both the per-scene and aggregate level, for every quality and efficiency measure.
+**Three seeds per configuration per scene**: eight factorial configurations plus one
+supplementary contrast, four scenes, three seeds — one hundred and eight training runs, with a
+four-run reference control alongside. Results are reported as mean and standard deviation
+across seeds, at both the per-scene and aggregate level, for every quality and efficiency
+measure.
 
 This is the study's dominant cost and it is not negotiable, for a reason visible in the source
 literature. **No source method reports error bars.** The baseline's published ablation table
@@ -137,9 +158,9 @@ than by arithmetic throughput. Absolute figures should be read as device-specifi
 between-configuration ratios are the transferable quantity.
 
 **Four scenes.** Every claim is an average over four points from three geographic locations,
-with twelve held-out evaluation frames in total. Water types beyond these — very high
+with thirteen held-out evaluation frames in total. Water types beyond these — very high
 turbidity, green inland water, deep low-light environments — are unrepresented. This bounds
-generalisation more tightly for fidelity claims, which rest on twelve images, than for
+generalisation more tightly for fidelity claims, which rest on thirteen images, than for
 efficiency claims, which rest on four per-run measurements of effects that are multiples
 rather than fractions.
 

@@ -77,10 +77,10 @@ is false and should not be offered.
 
 ## 3.9.3 Limitations of the empirical scope
 
-**Four scenes, eighty-eight images, twelve held-out frames.** All results are averaged over
+**Four scenes, eighty-eight images, thirteen held-out frames.** All results are averaged over
 four points from three geographic locations. This bounds fidelity claims more tightly than
 efficiency claims: the fidelity differences of interest are fractions of a decibel measured on
-twelve images, while the efficiency effects are multiples measured once per run.
+thirteen images, while the efficiency effects are multiples measured once per run.
 
 **Unrepresented conditions.** Very high turbidity, green inland water, deep low-light
 environments, artificial illumination, caustics, dynamic content, and non-forward-facing

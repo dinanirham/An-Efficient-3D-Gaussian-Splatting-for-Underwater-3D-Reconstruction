@@ -111,7 +111,7 @@ Three requirements attach to this layer and are not optional.
 codebases contain parameters that are set in one place and contradicted in another — a
 configuration file that disables densification while the documentation claims it is enabled by
 default, a batch size that is read and never used, a correspondence count that differs between
-the configuration and the documented command. The only defence that scales to ninety-six runs
+the configuration and the documented command. The only defence that scales to a campaign of this size
 is for each run to record what it actually did.
 
 **Every run asserts that each enabled mechanism fired.** Two of the three mechanisms are
