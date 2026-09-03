@@ -20,6 +20,14 @@
 #     gaussian_renderer/__init__.py for why the `_ms` fork alone suffices).
 set -euo pipefail
 
+# Say where it died. Under `set -e` an aborted script simply stops, and the
+# failure then surfaces one cell later as a missing extension -- which is what
+# happened when a diagnostic that fails by design took the build down with it
+# through `pipefail`. A one-line trap turns silence into a location.
+trap 'echo "
+!!! setup_colab.sh aborted at line $LINENO (exit $?)
+    The CUDA extensions may not have been built. Nothing below this point ran." >&2' ERR
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMPL_ROOT="$(dirname "$HERE")"
 REPO_ROOT="$(dirname "$IMPL_ROOT")"
@@ -123,7 +131,12 @@ if pip install -q fused-local-corr 2>/dev/null; then
         echo "    fused-local-corr ok"
     else
         echo "    fused-local-corr installed but will not load:"
-        python -c "import local_corr" 2>&1 | tail -2 | sed 's/^/        /'
+        # `|| true` is load-bearing. This command fails by design -- it exists
+        # to print why the import failed -- and under `set -euo pipefail` the
+        # pipeline inherits its non-zero status and aborts the script. Without
+        # it the diagnostic kills the build it is diagnosing, and the failure
+        # surfaces one cell later as a missing extension.
+        python -c "import local_corr" 2>&1 | tail -2 | sed 's/^/        /' || true
         pip uninstall -q -y fused-local-corr || true
         echo "    removed it; roma_init uses the pure-torch correlation"
         echo "    (slower, same result)"
@@ -139,7 +152,7 @@ else
     echo "    WARNING: romatch unavailable -- the M1 cells (A1/A4/A5/A7) and"
     echo "             source/roma_init.py will not run. A0/A2/A3/A6 are fine."
     echo "    the import error was:"
-    python -c "import romatch" 2>&1 | tail -4 | sed 's/^/        /'
+    python -c "import romatch" 2>&1 | tail -4 | sed 's/^/        /' || true
 fi
 
 # Quiet on success, but show the compiler output on failure. With `pip -q` a
