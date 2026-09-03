@@ -108,6 +108,11 @@ def t4_m2_blocked_without_budget():
     """
     with tempfile.TemporaryDirectory() as tmp:
         led = fresh(tmp)
+        # `init` now takes the budget from configs/cells.json, so the
+        # no-budget state has to be constructed rather than assumed. The
+        # mechanism it guards is unchanged and still worth testing: an m2 cell
+        # without a budget is a different experiment, not a run.
+        led.data["n_bud"] = None
         finish_stage(led, {"A0"})
         nxt = led.claim()          # S2 needs a budget it does not have
         blocked = {r["cell"] for r in led.runs if r["status"] == "blocked"}
@@ -142,6 +147,7 @@ def t4b_runnable_stage_holds_the_queue():
 def t5_set_budget_releases_blocked():
     with tempfile.TemporaryDirectory() as tmp:
         led = fresh(tmp)
+        led.data["n_bud"] = None          # see T4
         finish_stage(led, {"A0"})
         led.claim()                       # blocks the A2 rows
         assert any(r["status"] == "blocked" for r in led.runs)
@@ -335,6 +341,39 @@ def t12_exhausted_runs_are_visible_and_resettable():
     return True, "cap is visible in summary, reset restores it, blocked untouched"
 
 
+def t13_init_takes_the_budget_from_config():
+    """`init` must pick n_bud up from cells.json, and say where it came from.
+
+    The budget used to be derived from A0 and therefore lived only here. It is
+    now fixed ahead of the campaign by the binding rule, so it exists in
+    configs/cells.json too -- and two homes for one number is a way for them to
+    disagree. Forgetting `set-budget` after an init would silently block all 48
+    m2 runs.
+    """
+    from tools.run_ledger import config_n_bud
+
+    expected = config_n_bud()
+    if expected is None:
+        return False, "configs/cells.json has no defaults.n_bud to read"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        led = fresh(tmp)
+        got = led.data.get("n_bud")
+        src = led.data.get("n_bud_source")
+        if got != expected:
+            return False, f"init recorded n_bud={got}, config says {expected}"
+        if not src:
+            return False, "n_bud_source not recorded, so provenance is lost"
+
+        # ...and with a budget in hand, no m2 cell may be blocked on it.
+        blocked = [r["id"] for r in led.runs
+                   if any("budget" in b for b in led.blockers(r))]
+        if blocked:
+            return False, f"{len(blocked)} runs still blocked on the budget"
+
+    return True, f"n_bud={expected:,} read from {src}; no m2 cell blocked on it"
+
+
 def main() -> int:
     check("T1 init creates the full 8x4x3 matrix", t1_init_shape)
     check("T2 stage order is enforced  <-- decisive", t2_stage_order_enforced)
@@ -351,6 +390,8 @@ def main() -> int:
           t11_images_dir_resolution)
     check("T12 exhausted runs are visible and resettable  <-- decisive",
           t12_exhausted_runs_are_visible_and_resettable)
+    check("T13 init takes the budget from cells.json",
+          t13_init_takes_the_budget_from_config)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

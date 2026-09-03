@@ -221,14 +221,29 @@ just compiled against. So those two are excluded and the rest installed by
 name. A romatch failure is a warning rather than fatal: only the M1 cells
 (A1/A4/A5/A7) need it, so A0/A2/A3/A6 are unaffected.
 
-**`fused-local-corr` is optional and may be absent.** RoMa's refiner blocks
-call a fused CUDA correlation kernel whenever `use_custom_corr` is set, and the
-import failure surfaces mid-forward rather than at construction. `roma_init`
-probes for it and, if missing, clears the flag on every refiner block and uses
-the pure-torch correlation — the reference path the kernel optimises, not a
-different computation. Whether the fused kernel was used is printed and
-recorded as `fused_local_corr` in the cloud's sidecar, since it affects
-preprocessing wall-clock, which is reported alongside A1's training cost.
+**`fused-local-corr` is optional, and installing it is not the same as it
+working.** RoMa's refiner blocks call a fused CUDA correlation kernel whenever
+`use_custom_corr` is set, and the failure surfaces mid-forward rather than at
+construction. `roma_init` probes for it and, if unusable, clears the flag on
+every refiner block and uses the pure-torch correlation — the reference path
+the kernel optimises, not a different computation.
+
+The probe **imports** the module rather than asking whether it is findable.
+`importlib.util.find_spec` reports that a module exists; it says nothing about
+whether it loads. The PyPI wheel is linked against `libcudart.so.13` while
+Colab ships CUDA 12.8, so the package installs cleanly, satisfies `find_spec`,
+and then dies inside the forward pass — with the fallback skipped, because the
+probe had already concluded the kernel was available. All four scenes failed
+that way once.
+
+`setup_colab.sh` now verifies by importing after installing, and uninstalls the
+package if it cannot load: a broken extension left in place is worse than an
+absent one, because it makes the fallback look unnecessary.
+
+Whether the kernel was used is printed and recorded as `fused_local_corr` in
+the cloud's sidecar, with `fused_local_corr_error` giving the reason when it
+was not — a wheel built against the wrong CUDA is indistinguishable from "not
+installed" in the timing, and preprocessing wall-clock is a reported figure.
 
 **Windows build note.** `torch/include/ATen/ops/…` header paths overrun the
 260-character limit from a deep working directory, producing a misleading

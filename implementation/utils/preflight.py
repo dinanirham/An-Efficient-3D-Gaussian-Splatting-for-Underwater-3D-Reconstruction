@@ -100,6 +100,29 @@ def gpu_info() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _ply_vertex_count(path: str) -> int | None:
+    """Point count from a PLY header, without loading the body.
+
+    Used to check the M2 budget against the M1 cloud before training starts.
+    The header is ASCII even in a binary PLY, so this reads a few hundred bytes
+    of a file that may be hundreds of megabytes.
+    """
+    try:
+        with open(path, "rb") as fh:
+            for _ in range(64):                      # headers are short
+                line = fh.readline()
+                if not line:
+                    break
+                text = line.decode("ascii", "replace").strip()
+                if text.startswith("element vertex"):
+                    return int(text.split()[-1])
+                if text == "end_header":
+                    break
+    except (OSError, ValueError):
+        return None
+    return None
+
+
 def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
     """Checks that depend only on the resolved configuration."""
     fail: list[str] = []
@@ -213,13 +236,46 @@ def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
         if n_bud is None or n_bud <= 0:
             fail.append(
                 "m2_simplify is set but n_bud is unset. The budget is an "
-                "explicit primitive count, and it must be derived from A0's "
-                "converged count so that it binds in every cell -- a budget "
-                "that does not bind makes A4 equivalent to A1 and A7 to A5, "
-                "and a null interaction measured in that state is a "
-                "configuration artifact rather than a finding. Run A0 first "
-                "and read its final count from diagnostics.csv."
+                "explicit primitive count, and it must lie below whatever the "
+                "other enabled mechanisms produce -- a budget that does not "
+                "bind makes A4 equivalent to A1 and A7 to A5, and a null "
+                "interaction measured in that state is a configuration "
+                "artifact rather than a finding. See docs/ablation_design.md."
             )
+
+        # The binding rule, checked where it can actually be checked.  Under
+        # M1 the count is fixed by the cloud and densification never runs, so
+        # a budget above the cloud's point count is provably inert -- this is
+        # knowable before a single iteration, and it is the one degeneracy the
+        # design cannot detect after the fact, because A4 and A1 would simply
+        # agree and look like a null interaction.
+        if flags[0] and n_bud and n_bud > 0:
+            pcd = getattr(dataset, "pcd_path", "") or ""
+            n_points = _ply_vertex_count(pcd) if pcd else None
+            if n_points is None:
+                warn.append(
+                    f"could not read a vertex count from {pcd or '<unset>'}, so "
+                    f"the budget could not be checked against it. If n_bud "
+                    f"({n_bud:,}) exceeds the cloud, M2 is inert and this cell "
+                    f"silently duplicates its M1-only counterpart."
+                )
+            elif n_bud >= n_points:
+                fail.append(
+                    f"n_bud ({n_bud:,}) is not below the dense cloud "
+                    f"({n_points:,} points). With densification disabled under "
+                    f"M1 the count can never grow, so the budget can never "
+                    f"bind: this cell would be an exact duplicate of its "
+                    f"M1-only counterpart, and the interaction it exists to "
+                    f"measure would read as a null result. Lower n_bud, or "
+                    f"build a denser cloud with --preset dense."
+                )
+            elif n_bud > 0.9 * n_points:
+                warn.append(
+                    f"n_bud ({n_bud:,}) is within 10% of the cloud "
+                    f"({n_points:,}). It binds, but barely -- M2 would remove "
+                    f"almost nothing and the interaction would be measured "
+                    f"over a very short lever."
+                )
         if getattr(opt, "imp_metric", None) not in ("indoor", "outdoor"):
             fail.append(
                 f"imp_metric must be 'indoor' or 'outdoor', got "
