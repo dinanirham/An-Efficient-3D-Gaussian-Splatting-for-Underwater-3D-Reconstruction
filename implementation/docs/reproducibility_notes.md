@@ -353,7 +353,7 @@ with one reported in steps.
 
 | Gap | Status |
 |---|---|
-| **Checkpoints are incomplete** — no medium model, learned background, codebooks or schedule flags | Interrupted runs are **restarted, not resumed**. Correct resume needs that state in the checkpoint first. |
+| **Checkpoints are incomplete** — no medium model, learned background, codebooks or schedule flags | Interrupted runs are **restarted, not resumed**. Correct resume needs that state in the checkpoint first. A restarted run rotates the previous attempt's `diagnostics.csv` to `diagnostics.attemptN.csv` rather than appending, since two runs concatenated into one file are non-monotonic in iteration while the final row stays correct — which is what makes that corruption easy to miss. |
 | Which convention produced the baseline's *published* PSNR | Unrecorded upstream. Reporting both makes this work immune, but the comparability claim about the baseline should not be repeated until settled. |
 | k-means++ seeding deviates from the source method's uniform seeding | Deliberate — uniform seeding wastes codewords (worst-case error 5.14 → 0.20 on the test fixture). Its effect at k=4096 on real data is unmeasured. |
 | Rasterizer verified on sm_86, campaign runs sm_80 | Re-verify on the first A100 session. |
