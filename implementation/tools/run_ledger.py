@@ -1,19 +1,24 @@
-"""The run ledger: durable state for a 96-run campaign on preemptible sessions.
+"""The run ledger: durable state for a 108-run campaign on preemptible sessions.
 
     python -m tools.run_ledger init   --output_root /content/drive/MyDrive/e3dgsuw
     python -m tools.run_ledger status --output_root ...
     python -m tools.run_ledger set-budget 812345 --output_root ...
 
-8 cells x 4 scenes x 3 seeds is roughly 145 GPU-hours against Colab sessions
-that terminate well before that, so the campaign's state cannot live in a
-process.  It lives here, on Drive, and any fresh session reconstructs what to
-do next by reading it.
+9 cells x 4 scenes x 3 seeds, against Colab sessions that terminate long
+before the campaign does, so its state cannot live in a process.  It lives here,
+on Drive, and any fresh session reconstructs what to do next by reading it.
+
+Because it lives on Drive, it is also the campaign's single point of failure:
+`os.replace` is not reliably atomic on a FUSE mount, and one write left neither
+the target nor the temp file.  Every write therefore keeps the previous copy as
+`run_ledger.json.bak`, and a load falls back to it.
 
 Three properties the campaign depends on:
 
 **Stage ordering.**  Runs are claimed from the lowest stage that still has work.
-S1 (A0) must finish before anything else, because the primitive budget is
-derived from A0's converged count and is not knowable before it.
+S1 (A0) runs first as the baseline and environment check.  It is no longer a
+hard prerequisite: the budget used to be derived from A0's converged count, and
+is now fixed ahead of the campaign by the binding rule.
 
 **Prerequisites.**  An m2 cell without a budget, or an m1 cell without its dense
 cloud, is not merely misconfigured -- it silently becomes a different
@@ -29,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -101,26 +107,75 @@ class Ledger:
         self.root = Path(output_root)
         self.path = self.root / LEDGER_NAME
         self.data: dict[str, Any] = {}
-        if self.path.exists():
+        # Also load when only the backup survives -- that is precisely the case
+        # the fallback in load() exists for, and gating on the primary file
+        # would skip it.
+        if self.path.exists() or self.backup_path.exists():
             self.load()
 
     # -- persistence -------------------------------------------------------
 
+    @property
+    def backup_path(self) -> Path:
+        return self.root / (LEDGER_NAME + ".bak")
+
     def load(self) -> None:
+        """Read the ledger, falling back to the backup if it has vanished.
+
+        `os.replace` is atomic on a real filesystem. This file lives on a Drive
+        FUSE mount, where it is not: the target can be unlinked and the rename
+        then fail, leaving *neither*. That happened once, and the campaign's
+        entire state disappeared with it. A backup written before each replace
+        turns that from data loss into a warning.
+        """
+        if not self.path.exists() and self.backup_path.exists():
+            print(f"[ledger] {self.path.name} is missing; restoring from "
+                  f"{self.backup_path.name}. The last write did not complete -- "
+                  f"at most one run's status may be stale, and a `reap` will "
+                  f"recover it.")
+            shutil.copyfile(self.backup_path, self.path)
+
         with open(self.path, encoding="utf-8") as fh:
             self.data = json.load(fh)
 
     def save(self) -> None:
-        """Atomic replace: a session killed mid-write must not corrupt state."""
+        """Write via a temp file, keeping the previous copy as a backup.
+
+        Two failure modes are covered. A session killed mid-write must not
+        leave a truncated ledger -- hence the temp file and the replace. And
+        the replace itself must not be able to destroy the only copy, which is
+        a live risk on Drive; hence the backup taken first.
+        """
         self.root.mkdir(parents=True, exist_ok=True)
+
         fd, tmp = tempfile.mkstemp(dir=str(self.root), suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump(self.data, fh, indent=2)
+                fh.flush()
+                os.fsync(fh.fileno())
             os.replace(tmp, self.path)
         except Exception:
             Path(tmp).unlink(missing_ok=True)
             raise
+
+        if not self.path.exists():
+            # Drive can report success and leave nothing behind.
+            raise RuntimeError(
+                f"{self.path} does not exist after a successful write. The "
+                f"filesystem did not honour the replace. The previous state is "
+                f"in {self.backup_path.name}."
+            )
+
+        # Refresh the backup only once the write has demonstrably landed, so it
+        # always holds the last state known to have reached disk. Copying
+        # *before* the write would leave it a further write behind, and the
+        # difference is whether a lost write costs the run that just finished
+        # or the one before it as well.
+        try:
+            shutil.copyfile(self.path, self.backup_path)
+        except OSError:
+            pass              # a stale backup must never fail a good write
 
     # -- construction ------------------------------------------------------
 

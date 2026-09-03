@@ -374,6 +374,44 @@ def t13_init_takes_the_budget_from_config():
     return True, f"n_bud={expected:,} read from {src}; no m2 cell blocked on it"
 
 
+def t14_ledger_survives_losing_its_file():
+    """The ledger must survive its own file disappearing.
+
+    `os.replace` is atomic on a real filesystem; on the Drive FUSE mount this
+    file actually lives on, it is not. One write left neither the target nor
+    the temp file, and the campaign's entire state went with it. Every write
+    now refreshes a backup once the write has demonstrably landed, and a load
+    falls back to it.
+
+    Asserts recovery of both the shape and the progress -- a backup that
+    restores 108 pending runs while forgetting which had finished would send
+    completed work round again.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        led = fresh(tmp)
+        for rid in ("A0/Curasao/s0", "A0/Curasao/s1"):
+            led.by_id(rid)["status"] = "done"
+        led.save()
+
+        backup = Path(tmp) / "run_ledger.json.bak"
+        if not backup.exists():
+            return False, "no backup written after a successful save"
+
+        (Path(tmp) / "run_ledger.json").unlink()      # the failure mode
+        recovered = Ledger(tmp)
+
+        n = len(recovered.runs)
+        done = sum(1 for r in recovered.runs if r["status"] == "done")
+        if n != len(led.runs):
+            return False, f"recovered {n} runs, expected {len(led.runs)}"
+        if done != 2:
+            return False, f"recovered {done} completed runs, expected 2"
+        if not (Path(tmp) / "run_ledger.json").exists():
+            return False, "load() did not restore the primary file"
+
+    return True, f"{n} runs and {done} completed survived the file vanishing"
+
+
 def main() -> int:
     check("T1 init creates the full 8x4x3 matrix", t1_init_shape)
     check("T2 stage order is enforced  <-- decisive", t2_stage_order_enforced)
@@ -392,6 +430,8 @@ def main() -> int:
           t12_exhausted_runs_are_visible_and_resettable)
     check("T13 init takes the budget from cells.json",
           t13_init_takes_the_budget_from_config)
+    check("T14 ledger survives losing its file  <-- decisive",
+          t14_ledger_survives_losing_its_file)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

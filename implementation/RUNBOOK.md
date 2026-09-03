@@ -209,6 +209,29 @@ concatenated into one file are non-monotonic in iteration while the *final row
 stays correct*, which is what makes that corruption easy to miss — the
 converged count reads fine and every trajectory is wrong.
 
+### If the ledger itself disappears
+
+`run_ledger.json` lives on Drive, where `os.replace` is not reliably atomic — a
+write can leave neither the target nor its temp file. This happened once, mid
+S1.
+
+Every write now refreshes `run_ledger.json.bak` once the write has landed, and
+a load restores from it automatically, printing:
+
+```
+[ledger] run_ledger.json is missing; restoring from run_ledger.json.bak.
+```
+
+Nothing to do. The backup holds the last state that reached disk, so at most
+the final write is lost — one run's status, which a `reap` or a re-run
+recovers.
+
+If **both** files are gone, check for a stray `*.tmp` in `$DRIVE_ROOT` (that is
+a complete ledger needing only a rename) and Drive's trash. Failing that,
+`init --force` rebuilds the shape and you lose only the record of which runs
+finished — the run directories themselves are untouched, so completed work can
+be identified from `eval_metrics.json` on disk.
+
 ### If the same run keeps dying
 
 After **three** attempts the ledger stops claiming it, and `status` marks it
