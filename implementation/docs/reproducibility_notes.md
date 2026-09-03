@@ -71,6 +71,30 @@ the CD-22/CD-23 investigation spent effort chasing a 1.58× "residual" that sat
 inside this spread. Any contrast reported on primitive count must clear the
 dispersion, and `tools/replicate_baseline.py` is the tool for establishing it.
 
+### Replication: A0 and vanilla SeaSplat are indistinguishable
+
+Three runs each, Curasao, 16 000 iterations:
+
+| | runs | mean | sd | spread |
+|---|---|---|---|---|
+| ours (A0) | 4,260,571 / 3,990,523 / 4,906,223 | 4,385,772 | 470,514 | 20.9% |
+| vanilla SeaSplat | 4,290,897 / 3,749,643 / 4,661,489 | 4,234,010 | 458,577 | 21.5% |
+
+Mean ratio **1.036**, ranges fully overlapping. After CD-22 and CD-23, **A0 is
+SeaSplat** to within the measurement's resolution, and the claim "we improve
+SeaSplat" has a baseline that can carry it.
+
+Two details worth keeping. The spreads are equal to within a point, so ours is
+not the noisier implementation — the 49% quoted from two samples was an
+artifact of n=2. And the spread is the same despite our seeding both the CPU
+and CUDA generators, which confirms the variance is intrinsic to atomic
+accumulation in the backward rather than anything seeding could control.
+
+For contrast, the *paired single run* from the same session gave 3,183,805
+against 4,711,324 — a ratio of 0.68, which read alone looks like a substantial
+deficit in a pair the replication calls indistinguishable. That is the whole
+argument for measuring distributions.
+
 ## 3. Versions and hardware
 
 Recorded automatically in every `run_config.json`: git SHA (with a `-dirty`
