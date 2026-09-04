@@ -48,12 +48,22 @@ CELL_FLAGS: dict[str, tuple[bool, bool, bool]] = {
 MULTIPLICATIVE = {
     "ratio_vs_this_baseline", "total_bytes", "bytes_per_primitive",
     "n_primitives_final", "train_wall_seconds", "effective_optimizer_steps",
+    # Frame rate combines multiplicatively -- a speedup is a ratio, and the
+    # design's prediction about it ("sub-linear in primitive reduction") is a
+    # statement about ratios. Peak memory is deliberately NOT here: it carries
+    # a large device-constant floor, so a ratio of two peaks is dominated by
+    # the constant and an additive difference in MB is the honest form.
+    "render_fps",
 }
 
 DEFAULT_METRICS = [
     "psnr_pooled", "psnr_per_channel", "ssim", "lpips",
     "n_primitives_final", "total_bytes", "bytes_per_primitive",
     "effective_optimizer_steps", "train_wall_seconds",
+    # Frame rate is the one efficiency measure all three mechanisms affect, and
+    # two of the design's predictions are stated against it. Omitting it from
+    # the defaults would leave both untested by the analysis that runs.
+    "render_fps", "render_peak_mem_mb",
 ]
 
 
