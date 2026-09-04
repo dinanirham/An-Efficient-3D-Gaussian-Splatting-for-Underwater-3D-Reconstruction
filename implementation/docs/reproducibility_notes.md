@@ -359,10 +359,22 @@ rendering, and including them would measure this study's training arrangement
 rather than the model's rendering cost — and would not be comparable with any
 published figure.
 
-Recorded per run as `render_fps`, `render_ms_per_frame`, `render_frames_timed`
-and `render_peak_mem_mb`, with `render_note` carrying the reason when profiling
-did not produce a figure. Profiling never raises: a failure there must not lose
-a finished training run.
+Each pass over the held-out views is timed separately rather than as one
+block. The scenes hold only three or four such views, so a single block is
+under a fifth of a second and gives no way to distinguish a stable figure from
+a noisy one. Twenty passes cost about a second and yield a dispersion —
+reported as `render_ms_per_frame_sd` and `_cv`. **A frame rate quoted without
+its dispersion cannot be compared against another cell's**, and the design's
+sub-linearity prediction is a claim about a ratio of two such figures.
+
+Recorded per run as `render_fps`, `render_ms_per_frame` with its standard
+deviation and coefficient of variation, `render_frames_timed` and
+`render_peak_mem_mb`, with `render_note` carrying the reason when profiling did
+not produce a figure. Profiling never raises: a failure there must not lose a
+finished training run.
+
+First measured value, A0/Curasao/s0 at 4,285,043 primitives: **69.17 fps**,
+14.46 ms/frame, 3,587 MB peak. Training wall clock 4,682 s.
 
 ## 6. Timing
 

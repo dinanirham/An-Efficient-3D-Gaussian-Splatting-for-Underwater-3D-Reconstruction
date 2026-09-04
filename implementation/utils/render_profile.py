@@ -43,7 +43,7 @@ def profile_rendering(
     pipe: Any,
     background: torch.Tensor,
     warmup: int = 5,
-    repeats: int = 3,
+    repeats: int = 20,
 ) -> dict[str, Any]:
     """Time the colour pass over `cameras`, and report peak memory.
 
@@ -57,6 +57,8 @@ def profile_rendering(
         "render_frames_timed": 0,
         "render_warmup_frames": warmup,
         "render_repeats": repeats,
+        "render_ms_per_frame_sd": None,
+        "render_ms_per_frame_cv": None,
         "render_note": None,
     }
     if not cameras:
@@ -73,18 +75,39 @@ def profile_rendering(
                 # rendering, not whatever training left behind.
                 torch.cuda.reset_peak_memory_stats()
 
-            t0 = time.perf_counter()
+            # Time each full pass over the cameras separately, rather than one
+            # block. The scenes hold only three or four held-out views, so a
+            # single block is under a fifth of a second and gives no way to
+            # tell a stable figure from a noisy one. Per-pass samples cost one
+            # extra synchronise each and yield a dispersion.
+            per_pass: list[float] = []
             for _ in range(repeats):
+                t0 = time.perf_counter()
                 for cam in cameras:
                     render_fn(cam, gaussians, pipe, background)
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-            elapsed = time.perf_counter() - t0
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                per_pass.append(time.perf_counter() - t0)
+
+            elapsed = sum(per_pass)
 
         n = len(cameras) * repeats
         out["render_frames_timed"] = n
         out["render_ms_per_frame"] = round(1000.0 * elapsed / max(1, n), 4)
         out["render_fps"] = round(n / elapsed, 2) if elapsed > 0 else None
+
+        # Dispersion of per-frame time across passes. A frame rate quoted
+        # without it cannot be compared against another cell's: the design's
+        # sub-linearity prediction is a claim about ratios, and a ratio of two
+        # unstable numbers says nothing.
+        if len(per_pass) > 1:
+            ms = [1000.0 * t / len(cameras) for t in per_pass]
+            mean = sum(ms) / len(ms)
+            var = sum((x - mean) ** 2 for x in ms) / (len(ms) - 1)
+            out["render_ms_per_frame_sd"] = round(var ** 0.5, 4)
+            out["render_ms_per_frame_cv"] = (
+                round(100.0 * (var ** 0.5) / mean, 2) if mean > 0 else None
+            )
         if torch.cuda.is_available():
             out["render_peak_mem_mb"] = round(
                 torch.cuda.max_memory_allocated() / 1024 / 1024, 1
