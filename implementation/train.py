@@ -19,6 +19,7 @@ import torch
 from typing import List
 from random import randint
 from utils.loss_utils import l1_loss, ssim, depth_weighted_l1_loss, depth_weighted_l2_loss
+from utils.render_profile import profile_rendering
 from gaussian_renderer import render, render_alpha, render_depth, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -1031,6 +1032,14 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
             # stochastic and driven by device-computed probabilities, so it
             # varies run to run even at a fixed seed.
             "n_primitives_final": int(gaussians.get_xyz.shape[0]),
+            # Rendering throughput.  The design rests two predictions on this --
+            # that the quantization cell shows approximately no gain, and that
+            # gains from primitive reduction are sub-linear -- and neither is
+            # testable without it.  See utils/render_profile.py for what is
+            # timed and why.
+            **profile_rendering(
+                render, scene.getTestCameras(), gaussians, pipe_params, bg
+            ),
         },
     }
     chunk_size = 128

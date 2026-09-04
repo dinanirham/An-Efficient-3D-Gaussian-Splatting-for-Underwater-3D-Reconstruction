@@ -237,7 +237,7 @@ Under `runs/<cell>/<scene>/s<seed>/`:
 |---|---|
 | `run_config.json` | resolved args, git SHA, GPU, versions, seed, split sizes, dense-cloud hash |
 | `diagnostics.csv` | depth normalisation constants, medium coefficients, primitive count — one row per interval and per event |
-| `eval_metrics.json` | both PSNR conventions, SSIM, LPIPS, per-image records, and the cost block (iterations, **effective optimizer steps**, wall clock, final primitive count) |
+| `eval_metrics.json` | both PSNR conventions, SSIM, LPIPS, per-image records, and the cost block (iterations, **effective optimizer steps**, wall clock, final primitive count, **render FPS**, ms/frame and peak render memory) |
 | `compressed_<iter>/` | the shippable artifact plus `model_size.json` |
 | `train.log` | full stdout/stderr |
 | `point_cloud/`, `chkpnt*.pth` | the model, for rendering and inspection |
