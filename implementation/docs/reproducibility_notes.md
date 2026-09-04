@@ -339,6 +339,31 @@ Aggregation is reported under **both** weightings, because scene image counts
 are unequal (21/29/20/18) and the two differ by ~0.27 dB — larger than many
 ablation differences in this literature.
 
+## 5b. Rendering throughput
+
+Frame rate is the one efficiency measure all three mechanisms affect, and two
+of the design's predictions are stated against it — that the quantization cell
+shows approximately **no** gain, since the source method credits its published
+2–3× speedup to an opacity penalty this study disables, and that gains from
+primitive reduction are **sub-linear**. Neither was testable until now: the
+harness measured model size and training time but never render speed.
+
+What is timed is the **colour pass alone**, over the held-out views, with
+`torch.cuda.synchronize()` around the loop and five warm-up frames discarded.
+Both details decide whether the number means anything — CUDA launches are
+asynchronous, so timing without synchronising measures how fast Python enqueues
+work, and the first render of a session pays autotuning and allocator growth.
+
+The probe passes are excluded. They serve the training objective, not
+rendering, and including them would measure this study's training arrangement
+rather than the model's rendering cost — and would not be comparable with any
+published figure.
+
+Recorded per run as `render_fps`, `render_ms_per_frame`, `render_frames_timed`
+and `render_peak_mem_mb`, with `render_note` carrying the reason when profiling
+did not produce a figure. Profiling never raises: a failure there must not lose
+a finished training run.
+
 ## 6. Timing
 
 Reported as wall-clock **and effective optimizer steps**. They are not
