@@ -71,6 +71,37 @@ the CD-22/CD-23 investigation spent effort chasing a 1.58× "residual" that sat
 inside this spread. Any contrast reported on primitive count must clear the
 dispersion, and `tools/replicate_baseline.py` is the tool for establishing it.
 
+### S1 measured: A0's converged counts, all four scenes
+
+Twelve runs, three seeds each, 30 000 iterations:
+
+| scene | seeds 0 / 1 / 2 | mean | sd | CV |
+|---|---|---:|---:|---:|
+| Curasao | 4,285,043 / 3,186,018 / 3,802,363 | 3,757,808 | 550,866 | 14.7% |
+| IUI3-RedSea | 2,280,526 / 2,761,801 / 2,571,227 | 2,537,851 | 242,367 | 9.6% |
+| JapaneseGradens-RedSea | 2,377,216 / 2,220,485 / 2,109,283 | 2,235,661 | 134,610 | **6.0%** |
+| Panama | 1,590,127 / 2,393,173 / 2,934,459 | 2,305,920 | 676,400 | **29.3%** |
+
+Median across all twelve: **2,482,200**.
+
+**Dispersion is heterogeneous across scenes, by a factor of five.** The 21%
+figure measured earlier came from Curasao alone and is not a constant: Japanese
+Gardens is stable at 6%, Panama scatters at 29% — its slowest and fastest seeds
+differ by 1.85×. Any pooled variance estimate hides that, and a per-scene
+contrast on Panama is far weaker than the same contrast on Japanese Gardens.
+The analysis reports per-scene dispersion for this reason.
+
+At the mean CV of 14.9% with three seeds, the standard error of a scene mean is
+**8.6%**, so a difference on primitive count must exceed roughly **17%** to
+clear it. The main effects are far larger than that — M2 targets a 92%
+reduction — but the interaction terms are differences of differences and carry
+about twice the variance.
+
+**Curasao is not representative.** The replication that established A0 ≡ vanilla
+SeaSplat ran on Curasao only, where A0 converges near 3.8–4.4M. The median
+across all four scenes is 2.48M. Statements of the form "A0 converges to ~4.4M"
+are Curasao statements and should be written as such.
+
 ### Replication: A0 and vanilla SeaSplat are indistinguishable
 
 Three runs each, Curasao, 16 000 iterations:
@@ -359,10 +390,22 @@ rendering, and including them would measure this study's training arrangement
 rather than the model's rendering cost — and would not be comparable with any
 published figure.
 
-Recorded per run as `render_fps`, `render_ms_per_frame`, `render_frames_timed`
-and `render_peak_mem_mb`, with `render_note` carrying the reason when profiling
-did not produce a figure. Profiling never raises: a failure there must not lose
-a finished training run.
+Each pass over the held-out views is timed separately rather than as one
+block. The scenes hold only three or four such views, so a single block is
+under a fifth of a second and gives no way to distinguish a stable figure from
+a noisy one. Twenty passes cost about a second and yield a dispersion —
+reported as `render_ms_per_frame_sd` and `_cv`. **A frame rate quoted without
+its dispersion cannot be compared against another cell's**, and the design's
+sub-linearity prediction is a claim about a ratio of two such figures.
+
+Recorded per run as `render_fps`, `render_ms_per_frame` with its standard
+deviation and coefficient of variation, `render_frames_timed` and
+`render_peak_mem_mb`, with `render_note` carrying the reason when profiling did
+not produce a figure. Profiling never raises: a failure there must not lose a
+finished training run.
+
+First measured value, A0/Curasao/s0 at 4,285,043 primitives: **69.17 fps**,
+14.46 ms/frame, 3,587 MB peak. Training wall clock 4,682 s.
 
 ## 6. Timing
 

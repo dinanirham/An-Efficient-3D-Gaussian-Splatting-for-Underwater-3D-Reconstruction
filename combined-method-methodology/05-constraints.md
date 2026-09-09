@@ -95,9 +95,15 @@ For each cell: the specific degeneracy at risk, the mechanism that would normall
 whether that mechanism still applies, and — as the brief requires — **whether the evidence
 shows the risk avoided, mitigated, or occurred.**
 
-**Every "evidence" column below reads `NOT MEASURED`.** That is not an oversight in this
-document; it is Phase 0's finding, and stating it once per row is the only honest way to
-present a risk register built without results.
+**Almost every "evidence" column below reads `NOT MEASURED`.** That is not an oversight in
+this document; it was Phase 0's finding, and stating it once per row is the only honest way
+to present a risk register built without results.
+
+**One row has since been settled**, and is marked as such: the A4/A7 budget degeneracy is
+now resolved by construction and confirmed by measurement. The rest await the campaign.
+Rows will be updated in place as evidence arrives, so that the register reads as a live
+document rather than a record of what was once unknown — the `[measured n=k]` tag from
+`13-campaign-addendum.md` carries the sample size behind each.
 
 | Cell | Risk | Baseline mechanism at stake | Still applies? | Mitigation adopted | Evidence |
 |---|---|---|---|---|---|
@@ -109,7 +115,7 @@ present a risk register built without results.
 | **A2** | Depth reinit resamples preferentially where `α_accum` is low — i.e. the water column — and fails where there is no depth, also the water column | M-3 (`L_op`) | ⚠️ | **scope M2 to simplification only**, leaving 3DGS ADC for densification `[PI]` | **NOT MEASURED** |
 | **A3** | The medium parameters absorb codebook error, so `β` stops being interpretable as a medium estimate | M-4 (global homogeneity) is precisely what makes the absorption *global* and therefore harmful | ❌ M-4 is the vector, not the defence | log medium-parameter drift, quantized vs unquantized `[PI]` (`04-loss.md` §4.4) | **NOT MEASURED** |
 | **A3** | Quantization damage concentrates in `Ĵ`, which is never scored; the metric multiplies the damage by `Â ≤ 1` before measuring it | none — this is a *measurement* gap, not a well-posedness gap | n/a | report a `Ĵ`-space self-consistency metric as **secondary**; declare the limitation `[PI]` | **NOT MEASURED** |
-| **A4** | **Degenerate cell.** If M1's converged count already sits below M2's budget, IP2 is a no-op and **A4 ≡ A1** | n/a — a design failure, not a degeneracy | n/a | set the budget from A0's converged count so it binds everywhere, **or** run M1 at a binding density; check and report which regime obtained `[PI]` (`02-pipeline.md` §2.8) | **NOT MEASURED** |
+| **A4** | **Degenerate cell.** If M1's converged count already sits below M2's budget, IP2 is a no-op and **A4 ≡ A1** | n/a — a design failure, not a degeneracy | n/a | `n_bud` fixed **pre-campaign** below the smallest cloud, not from A0 — see the note below the table; preflight refuses any M1+M2 run where it would not bind, reading the count from the cloud's PLY header `[repo: utils/preflight.py]` | ✅ **RESOLVED.** All four clouds clear `n_bud = 200 000`: Panama 299 368, JapaneseGardens 334 931, Curasao 356 674, IUI3 471 531 `[measured n=1/scene]` |
 | **A4** | ~~LR schedule conflict~~ — **DISSOLVED 2026-08-28.** M2's rewind is disabled by default, so only M1's clamp fires and there is no conflict to resolve | none | n/a | the rewind exists for *reinitialized* primitives; under CD-4 nothing is reinitialized (survivors keep parameters and Adam state), so its premise never holds `[PI — CD-7]` | **N/A — risk removed rather than mitigated** |
 | **A4** | Four writers to `_opacity` in a single iteration (`L_op`, EDGS decay, EDGS prune, M2 reset-on-reinit) | M-3 (`L_op`) | ⚠️ | the same re-tuning as A1; **and** note M2 resets opacity *up* while M1 decays it *down* | **NOT MEASURED** |
 | **A5** | The least-coupled pair — IP1 and IP3 never touch the same stage — but inherits A1's opacity issue and A3-a's ratio cap | — | ✅ mostly intact | none beyond A1's and A3's | **NOT MEASURED** |
@@ -170,8 +176,12 @@ Carried forward from the baseline and still true:
 
 New, and specific to the combination:
 
-- **No mechanism guarantees the budget binds.** The A4/A7 degeneracy is a design
-  responsibility, not something the code will report.
+- ~~**No mechanism guarantees the budget binds.**~~ **RESOLVED.** Preflight reads the point
+  count from the M1 cloud's PLY header and refuses any run combining M1 and M2 where
+  `n_bud` is not below it, naming the collapse it would have produced; within 10% it warns
+  instead, since a budget that binds by a few per cent measures the interaction over almost
+  no lever `[repo: utils/preflight.py]`. It has already rejected one wrong value before a
+  run consumed it.
 - **No mechanism validates that the medium re-warm-up actually re-identifies `β`.** The
   `[PI]` burst is specified by analogy with SeaSplat's existing warm-up; whether `n` steps
   suffice after a prune is unknown and untested.
@@ -179,3 +189,67 @@ New, and specific to the combination:
   densification) and A2 (only removal), primitives can only ever decrease after
   initialization. In a domain where the initializer's matcher is known to fail on the water
   column, that is a one-way ratchet.
+
+---
+
+## 5.6 A degeneracy class this file did not anticipate: gradient destination
+
+Everything above — D-1 through D-4, M-1 through M-5, the whole register in §5.3 — is a
+statement about **values**. What solutions the objective admits; what a variable is allowed
+to be; which term penalises which collapse. That framing was inherited from the baseline's
+own well-posedness argument and it is the right one for the questions it was built to
+answer.
+
+It does not cover the defect that execution actually produced, and the gap is worth naming
+because it is structural rather than incidental.
+
+**The observation.** With all three mechanisms disabled, the implementation converged to
+743 457 primitives where unmodified SeaSplat reaches 4 462 668 on the same scene — a sixth
+— at a fidelity cost of about a tenth of a decibel `[measured n=1]`. Nothing in §5.1–§5.5
+predicts or detects this. No degeneracy was entered: the objective, its terms, its
+gradients and every rendered value were correct.
+
+**The mechanism.** 3DGS's density control reads `‖∂L/∂means2D‖`, accumulated over an
+interval. Each rasterization call owns one such buffer, so *whichever losses backpropagate
+through a given pass, their gradients land in that pass's buffer and nowhere else.*
+SeaSplat obtains `α` from the colour pass, so every `α`-derived term contributes. CD-13
+substituted a rasterizer that cannot emit `α`, recovering it from a probe holding its own
+buffer. `α`'s **value** was exact throughout; its **gradient** was absent from the signal
+that decides how the model grows.
+
+**Why nothing caught it.** The acceptance suite tests what the renderer returns — `α` in
+range, compositing correctly, `Z_raw/α` recovering depth to seven decimal places. All
+correct, on both architectures, throughout. A value-level check cannot observe a
+gradient's destination, and every check in this methodology was a value-level check.
+
+**The generalisation.** A composed method has, at every seam, a set of properties that
+belong to *neither* component and appear in *neither* component's documentation. §5.4
+identified one analytically — two incompatible notions of depth. This one was found only
+by running the baseline configuration and noticing it did not reproduce the baseline. The
+class is: **an integration boundary can preserve every value and still change which
+gradients flow where.** That admits no purely analytical audit, because the property is
+not local to either side of the seam.
+
+**What now guards it** `[repo: tools/verify_rasterizer.py]`:
+
+| | asserts |
+|---|---|
+| **T7** | `α`'s gradient reaches the shared buffer when passed, and does **not** when it is not — both directions, so removing the fix fails a test rather than silently changing a result |
+| **T8** | the alpha-only probe's `α` matches the combined probe's to 1e-6, and its depth channel is identically zero |
+
+And the invariant they encode, stated once so it can be checked against any future change to
+the render path:
+
+> **Density control must see the image and `α`, and must not see depth.**
+
+**A third instance has since been measured.** D-1 — the "no medium" collapse — turns out to be
+reachable *channel-wise* through a clamp boundary that no component documents: β_att is
+unconstrained while the forward pass clamps β_att⊛Ẑ at zero, so a channel driven negative is
+frozen with zero gradient and its attenuation becomes `exp(0) = 1`. Simplification drives it
+there. See `13-campaign-addendum.md` §13.10; detected campaign-wide by
+`tools/medium_collapse.py`.
+
+Both halves are load-bearing. Omitting `α` gives 743 457 primitives; admitting depth as
+well gives 635 038 — *worse*, because the two gradients partially cancel. Satisfying both
+reproduces the baseline within its run-to-run spread `[measured n=3 — see
+13-campaign-addendum §13.2–§13.3]`.

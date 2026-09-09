@@ -148,8 +148,17 @@ evidence base available to this pass.** See `12-novelty-defensibility.md` for th
 and `open-questions.md` for what would close it.
 
 > **Read `13-campaign-addendum.md` first if you are reading this after implementation.**
-> Sections 01–12 are a synthesis pass written *before any code ran*. Section 13 records
-> what changed once it did, and supersedes them where they disagree. In particular: the
+> Sections 01–12 were a synthesis pass written *before any code ran*. Section 13 records what
+> changed once it did.
+>
+> **They have since been reconciled rather than left to disagree.** Each file that carried a
+> superseded claim now carries the correction in place, tagged `[measured n=k]` so the sample
+> size behind every empirical statement is visible: `05-constraints.md` §5.6 (a degeneracy
+> class the original analysis had no category for), `06-implementation-deltas.md` §6.7
+> (CD-22 … CD-25), `07-pseudocode.md` (three rasterization passes, and which gradient buffer
+> each writes into), `08-computational-profile.md` §8.2b (the measured A0 reference point),
+> `10-reproducibility.md` §10.4 (the magnitude of the non-determinism), and
+> `12-novelty-defensibility.md` §12.6 (the revised novelty verdict). In particular: the
 > baseline is now empirically verified against vanilla SeaSplat, `n_bud` is fixed
 > pre-campaign rather than derived from A0, a fourth mechanism exists as a supplementary
 > contrast, and `n_primitives` turns out to carry ~21% run-to-run spread — which

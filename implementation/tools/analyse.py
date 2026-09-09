@@ -63,7 +63,7 @@ DEFAULT_METRICS = [
     # Frame rate is the one efficiency measure all three mechanisms affect, and
     # two of the design's predictions are stated against it. Omitting it from
     # the defaults would leave both untested by the analysis that runs.
-    "render_fps", "render_peak_mem_mb",
+    "render_fps", "render_ms_per_frame", "render_peak_mem_mb",
 ]
 
 
