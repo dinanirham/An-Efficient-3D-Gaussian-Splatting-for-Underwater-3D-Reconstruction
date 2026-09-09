@@ -58,7 +58,8 @@ submission.
 | # | Claim | Verdict | Basis |
 |---|---|---|---|
 | E.1 | An integration boundary can preserve every forward value and still change which gradients drive densification | **Supported** | **D-3.** Bracketed at three configurations; the fix verified to indistinguishability at n=3 `[05-constraints.md §5.6]` |
-| E.2 | A scene-global medium model whose only spatial input is per-frame min–max-normalised depth is not invariant to primitive-count reduction | **Not yet tested** | Derived analytically `[05-constraints.md §5.4]`; CD-6 remedy implemented; needs S2's β diagnostics |
+| E.2 | A scene-global medium model whose only spatial input is per-frame min–max-normalised depth is not invariant to primitive-count reduction | **Partially supported** `[measured n=1]` | First evidence: A2/IUI3-RedSea/s0's β_att falls **94% in one step** at simplification and two channels enter a permanent clamp trap; A0 never does. The effect is *larger* than the hypothesis predicted, and the Ẑ rescale alone does not account for it `[13-campaign-addendum.md §13.10]`. Needs seeds and scenes |
+| E.6 | CD-6's medium re-identification burst restores β after a population change | **Contradicted** `[measured n=1]` | The `rewarm_end` row *is* the post-burst state, and β_att is already collapsed in it. 200 steps did not restore it. First evidence either way, since the burst has been unconditionally enabled `[§13.10]` |
 | E.3 | Converged primitive count carries 6–29% run-to-run dispersion, seeding notwithstanding | **Supported** | 12 A0 runs + 3+3 replication `[measured n=3/scene]` |
 | E.4 | Detaching alpha gradients from densification yields ~6× fewer primitives at ~−0.1 dB | **Not yet tested** | `[measured n=1]` against a *defective* baseline, different seeds. Not claimable until S6 `[12-novelty-defensibility.md §12.6.2]` |
 | E.5 | A0 is indistinguishable from unmodified SeaSplat | **Supported**, Curasao only | 3+3 runs, ratio 1.036. Should not be stated for all scenes |
@@ -70,12 +71,27 @@ submission.
 | Verdict | Count |
 |---|---:|
 | Supported | 6 |
-| Partially supported | 3 |
-| **Contradicted** | **4** |
+| Partially supported | 4 |
+| **Contradicted** | **5** |
 | Not yet tested | 5 |
 | Methodologically untestable with the current design | 2 |
 
-### The four contradicted claims
+### Two claims have moved since this ledger was first written
+
+**E.2 is now partially supported**, and the measured effect is more severe than the hypothesis
+stated: attenuation falls 94% in a single step and two of three channels enter a dead-gradient
+trap they cannot leave.
+
+**E.6 is contradicted** — CD-6, this thesis's own proposed remedy, did not restore β. That is
+the first evidence either way, because the burst has been unconditionally enabled since it was
+written. It is a negative result about the work's own contribution and it should be reported
+as one `[13-campaign-addendum.md §13.10]`.
+
+Both are `n=1`. They are recorded because they bear on the recommended positioning: the
+"integration boundary" contribution now has a third instance, and unlike the other two it has
+a physical rather than an engineering interpretation.
+
+### The contradicted claims
 
 They are not peripheral — **B.1 and B.2 are the manuscript's headline result**, and the one
 the meta-review singled out as the study's most useful finding. C.3 and D.2 are framing.
