@@ -242,6 +242,13 @@ the render path:
 
 > **Density control must see the image and `α`, and must not see depth.**
 
+**A third instance has since been measured.** D-1 — the "no medium" collapse — turns out to be
+reachable *channel-wise* through a clamp boundary that no component documents: β_att is
+unconstrained while the forward pass clamps β_att⊛Ẑ at zero, so a channel driven negative is
+frozen with zero gradient and its attenuation becomes `exp(0) = 1`. Simplification drives it
+there. See `13-campaign-addendum.md` §13.10; detected campaign-wide by
+`tools/medium_collapse.py`.
+
 Both halves are load-bearing. Omitting `α` gives 743 457 primitives; admitting depth as
 well gives 635 038 — *worse*, because the two gradients partially cancel. Satisfying both
 reproduces the baseline within its run-to-run spread `[measured n=3 — see

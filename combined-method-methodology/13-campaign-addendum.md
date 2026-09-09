@@ -310,3 +310,117 @@ any draft before then.
 **Claim (b) remains unavailable** until S4 completes — and §13.6 is a warning that
 it may remain unavailable afterwards, if the interaction effects do not clear the
 21% dispersion.
+
+---
+
+## 13.10 First direct evidence on H4: simplification collapses the attenuation model
+
+*Extends §5.1's degeneracy D-1 and §5.4. First measurement bearing on the thesis's central
+hypothesis. `[measured n=1]` — one scene, one seed; see the caveats before using it.*
+
+### The observation that prompted it
+
+Loading the trained models into a splat viewer, A2/IUI3-RedSea showed a **reddish seabed**
+where A0 and the prior work's models were neutral, together with visibly fewer water-column
+floaters and a tighter bounding box.
+
+A viewer displays the `.ply`'s `f_dc`, which is **Ĵ — the medium-free radiance**, not the
+composed image. A colour cast there is a statement about the medium model, and it turned out
+to be diagnostic.
+
+### What the diagnostics show
+
+A2/IUI3-RedSea/s0, across the first simplification (`simp_iteration1 = 15000`):
+
+| | iteration 15000 (pre-simp) | 15001 (post-simp, **after** the CD-6 burst) |
+|---|---|---|
+| primitives | 2 437 342 | 200 000 — **−92%** |
+| `z_min` / `z_max` | 7.27 / 40.08 | 8.27 / 37.92 |
+| **β_att** (R/G/B) | 0.525 / 0.609 / 0.674 | 0.061 / 0.089 / **−0.046** |
+
+β_att,B crosses zero **at the simplification step itself**. β_att,G follows at iteration
+19500. Neither ever recovers. **A0 never goes negative in any channel**, and its β_att
+trajectory across the same range is smooth (1.10 → 1.15 → 1.19 → 1.21).
+
+### Why recovery is impossible
+
+`deepseecolor/models.py:83` clamps the *product*, not the parameter:
+
+```python
+beta_d_conv = torch.clamp(conv2d(depth, self.residual_conv_params), 0.0)
+```
+
+β_att is unconstrained; depth is non-negative. Once β_att < 0 the product clamps to zero,
+`d(clamp)/dβ = 0`, and the channel is **frozen for the remainder of training with no path
+back**. Confirmed empirically: after going negative, β_att,G takes exactly **one** distinct
+value across every subsequent logged iteration, and β_att,B likewise.
+
+`exp(−0) = 1` means no attenuation is modelled for those channels — **SeaSplat's own D-1
+"no medium" degeneracy, reached one channel at a time.** D-1 was described in §5.1 as a global
+optimum that the staged warm-up and `L_bs` defend against. Neither defence addresses a
+channel-wise entry through a clamp boundary, because neither anticipated the parameter being
+driven there by an external population change.
+
+This is an inherited SeaSplat design flaw — a one-way trap — that only becomes reachable under
+an intervention SeaSplat does not have.
+
+### Why the seabed is red
+
+Ĵ = (Î − B̂) / Â, so a channel's restoration is `exp(+β_att,c · Ẑ)`. With β_att,G ≈ β_att,B ≈ 0
+(clamped) and β_att,R surviving at 0.1–0.44, **only red is restored**. A0's three channels sit
+near 1.0–1.15 and restore together, which is why it looks neutral.
+
+The visual signature and the parameter collapse are the same fact.
+
+### What is *not* attributable to M2
+
+**Backscatter runaway occurs in the baseline too.** β_bs reaches 15.8 in A2 and **13.6 in A0**,
+large enough in both that `exp(−β_bs Ẑ)` ≈ 0 and the backscatter term saturates to a constant
+`σ(B^∞)`. An earlier reading of this data attributed the runaway to simplification; that was
+wrong. It is a property of the baseline, and it is a separate finding worth reporting on its
+own — SeaSplat's backscatter coefficients are not identified either, they simply saturate.
+
+What is M2-specific is the **attenuation** collapse.
+
+### Why no fidelity metric would have caught it
+
+PSNR, SSIM and LPIPS score **Î**, the composed image. A model with Â ≈ 1 and a saturated,
+constant B̂ can still fit Î — it has become plain 3DGS plus a global colour offset. The physics
+is gone; the photometry is intact.
+
+This is the concrete case for the standing instruction that physical correctness must not be
+inferred from fidelity metrics, and it is the strongest available answer to the reviewers who
+asked *why* the mechanisms behave differently under underwater conditions.
+
+### Consequences for the design
+
+**H4 is supported, and the effect is more severe than the hypothesis stated.** §5.4 predicted
+that primitive reduction would *perturb* medium identifiability through the Ẑ rescale. The
+measured Ẑ change is modest — `z_min` +14%, `z_max` −5% — while β_att falls by 94% in one
+step. The rescale alone does not account for it; removing 92% of the population appears to
+remove the structure the medium term was explaining, and the optimiser answers by switching
+the medium off.
+
+**CD-6 is insufficient as configured.** The 15001 row is the state *after* the 200-step
+re-identification burst. The burst ran and β_att was already collapsed when it finished. The
+remedy this work proposes does not, at 200 steps, do what it was designed to do — and this is
+the first evidence either way, because the burst has been unconditionally enabled.
+
+**The budget may be the operative variable, not M2.** `n_bud = 200 000` removes 92% here.
+Whether the collapse is a property of simplification or of *this budget* cannot be separated
+from a single operating point. This converts the rate–distortion sweep from a reviewer request
+into a scientific necessity `[new-revisited-writing/01-discrepancy-ledger.md D-9]`.
+
+### Caveats
+
+- **n = 1.** One scene, one seed.
+- **A0 and A2 already differed before the intervention** — β_att ≈ 1.10 vs 0.54 at iteration
+  12500, a factor of two with M2 not yet active. Given the 6–29% run-to-run dispersion
+  (§13.6) this needs seeds before the pre-existing gap means anything. The *step change* at
+  15001 is coincident with the intervention and is not noise.
+- The reddish cast is a **gauge-visible** quantity. §5.1's D-3 says Ĵ has an unconstrained
+  per-channel gain under the photometric loss alone, so a colour shift is not by itself
+  evidence of anything. It is evidence *here* because the parameter trace shows the mechanism.
+
+`tools/medium_collapse.py` scans every run for negative-and-frozen attenuation channels and
+saturated backscatter, so this is detected across the campaign rather than found by eye.
