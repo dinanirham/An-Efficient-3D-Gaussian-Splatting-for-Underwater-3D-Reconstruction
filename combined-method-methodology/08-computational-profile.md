@@ -201,10 +201,59 @@ reports only "30 000 iterations" is not comparable to one that reports steps.
 
 ---
 
+## 8.2b The A0 reference point, measured
+
+§8.1 states that the baseline's own cost on *this* hardware "has to be measured, not looked
+up", because every efficiency ratio in §8.3 divides by it. S1 supplies it.
+
+**Twelve A0 runs, three seeds per scene, 30 000 iterations, A100-SXM4-40GB, sm_80.**
+
+| scene | primitives (s0 / s1 / s2) | mean | sd | CV |
+|---|---|---:|---:|---:|
+| Curasao | 4 285 043 / 3 186 018 / 3 802 363 | 3 757 808 | 550 866 | 14.7% |
+| IUI3-RedSea | 2 280 526 / 2 761 801 / 2 571 227 | 2 537 851 | 242 367 | 9.6% |
+| JapaneseGradens-RedSea | 2 377 216 / 2 220 485 / 2 109 283 | 2 235 661 | 134 610 | **6.0%** |
+| Panama | 1 590 127 / 2 393 173 / 2 934 459 | 2 305 920 | 676 400 | **29.3%** |
+
+**Median across all twelve: 2 482 200.**
+
+Per-run cost, from `A0/Curasao/s0` at 4 285 043 primitives:
+
+| | measured | note |
+|---|---|---|
+| training wall clock | **4 682 s (78 min)** | the loop only; excludes scene load and evaluation |
+| effective optimizer steps | **43 000** | against 30 000 iterations — the ratio §8.2 warns about, confirmed |
+| render throughput | **69.2 fps**, 14.46 ms/frame | colour pass only, CUDA-synchronised, held-out views |
+| peak render memory | **3 587 MB** | 9% of the card; memory is not a binding constraint here |
+
+Two things this table settles that the published figures could not.
+
+**Dispersion is heterogeneous across scenes by a factor of five.** Japanese Gardens has a
+6.0% coefficient of variation; Panama has 29.3%, its slowest and fastest seeds differing by
+1.85× at identical configuration. A pooled variance would hide that, and a per-scene contrast
+on Panama is far weaker evidence than the same contrast on Japanese Gardens. **§8.3's ratios
+must therefore be reported per scene with their own dispersion, never as a single pooled
+number.** At the mean CV with three seeds the standard error of a scene mean is 8.6%, so a
+difference on primitive count must exceed roughly **17%** to clear it — comfortable for the
+main effects, which target 90%+, and not obviously comfortable for the interactions, which
+are differences of differences.
+
+**Curasao is not representative**, and earlier statements in this folder of the form "A0
+converges to ~4.4M" are Curasao statements. The four-scene median is 2.48M. This matters
+directly for §8.4's claim-(b) test, whose predicted effect sizes were sketched against the
+higher figure.
+
+---
+
 ## 8.3 The combined-method measurement tables — to be filled
 
 These are the deliverable of this section. Units, normalisation, and hardware are fixed here
 so that the numbers, when they exist, are comparable.
+
+**Frame rate is now instrumented** (CD-24). It was not, when this table was written: the
+`render_fps`, `render_ms_per_frame` and `render_peak_mem_mb` columns below had no source, and
+the two predictions §8.4 rests on them — A3 showing ≈no gain, and sub-linear gains from count
+reduction — had no instrument behind them.
 
 **Protocol assumptions for every cell:** single GPU, named and reported; all eight cells on
 the same device; ≥3 seeds per cell with dispersion reported; metrics per

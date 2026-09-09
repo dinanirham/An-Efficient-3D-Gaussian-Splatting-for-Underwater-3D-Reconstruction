@@ -251,3 +251,82 @@ match the published ones, and explaining why is a small but real result.
 | What would upgrade the claim from (c) to (c)+(b)? | Running the eight-cell matrix with ≥3 seeds and reporting the three interaction terms against the additive null. The A6 cell is informative in both directions. |
 | What is the minimum experiment that supports a real claim? | **A0 vs A2, with `Ẑ_min`/`Ẑ_max` and `β` logged across the simplification boundary.** Two cells. |
 | What must not be claimed? | Any efficiency or quality number for A1–A7; any statement about non-additivity; any compression ratio compared to CompGS-VQ's published 41–65× without renormalising to a 14-float-per-Gaussian baseline. |
+
+---
+
+## 12.6 What execution changed — a second claim-(c) instance, and a candidate claim (a)
+
+§12.1–§12.5 were written before any code ran. Two things have changed and one has not.
+
+### 12.6.1 Claim (c) gains a second, independently discovered instance
+
+§12.2.1 argues claim (c) from one case: a scene-global medium model whose only spatial input
+is a per-frame min–max-normalised depth map is not invariant to primitive-population change,
+so pruning injects degeneracy D-2 from outside the objective.
+
+Execution produced a second case of the same *kind*, by a completely different route.
+Substituting the rasterizer (CD-13) preserved every forward value — `α` in range,
+compositing correct, `Z_raw/α` recovering depth to seven decimal places — and silently
+changed **which loss gradients reach density control**. The baseline configuration then
+converged to a sixth of the baseline's primitive count `[measured n=1]`, and no check in this
+methodology could have seen it, because every check was a check on returned values
+`[05-constraints.md §5.6]`.
+
+That strengthens claim (c) in a specific way. One instance invites the reading "you found a
+quirk of this particular medium model." Two instances, one derived analytically and one found
+empirically, at different seams, support the more general statement:
+
+> **A composed method has properties at its integration boundaries that belong to neither
+> component and appear in neither component's documentation. Some are reachable by analysis;
+> some are reachable only by execution; and the second class cannot be enumerated in
+> advance.**
+
+That is a claim about method composition, which is what this work is. It is also
+uncomfortable for the field it sits in, since the standard practice — a cumulative ablation
+ladder on a composed system — has no step at which such a property would surface.
+
+### 12.6.2 Mechanism D is a candidate claim (a), and is not yet claimable
+
+The defective configuration is not merely a bug. Detaching alpha-loss gradients from
+densification gave **6× fewer primitives for −0.107 dB** test PSNR `[measured n=1]` — larger
+than M1, M2 or M3 is expected to deliver, and *cheaper than doing nothing*, since detaching
+removes a rasterization pass rather than adding one.
+
+Nothing in the SeaSplat, Mini-Splatting, CompGS-VQ or EDGS literature reports that alpha-loss
+gradients inflate 3DGS densification. If it holds, it is a **prior-art gap — claim (a)** — and
+not an integration fix.
+
+**It is not claimable yet, and the reason is worth stating precisely.** That figure comes
+from a single pair of runs, at different seeds, against a baseline now known to be defective.
+Replication subsequently established that primitive count carries a 6–29% run-to-run spread
+depending on scene `[08-computational-profile.md §8.2b]`, which is the same order as many
+effects this study will report. A single-run ratio on that quantity is not evidence — a
+lesson this project paid for, having tested four hypotheses against exactly such ratios
+before measuring the spread.
+
+It is therefore measured as cell `A0D`, stage S6, twelve runs against the corrected baseline,
+and **must not appear in any draft before that contrast completes**. It is deliberately not a
+fourth factor: M1 disables densification, so D is provably inert in all eight M1 cells and a
+2⁴ design would be half duplicates.
+
+### 12.6.3 What has not changed
+
+**Claim (b) remains unavailable**, and §12.3's concession still stands in full. The matrix is
+running; no interaction has been measured.
+
+There is now a sharper reason for caution than "no measurements exist". The measured
+dispersion means an interaction term — a difference of differences, carrying roughly twice
+the variance of a main effect — may not clear the noise floor even after all 108 runs. If it
+does not, the honest report is `UNDETERMINED`, which the analysis tooling emits rather than
+rounding to zero. **A null interaction and an unresolvable one are different findings**, and
+the distinction has to survive into the write-up.
+
+### 12.6.4 Revised verdict
+
+| Question | Answer |
+|---|---|
+| Which claim type does the evidence support? | **(c)**, supported by **(a)**, now with **two** independent instances of (c) — one analytical, one empirical |
+| Is (b) supported? | **Still no.** The matrix is in progress. |
+| Is there a new candidate claim? | **Yes — mechanism D**, a possible prior-art gap in its own right. `[measured n=1, against a defective baseline]`. Not claimable until S6. |
+| What did execution add that reading could not? | Two integration defects invisible to value-level checking (CD-22, CD-23), a missing instrument the design depended on (CD-24), a budget rule that would have collapsed two cells (CD-25), and the measured dispersion that bounds every effect size this study can report. |
+| What must not be claimed? | Everything in §12.5's row, **plus** any figure for mechanism D until `A0D` completes, **plus** any statement of the form "A0 converges to ~4.4M" — that is a Curasao figure; the four-scene median is 2.48M. |

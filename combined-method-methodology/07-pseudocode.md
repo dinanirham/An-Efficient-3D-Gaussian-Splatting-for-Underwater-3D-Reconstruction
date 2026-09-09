@@ -51,7 +51,13 @@ GATES   it_st  = seathru_from_iter = 10 000                       [SS repo: READ
         it_s2  = simp_iteration2   = 20 000                       [MS repo: ms/train.py:404]
         it_vq  = kmeans_st_iter    > it_s2                        [PI — CD-10, see 06-…]
         Δ_med  = 100, n_med = 50                                  [SS repo: arguments/__init__.py:180-181]
-        n_bud  = primitive budget, set from A0's converged count   [PI — CD-5]
+        n_bud  = 200 000, fixed pre-campaign by the binding rule   [PI — CD-5, revised]
+                        ▲ NOT from A0's converged count. A0's median is
+                          2 482 200, so a fraction of it would exceed every M1
+                          cloud (299 368 – 471 531) and IP2 would be inert
+                          under M1. The rule is: n_bud below the smallest count
+                          any other enabled mechanism produces.
+                                                    [measured — 13-campaign-addendum §13.5]
         t      = kmeans_freq = 100                                [VQ paper §3]
 ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -148,12 +154,35 @@ GATES   it_st  = seathru_from_iter = 10 000                       [SS repo: READ
                           ⇒ M3 CANNOT corrupt the two variables the baseline's
                             D-2 and D-4 arguments depend on                    [inferred]
 
-     ── forward render: TWO rasterization passes ──────────────────────────────────────
-45     Ĵ, α, radii, vs_pts ← RASTERIZE(G, v)                        [SS paper Eq.1] [SS repo: train.py:201-203]
-46     Z_raw               ← RASTERIZE(G, v; override_color = z_cam(μ))
+     ── forward render: THREE rasterization passes ───────────────────────────────────
+                        ▲ SeaSplat uses TWO. The third exists because of which
+                          gradient buffer each pass writes into — see 46b.
+                                                                   [PI — CD-23]
+45     Ĵ, radii, vs_pts, w_acc, a_proj, a_max ← RASTERIZE(G, v)     [SS paper Eq.1] [SS repo: train.py:201-203]
+                        ▲ the _ms fork returns Mini-Splatting's importance
+                          accumulators and NO alpha, where SeaSplat's fork
+                          returns alpha and no accumulators           [PI — CD-13]
+46a    α     ← RASTERIZE(G, v; override_color = [0,1,0], bg = 0; means2D ← vs_pts)  ⧉
+                                                                   [PI — CD-23] [repo: gaussian_renderer/__init__.py render_alpha]
+                        ▲ SHARES vs_pts, so ∂L_α/∂means2D reaches the
+                          densification accumulator — as it does in SeaSplat,
+                          where α comes from line 45 itself
+46b    Z_raw ← RASTERIZE(G, v; override_color = z_cam(μ), bg = 0; means2D ← OWN)
                                                                    [SS repo: gaussian_renderer/__init__.py:116-137]
-                        ▲ under M2 this must run on the FORKED kernel
-                          diff_gaussian_rasterization_ms             [PI — CD-13]
+                        ▲ keeps its OWN buffer, so depth gradients do NOT reach
+                          density control — matching SeaSplat, whose depth pass
+                          is likewise separate
+                        ▲▲ THE GRADIENT-DESTINATION INVARIANT. A control-flow
+                           property, invisible to any test of returned values:
+                               density control must see      image + α
+                               density control must NOT see  depth
+                           A single [z,1,0] probe sharing vs_pts (CD-22) admits
+                           depth, and the terms partially cancel — measured
+                           635,038 primitives against vanilla's 4,462,668.
+                           Sharing nothing, as first merged, omits α: 743,457.
+                           Splitting as above reproduces vanilla within its
+                           run-to-run spread.
+                                                    [measured n=3 — 13-campaign-addendum §13.2, §13.3]
 47     Ẑ ← Z_raw / α ; nan_to_num ; ÷ normalize_depth               [SS repo: train.py:222-232]
 48     Ẑ_min, Ẑ_max ← min Ẑ, max Ẑ    ⧉ LOG THESE                   [PI — CD-12]
 49     Ẑ ← (Ẑ − Ẑ_min)/(Ẑ_max − Ẑ_min)      ⚠ PER-FRAME min–max     [SS repo: train.py:233-237]

@@ -31,6 +31,19 @@
 > which are non-deterministic in floating point regardless of seeding
 > `[../seasplat/10-reproducibility.md §10.1]`. The correct response is not to chase
 > determinism but to **report dispersion** — §10.4.
+>
+> **Measured, and larger than assumed.** Three repetitions of both this implementation and
+> unmodified SeaSplat give a ~21% spread in converged primitive count on Curasao — the same
+> for an implementation that seeds host *and* device generators as for one that seeds
+> neither, so seeding is not the operative variable. Across all four scenes the coefficient
+> of variation ranges from **6.0% to 29.3%** `[08-computational-profile.md §8.2b]`. The
+> mechanism is amplification: a primitive lands either side of `densify_grad_threshold` from
+> run to run, changing the population that feeds the next densification event, 144 times over.
+>
+> **A single-run ratio on primitive count therefore carries no information.** This was
+> established the expensive way — four hypotheses about a 6× discrepancy were tested against
+> single pairs before the spread was measured, and one paired comparison showed 0.68× between
+> two configurations later shown indistinguishable at n=3.
 
 ---
 
@@ -71,7 +84,7 @@ fails for that scene. `[inferred: directory listing of ../dataset/SeathruNeRF_da
 This is the item the source methodology singles out as varying silently across underwater
 papers, and it varies across **all four** of this work's sources.
 
-### (a) Masking: **none, in every source**
+### 10.3a — Masking: **none, in every source**
 
 No sky mask, no water-column mask, no alpha mask, no valid-depth mask at metric time —
 full-frame, every pixel of every test frame. SeaSplat has a `depth_alpha_threshold = 0.5`
@@ -83,7 +96,7 @@ but it is used **only** for TensorBoard depth visualisation, never for PSNR/SSIM
 > (21.83 vs 33.80 on Red Sea). They must never be quoted as full-frame numbers
 > `[../seathru_NeRF/10-…​ §10.3c]`.
 
-### (b) What is scored: `Î` vs `I`, never `Ĵ`
+### 10.3b — What is scored: `Î` vs `I`, never `Ĵ`
 
 The restored medium-free output is **never scored** in either underwater method — SeaSplat's
 `Ĵ` and SeaThru-NeRF's `J` are both unsupervised outputs with no ground truth, "unobtainable
@@ -95,7 +108,7 @@ papers are qualitative.
 and why quantization damage to `Ĵ` needs a self-consistency proxy (`01-taxonomy.md` A3-b,
 `08-computational-profile.md` Table 8.3c).
 
-### (c) PSNR formula — three conventions
+### 10.3c — PSNR formula — three conventions
 
 Covered in full in `09-glossary.md` §9.4. `[PI]` **This work reports both `PSNR_perchan` and
 `PSNR_pooled`, each labelled, at every evaluation** (implemented in
@@ -117,7 +130,7 @@ Covered in full in `09-glossary.md` §9.4. `[PI]` **This work reports both `PSNR
 > hold if both used pooled MSE**, and which path produced SeaSplat's published numbers is
 > recorded nowhere. Treat that comparability argument as open, not established.
 
-### (d) Data path — the 8-bit disk round-trip
+### 10.3d — Data path — the 8-bit disk round-trip
 
 SeaSplat computes metrics **not** on in-memory float tensors but by writing renders to disk
 and re-opening them, in **JPEG** whenever the GT directory holds no PNGs
@@ -135,7 +148,7 @@ linear images" `[../seathru_NeRF/10-…​ §10.3b]`. **PSNR on linear data and 
 sRGB-ish data are not the same quantity**, and this is a *second, independent* axis on which
 the two papers' numbers are not interchangeable.
 
-### (e) SSIM and LPIPS
+### 10.3e — SSIM and LPIPS
 
 SSIM: 11×11 Gaussian window, σ = 1.5, `C1 = 0.01²`, `C2 = 0.03²` — standard 3DGS
 implementation `[../seasplat/10-…​ §10.3e]`. LPIPS: **VGG** backbone
@@ -143,7 +156,7 @@ implementation `[../seasplat/10-…​ §10.3e]`. LPIPS: **VGG** backbone
 and SeaSplat's paper does not state which it used; SeaThru-NeRF states neither window nor
 backbone `[../seathru_NeRF/10-…​ §10.3e]`. `[PI]` **Report the backbone.**
 
-### (f) Aggregation
+### 10.3f — Aggregation
 
 Per-image metrics → mean over the split → per scene; then an **unweighted mean of the four
 per-scene means**, not an image-weighted one `[../seasplat/10-…​ §10.3f]`. `[PI]` Since the
@@ -248,6 +261,8 @@ items marked `[PI]`.
 | 11 | Log `N_rend` at end of training — and at **five** points: post-init, post-settling, at 15 K pre/post, at 20 K pre/post | SeaSplat never reports it; EDGS's opacity-masked candidates inflate the post-init count; M2's realised count is stochastic |
 | 12 | **`[PI]`** Log `Ẑ_min`, `Ẑ_max`, and the nine medium scalars at every save iteration (CD-12) | converts interaction candidates IC-2 and the medium-absorption hypothesis into measurements at zero cost |
 | 13 | **`[PI]`** Assert that each enabled mechanism actually **fired** | both EDGS (`gs_epochs = 0`) and CompGS-VQ (`kmeans_st_iter = 30000`) are **silent no-ops** at their CLI defaults `[../EDGS/03-variables.md; ../compact3d/11-…​ D-6]` |
-| 14 | **`[PI]`** Check and report whether the primitive budget **bound** in A4 and A7 | otherwise a null interaction result is an artifact of configuration (`02-pipeline.md` §2.8) |
+| 14 | ✅ **DONE.** Preflight refuses any M1+M2 run whose budget cannot bind, reading the count from the cloud's PLY header; all four clouds clear `n_bud = 200 000` `[measured]` | otherwise a null interaction result is an artifact of configuration (`02-pipeline.md` §2.8) |
+| 14b | **`[PI]`** Report dispersion **per scene**, never pooled | measured CVs differ by 5×: JapaneseGardens 6.0%, Panama 29.3% (`08-computational-profile.md` §8.2b). A pooled figure would understate the weak scenes and overstate the strong |
+| 14c | **`[PI]`** Record `render_fps`, `render_ms_per_frame` and peak render memory (CD-24) | frame rate is the one efficiency measure all three mechanisms affect, and two stated predictions rest on it; it was not instrumented until the campaign had begun |
 | 15 | Report the aggregation rule (unweighted scene mean vs image-weighted) and give both | scene frame counts are unequal: 21 / 29 / 20 / 18 |
 | 16 | State the LPIPS backbone (VGG) explicitly | no source states it in text (§10.3e) |
