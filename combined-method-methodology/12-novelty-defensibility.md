@@ -330,3 +330,81 @@ the distinction has to survive into the write-up.
 | Is there a new candidate claim? | **Yes — mechanism D**, a possible prior-art gap in its own right. `[measured n=1, against a defective baseline]`. Not claimable until S6. |
 | What did execution add that reading could not? | Two integration defects invisible to value-level checking (CD-22, CD-23), a missing instrument the design depended on (CD-24), a budget rule that would have collapsed two cells (CD-25), and the measured dispersion that bounds every effect size this study can report. |
 | What must not be claimed? | Everything in §12.5's row, **plus** any figure for mechanism D until `A0D` completes, **plus** any statement of the form "A0 converges to ~4.4M" — that is a Curasao figure; the four-scene median is 2.48M. |
+
+---
+
+## 12.7 A defect in a published method, not in the composition
+
+*Added after CD-26. This is a different claim type from everything in §12.6 and
+is separated for that reason.*
+
+Every finding recorded so far is about **composition**: a property of a seam
+between two methods, belonging to neither. §12.6.1 argues that as the general
+form of claim (c), and it is the honest description of the gradient-destination
+defect, the medium-identifiability analysis, and the coupled-parameter finding
+from the M1 schedule sequence.
+
+**CD-26 is not that.** It is a defect in EDGS as published, reachable without
+composing it with anything.
+
+### The structure of the claim
+
+EDGS states the degeneracy itself `[../EDGS/05-constraints.md D-2]`:
+
+> *"When the two view rays are nearly parallel … the least-squares solution is
+> unstable in depth — arbitrarily far, arbitrarily wrong. Dense matchers happily
+> return matches for such pairs."*
+
+It then assigns that degeneracy to its reprojection filter `p^proj`. **The
+filter cannot detect it.** A near-parallel pair yields a point lying on both
+rays, so it reprojects close to both original pixels; the error is small
+*because* the geometry is ill-conditioned. `p^proj` addresses EDGS's own D-4 —
+confident hallucinations that happen to triangulate — which is a different
+failure mode that the paper lists separately.
+
+So the method identifies a degeneracy, names a remedy, and the remedy does not
+address it. No composition is required to reach that conclusion.
+
+### Why it has not been observed
+
+`num_refs = 180`. At that viewpoint density most pairs have healthy parallax, so
+ill-conditioned triangulations are rare enough for the `α < 0.005` prune to
+absorb, and the published evaluation never approaches a regime where they are
+not. **This corpus has 15–25 training views.** `K_ref = min(180, V)` collapses to
+the view count, near-collinear pairs become common, and a latent flaw becomes
+the dominant failure.
+
+**The finding is therefore conditional and the condition is stateable**: the
+remedy is adequate above some view-count threshold and inadequate below it. This
+study does not locate that threshold — it observes one point on the wrong side
+of it.
+
+### What it is worth, and what it is not
+
+**It is a genuine claim (a)** — a prior-art gap — in the narrow sense that the
+gap is a defect rather than a missing method. It is defensible from the source
+material alone: the degeneracy is quoted from EDGS's own analysis, and the
+inadequacy of `p^proj` follows from the geometry rather than from measurement.
+
+**It is not a contribution to efficient 3DGS.** A parallax filter is textbook
+structure-from-motion; COLMAP has applied one for a decade. The contribution is
+noticing that a recent method omitted it, and that the omission is invisible in
+the regime the method was evaluated in.
+
+**It must not be overstated.** The correct framing is *"we found that EDGS's
+stated remedy for its own D-2 does not address D-2, and that this matters at low
+view counts"* — not *"we improved EDGS"*. The distinction matters because the
+first is supported by the source text plus a simulation, and the second would
+require a controlled comparison this study is not running.
+
+### Evidence status
+
+| | |
+|---|---|
+| The degeneracy exists and EDGS names it | quoted from the source `[../EDGS/05-constraints.md]` |
+| `p^proj` cannot detect it | analytical, plus simulation at 0.5 px matcher noise: a 0.0014° pair recovers median depth 3.1 against a true 4 000, 48.6% behind a camera |
+| It has a measurable consequence here | `[measured n=1]` — `z_max` 122 673, `Ẑ ∈ [0, 0.0007]`, two attenuation channels clamped dead |
+| The corrected initializer behaves better | **`[pending]`** — clouds regenerated, M1 cells not yet re-run |
+
+The last row is the one that matters for a results chapter, and it is not yet
+available.
