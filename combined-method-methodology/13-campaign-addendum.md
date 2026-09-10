@@ -29,8 +29,18 @@ explains why that distinction turned out to matter more than any other item here
 | | Development (Windows) | **Campaign (Colab A100)** |
 |---|---|---|
 | GPU | RTX 3050 Ti, sm_86 | **A100-SXM4-40GB, sm_80** |
-| Python | 3.11 | **3.13** |
+| Python | 3.11 | **3.13.15** |
 | torch | 2.6.0+cu124 | **2.11.0+cu128** |
+| CUDA / nvcc | 12.4 | **12.8, V12.8.93** |
+| host compiler | MSVC | **g++ 13.3.0, libstdc++ 6.0.33** |
+
+**The host compiler is recorded because it is not cosmetic.** nvcc compiles
+host-side code with `g++` and takes its C++ standard library headers from
+libstdc++, so it is part of the build environment in the same way CUDA is —
+and it is the one component none of the other version strings reveal. GCC 13
+removed many transitive `<cstdint>` includes, which broke the reference
+rasterizer sources mid-campaign while torch, CUDA, nvcc and Python all still
+reported the known-good stack. See §5c of `implementation/docs/reproducibility_notes.md`.
 
 Three torch minors and a CUDA minor apart. It builds and passes, but that is a
 measured fact rather than a designed one, and it is why `verify_rasterizer` runs
