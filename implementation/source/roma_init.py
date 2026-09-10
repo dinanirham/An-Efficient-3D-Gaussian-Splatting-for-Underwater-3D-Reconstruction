@@ -164,6 +164,19 @@ def triangulate(
     return X[:, :3] / w
 
 
+def cam_centre(cam) -> "torch.Tensor":
+    """World-space position of a camera.
+
+    The scene reader stores `R` already transposed, so the camera-to-world
+    rotation is `R` itself and the centre is `-R @ T`. Getting this backwards
+    yields a plausible-looking value that is wrong everywhere except at the
+    origin, which is why it is written once here rather than inline.
+    """
+    R = torch.as_tensor(cam.R, dtype=torch.float32)
+    T = torch.as_tensor(cam.T, dtype=torch.float32)
+    return -(R @ T)
+
+
 def reprojection_error(
     P: np.ndarray, pts: torch.Tensor, uv: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -198,6 +211,11 @@ def main() -> int:
              "inherits the matcher's internal sample_thresh (0.05), so it "
              "changes if the matcher is swapped. Exposed and recorded here.",
     )
+    ap.add_argument("--min_parallax_deg", type=float, default=1.0,
+                    help="CD-26: reject triangulations whose rays meet at less "
+                         "than this angle. Below ~1 degree the depth is not "
+                         "determined by the data; EDGS has no such filter and "
+                         "its 180-view regime hides the consequence.")
     ap.add_argument("--proj_err_tolerance", type=float, default=8.0,
                     help="max reprojection error in pixels")
     ap.add_argument("--roma_model", choices=["outdoor", "indoor"], default="outdoor",
@@ -288,6 +306,7 @@ def main() -> int:
     all_pts: list[np.ndarray] = []
     all_rgb: list[np.ndarray] = []
     n_raw = n_kept = 0
+    n_low_parallax = 0
 
     for step, i in enumerate(refs, 1):
         ref = cams[i]
@@ -348,7 +367,37 @@ def main() -> int:
             # this, near-parallel rays produce confident matches that
             # triangulate behind a camera and become floaters that nothing
             # removes, since densification is off.
-            keep = (err < args.proj_err_tolerance) & (z_a > 0) & (z_b > 0)
+            #
+            # CD-26 -- parallax.  Cheirality catches rays that meet BEHIND a
+            # camera; it says nothing about rays that barely meet at all.  When
+            # the two rays are close to parallel the least-squares solution is
+            # unstable in depth: EDGS's own D-2 calls it "arbitrarily far,
+            # arbitrarily wrong".  EDGS assigns that degeneracy to its
+            # reprojection filter, which cannot detect it -- the point lies ON
+            # both rays, so it reprojects close to both pixels and the error is
+            # small BECAUSE the geometry is ill-conditioned.
+            #
+            # Measured consequence: A1/Curasao/s0 placed points at 156,172
+            # scene units (parallax 0.0007 degrees), which drove rendered z_max
+            # to 122,673 against a baseline ~50, compressed the scene into
+            # Z in [0, 0.0007] under per-frame depth normalisation, and left
+            # both red and blue attenuation channels clamped dead.
+            #
+            # The test is the angle AT the point between the two view rays --
+            # the conditioning of the estimate, not the distance of the result,
+            # so no per-scene constant is needed.
+            ray_a = cam_centre(ref).to(pts.device) - pts
+            ray_b = cam_centre(cams[j]).to(pts.device) - pts
+            cos = torch.nn.functional.cosine_similarity(ray_a, ray_b, dim=-1)
+            parallax = torch.rad2deg(torch.arccos(cos.clamp(-1.0, 1.0)))
+
+            keep = (
+                (err < args.proj_err_tolerance)
+                & (z_a > 0)
+                & (z_b > 0)
+                & (parallax >= args.min_parallax_deg)
+            )
+            n_low_parallax += int((parallax < args.min_parallax_deg).sum())
             n_raw += int(sel.sum())
             n_kept += int(keep.sum())
             if keep.sum() == 0:
@@ -393,6 +442,8 @@ def main() -> int:
             "nns_per_ref": nns_per_ref,
             "certainty_thresh": certainty_thresh,
             "proj_err_tolerance": args.proj_err_tolerance,
+            "min_parallax_deg": args.min_parallax_deg,
+            "n_rejected_low_parallax": n_low_parallax,
             "roma_model": args.roma_model,
             "upsample_preds": args.upsample_preds,
             "symmetric": args.symmetric,

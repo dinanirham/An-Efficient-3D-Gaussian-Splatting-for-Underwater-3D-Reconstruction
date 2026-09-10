@@ -320,6 +320,70 @@ def t7_cull_must_not_precede_the_medium_model():
     return True, f"undefended primitive survives to {dies_at} >= seathru {seathru_at}"
 
 
+def t8_parallax_rejects_what_reprojection_cannot():
+    """A near-parallel pair must be rejected, and NOT by reprojection error.
+
+    Two halves, and the second is what makes the filter necessary rather than
+    redundant: the parallax test rejects an ill-conditioned triangulation, and
+    the filters already present ACCEPT the same point.
+
+    EDGS names this degeneracy -- its D-2, "arbitrarily far, arbitrarily wrong"
+    -- and assigns it to the reprojection filter. That filter cannot detect it:
+    a near-parallel pair yields a point lying on both rays, so it reprojects
+    close to both original pixels and the error is small BECAUSE the geometry
+    is ill-conditioned. Asserting that failure encodes the reason for the
+    deviation rather than describing it.
+
+    Measured consequence of the omission: A1/Curasao/s0 placed points at
+    156,172 scene units, drove rendered z_max to 122,673 against a baseline of
+    roughly 50, and ended with two attenuation channels clamped dead.
+    """
+    cam_a = make_cam(np.array([0.0, 0.0, 0.0]))
+    cam_b = make_cam(np.array([0.10, 0.0, 0.0]))      # 10 cm baseline
+
+    c_a, c_b = np.array([0.0, 0.0, 0.0]), np.array([0.10, 0.0, 0.0])
+    near = np.array([[0.05, 0.02, 3.0]])              # well-conditioned
+    far = np.array([[2.0, 1.0, 4000.0]])              # ill-conditioned
+
+    def parallax_deg(pt):
+        ra, rb = c_a - pt, c_b - pt
+        cos = float(np.dot(ra, rb) / (np.linalg.norm(ra) * np.linalg.norm(rb)))
+        return math.degrees(math.acos(max(-1.0, min(1.0, cos))))
+
+    p_near = parallax_deg(near[0])
+    p_far = parallax_deg(far[0])
+    if p_near <= 1.0:
+        return False, f"the well-conditioned point has parallax {p_near:.3f} deg"
+    if p_far >= 0.05:
+        return False, f"the degenerate point has parallax {p_far:.4f} deg"
+
+    # The half that justifies the filter: the existing checks pass it.
+    pts_np = np.concatenate([near, far])
+    uv_a = torch.tensor(project_points(cam_a, pts_np), dtype=torch.float32)
+    uv_b = torch.tensor(project_points(cam_b, pts_np), dtype=torch.float32)
+    pts = torch.tensor(pts_np, dtype=torch.float32)
+
+    P_a, P_b = projection(cam_a), projection(cam_b)
+    err_a, z_a = reprojection_error(P_a, pts, uv_a)
+    err_b, z_b = reprojection_error(P_b, pts, uv_b)
+    err = torch.maximum(err_a, err_b)
+
+    passes_existing = bool(err[1] < 8.0 and z_a[1] > 0 and z_b[1] > 0)
+    if not passes_existing:
+        return False, (
+            f"the degenerate point was already rejected by the existing filters "
+            f"(err={float(err[1]):.4f}, z_a={float(z_a[1]):.1f}, "
+            f"z_b={float(z_b[1]):.1f}), so this fixture does not exercise the "
+            f"gap the parallax filter exists to close"
+        )
+
+    return True, (
+        f"parallax {p_near:.2f} deg kept, {p_far:.4f} deg rejected; the "
+        f"degenerate point has reprojection error {float(err[1]):.4f} px and "
+        f"passes cheirality -- neither existing filter sees it"
+    )
+
+
 def main() -> int:
     check("T1 world_to_camera matches the repo's getWorld2View2", t1_convention_matches_repo)
     check("T2 intrinsics from FoV are correct", t2_intrinsics_sane)
@@ -329,6 +393,8 @@ def main() -> int:
     check("T6 ply round-trips and tampering is detected", t6_ply_roundtrip_and_hash)
     check("T7 cull must not precede the medium model  <-- decisive",
           t7_cull_must_not_precede_the_medium_model)
+    check("T8 parallax rejects what reprojection cannot  <-- decisive",
+          t8_parallax_rejects_what_reprojection_cannot)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

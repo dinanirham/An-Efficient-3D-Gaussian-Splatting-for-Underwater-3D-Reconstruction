@@ -176,3 +176,82 @@ was doing exactly what it was written to do.
 > has properties at its seams that belong to neither component, and that some of them are
 > invisible to any check on returned values.** `05-constraints.md` §5.6 states the invariant
 > that now guards this one.
+
+---
+
+## 6.8 CD-26 — a parallax filter the source method does not have
+
+*Extends §6.7. Recorded separately because it is a deviation from EDGS **as
+published**, not merely from its undocumented behaviour.*
+
+### What was added
+
+Triangulations are rejected when the angle at the point between the two view
+rays falls below `min_parallax_deg` (default **1.0°**)
+`[repo: source/roma_init.py]`. The test is the **conditioning of the estimate**,
+not the distance of the result, so it needs no per-scene constant.
+
+### EDGS names this degeneracy and does not fix it
+
+Its **D-2** states the failure exactly `[../EDGS/05-constraints.md:40]`:
+
+> *"When the two view rays are nearly parallel (small baseline) or nearly
+> collinear with the point, `A` is ill-conditioned and the least-squares
+> solution is unstable in depth — **arbitrarily far, arbitrarily wrong**. Dense
+> matchers happily return matches for such pairs."*
+
+EDGS ships two filters, both of which this implementation already had:
+`p^corr` on matcher confidence, and `p^proj` on reprojection error. **Neither
+measures ray geometry**, and D-2 is assigned to `p^proj`.
+
+**`p^proj` cannot detect D-2.** A near-parallel pair yields a point lying on
+both rays, so it reprojects close to both original pixels. The error is small
+*because* the geometry is ill-conditioned. `p^proj` addresses D-4 — confident
+hallucinations that happen to triangulate — which is a different failure.
+
+Measured on a synthetic pair with a 10 cm baseline and 0.5 px of matcher noise,
+2000 realisations:
+
+| parallax | true depth | recovered, median | 5th–95th | behind a camera |
+|---:|---:|---:|---|---:|
+| 1.91° | 3.0 | 3.0 | 2.8 – 3.2 | 0.0% |
+| **0.0014°** | **4 000** | **3.1** | **−129 – +115** | **48.6%** |
+
+The depth is not *far*; it is **undetermined**, and the recovered value bears no
+relation to the truth. Cheirality removes 48.6% of such points by accident; the
+remainder pass every filter and land wherever the noise puts them.
+
+### Why it does not bite EDGS
+
+`num_refs = 180`. With dense viewpoint coverage most pairs have healthy
+parallax, so the unfixed degeneracy is rare enough for the `α < 0.005` prune to
+absorb. **This corpus has 15–25 training views**, so `K_ref = min(180, V)`
+collapses to the view count and near-collinear pairs become common. The same
+view-count constraint drives the initialization deficit in §13.12.
+
+### The measured consequence of omitting it
+
+`A1/Curasao/s0` `[measured n=1]`:
+
+- bounding box **38 895 × 31 415 × 156 172**, maximum radius **23 863×** the
+  median, and the distant material is **rendered**, not low-opacity;
+- rendered `z_max` reached **122 673** against a baseline of roughly 50;
+- per-frame depth normalisation therefore compressed the scene into
+  `Ẑ ∈ [0, 0.0007]`, so `Â = exp(−β_att·Ẑ) ≈ 1` for any β;
+- **both red and blue attenuation channels ended clamped dead.**
+
+This is §5.4's mechanism reached by primitive *placement* rather than primitive
+*reduction*.
+
+### Cost and status
+
+**M1's results are not a reproduction of EDGS**, and that was already true — M2
+omits its densification half, M3 disables its opacity regulariser. CD-26 adds a
+third such deviation and it is the only one that corrects a defect in a
+published method rather than adapting one.
+
+Requires regenerating every dense cloud and re-running every M1 cell. Guarded by
+`verify_dense_init.py` **T8**, which asserts both halves: that the filter
+rejects the ill-conditioned pair, **and that the existing filters accept it** —
+so the reason for the deviation is encoded in a test rather than described in a
+comment.
