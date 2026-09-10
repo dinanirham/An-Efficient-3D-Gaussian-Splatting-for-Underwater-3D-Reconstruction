@@ -190,6 +190,50 @@ def analyse_ply(path: Path) -> Optional[dict[str, Any]]:
         out["footprint_extent_z"] = fext[2]
         out["footprint_diagonal"] = float(np.linalg.norm(fext))
 
+    # Occupancy. The percentile box only catches a tail THINNER than its
+    # percentile: at 2.3M primitives the outer 1% is 23,000 points, so a dense
+    # detached blob of that size sits inside the robust box and never registers
+    # as inflation. A viewer shows such blobs immediately -- the bounding box is
+    # mostly empty -- so the measure that matches what is visible is how much of
+    # the box actually contains anything.
+    #
+    # Coarse voxelisation, fixed grid so the number is comparable across clouds
+    # of different extent: a low occupancy means the box is being held open by
+    # material that occupies very little of it.
+    grid = 64
+    lo, hi = xyz.min(axis=0), xyz.max(axis=0)
+    span = np.where(hi - lo > 0, hi - lo, 1.0)
+    idx = np.floor((xyz - lo) / span * (grid - 1e-9)).astype(np.int64)
+    idx = np.clip(idx, 0, grid - 1)
+    flat = (idx[:, 0] * grid + idx[:, 1]) * grid + idx[:, 2]
+    occupied = len(np.unique(flat))
+    out["occupancy_frac"] = occupied / float(grid ** 3)
+    out["occupied_voxels"] = int(occupied)
+    out["voxel_grid"] = grid
+
+    # The same over visible primitives only: a box held open by invisible
+    # material is a different problem from one held open by rendered material.
+    if "opacity" in f:
+        va = 1.0 / (1.0 + np.exp(-f["opacity"]))
+        vm = va >= VISIBLE_ALPHA
+        if vm.sum() >= 10:
+            vlo, vhi = xyz[vm].min(axis=0), xyz[vm].max(axis=0)
+            vspan = np.where(vhi - vlo > 0, vhi - vlo, 1.0)
+            vidx = np.clip(np.floor((xyz[vm] - vlo) / vspan * (grid - 1e-9)
+                                    ).astype(np.int64), 0, grid - 1)
+            vflat = (vidx[:, 0] * grid + vidx[:, 1]) * grid + vidx[:, 2]
+            out["visible_occupancy_frac"] = len(np.unique(vflat)) / float(grid ** 3)
+
+    # Concentration: the share of primitives close to the bulk. A cloud whose
+    # box is held open by detached clusters has a high share near the centre and
+    # a long, populated tail beyond it.
+    centre_ = np.median(xyz, axis=0)
+    r_ = np.linalg.norm(xyz - centre_, axis=1)
+    r50 = float(np.median(r_))
+    if r50 > 0:
+        for k in (2, 5, 10):
+            out[f"frac_within_{k}x_r50"] = float((r_ <= k * r50).mean())
+
     # Radial spread about the median point: a floater tail shows as a long
     # upper quantile relative to the bulk.
     centre = np.median(xyz, axis=0)
@@ -281,21 +325,27 @@ def main() -> int:
             w.writerow(r)
 
     print(f"\n{'run':<30} {'points':>10} {'X':>8} {'Y':>8} {'Z':>8} "
-          f"{'infl':>6} {'axis':>5} {'vis%':>6}")
-    print("-" * 88)
+          f"{'infl':>6} {'occ%':>6} {'vis%':>6}")
+    print("-" * 92)
     for r in sorted(rows, key=lambda r: (r["scene"], r["cell"], r["seed"])):
         print(f"{r['cell'] + '/' + r['scene'] + '/s' + str(r['seed']):<30} "
               f"{r['n_points']:>10,} "
               f"{r['full_extent_x']:>8.2f} {r['full_extent_y']:>8.2f} "
               f"{r['full_extent_z']:>8.2f} {r['inflation_diagonal']:>5.1f}x "
-              f"{str(r.get('worst_axis', '-')):>5} "
+              f"{100 * r.get('occupancy_frac', float('nan')):>5.2f}% "
               f"{100 * r.get('frac_visible', float('nan')):>5.1f}%")
 
     print(f"\nX Y Z     full min/max extent per axis -- compare directly against a")
     print(f"          viewer's reported dimensions.  These are splat CENTRES; the")
     print(f"          CSV also carries footprint_* which adds each primitive's own")
     print(f"          3-sigma radius, in case the viewer reports that instead.")
-    print(f"axis      the axis whose box is most inflated by the outer 2%")
+    print(f"occ%      share of the bounding box that contains any primitive, on a")
+    print(f"          64^3 grid.  A low value means the box is held open by material")
+    print(f"          occupying very little of it -- which is what a detached blob")
+    print(f"          looks like in a viewer, and which `infl` MISSES when the blob")
+    print(f"          is denser than the percentile it is measured against.")
+    print(f"          The CSV also carries visible_occupancy_frac, over rendered")
+    print(f"          primitives only, and frac_within_{{2,5,10}}x_r50.")
     print(f"infl      full diagonal / robust diagonal; near 1 means no tail")
     print(f"vis%      primitives with alpha >= {VISIBLE_ALPHA}")
     print(f"\nwritten: {out_dir / 'spatial_extent.csv'}")
