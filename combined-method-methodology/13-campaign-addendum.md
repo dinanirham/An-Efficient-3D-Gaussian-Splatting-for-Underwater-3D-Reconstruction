@@ -514,3 +514,77 @@ banner, against `min_primitives_floor = 1000` `[repo: train.py, arguments/__init
 - §5.5's standing warning that "primitives can only ever decrease after initialization … a
   one-way ratchet" is upgraded from a risk to a **measured failure**, with the specific
   mechanism identified.
+
+---
+
+## 13.12 First three-cell comparison — Curasao, seed 0 `[measured n=1]`
+
+*Provisional. Every figure below is a single run, and §13.6 establishes that
+primitive count alone carries 6–29% run-to-run dispersion depending on scene.
+Nothing here is a claim until three seeds exist.*
+
+| | **A0** baseline | **A1** dense-init | **A2** simplify |
+|---|---:|---:|---:|
+| test PSNR (pooled) | 30.4813 | **30.9698** | 30.2896 |
+| test PSNR (per-channel) | 30.6894 | 30.9966 | 30.5171 |
+| test SSIM | 0.9087 | 0.9077 | 0.9022 |
+| test LPIPS | 0.1787 | **0.1753** | 0.2162 |
+| train PSNR (pooled) | 35.5615 | 36.8981 | 33.4893 |
+| primitives | 4 285 043 | 299 196 | 144 318 |
+| render fps | 69.17 | 102.37 | 295.19 |
+| peak render memory | 3 587 MB | 1 245 MB | 1 100 MB |
+| training wall clock | 4 682 s | 5 088 s | 3 187 s |
+
+### What it suggests, stated as suggestion
+
+**M1 does not appear to cost fidelity.** A1 is +0.49 dB on test and +1.34 dB on
+train against 14.3× fewer primitives. Better on *both* splits rules out a
+generalisation artefact: the dense-initialised model simply fits better with a
+fourteenth of the population. If this survives three seeds it reframes M1 from
+"compression with a quality cost" to "a better initialisation that is also
+smaller", which is a stronger claim than the design anticipated.
+
+It also answers, negatively, the concern that the initialization is too sparse
+for this corpus. `K_ref = min(180, V)` collapses to the view count and yields
+300–471k where EDGS builds 3.6M, so the clouds are 8–19% of A0's converged
+population. On Curasao that is evidently **sufficient**, and A0's 4.29M is
+largely redundant. Whether it holds on the other three scenes is open.
+
+**Frame-rate gains are sub-linear, and not by a single exponent.** A1 buys
+1.48× from a 14.3× reduction; A2 buys 4.27× from 29.7×. Twice the reduction,
+nearly three times the speedup, so per-primitive rasterization cost is not
+constant across cells — A1's primitives carry the distance-proportional scales
+of correspondence initialization, A2's are importance-weighted survivors of an
+optimised population. **A count ratio does not predict a frame-rate ratio**, and
+the write-up must not present one as though it does.
+
+**M2 regularises.** A2 has the smallest train–test gap (3.20, against A0's 5.08
+and A1's 5.93): its train PSNR falls 2.07 dB while test falls 0.19. But its
+LPIPS is 21% worse than A0's, so it discards perceptual detail that PSNR does
+not register — which is a reason to report all three fidelity measures rather
+than lead with PSNR.
+
+**Training time is not primitive-bound.** A1 has 93% fewer primitives and takes
+**9% longer**. A2 is faster (0.68×), but it reaches its budget only at iteration
+15 000, so most of its saving comes from the second half of training. No claim
+that M1 accelerates training is supportable; the mechanism for A1's slowdown is
+not yet identified.
+
+### Caveats, in order of how much they matter
+
+1. **`n = 1` throughout.** A0's three Curasao seeds span 3.19M–4.29M primitives
+   (14.7% CV). A 0.49 dB difference between single runs is exactly the
+   comparison §13.6 says carries no information.
+2. **One scene**, and Curasao is where A0 converges highest — plausibly the most
+   redundant, hence the most favourable to any reduction.
+3. **The frame-rate figures mix sample sizes.** A0 and A2 were profiled before
+   `render_repeats` was raised (`render_frames_timed: 9`); A1 has 60 frames and a
+   7.4% coefficient of variation. Same protocol, but only A1's figure carries
+   dispersion. The sub-linearity conclusion is robust to this — 14.3× down
+   against 1.48× up is not a marginal call — but the exact ratios are not
+   quotable.
+4. **A2's medium model has not been checked here.** On IUI3-RedSea, A2's
+   attenuation collapsed channel-wise (§13.10) while its fidelity metrics stayed
+   unremarkable. A2's PSNR in this table is therefore **not** evidence that its
+   medium model is intact; `tools/medium_collapse.py` must be run before any A2
+   figure is reported.
