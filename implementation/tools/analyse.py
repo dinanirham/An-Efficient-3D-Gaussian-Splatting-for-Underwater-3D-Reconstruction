@@ -28,6 +28,7 @@ reports sub-decibel ablation differences from single runs; this refuses to.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 from dataclasses import dataclass, field
@@ -80,6 +81,39 @@ class Run:
     metrics: dict[str, float] = field(default_factory=dict)
     n_images: int = 0
     gpu: str = ""
+    # Attenuation channels that ended negative and are therefore permanently
+    # clamped out. Empty means intact OR unmeasurable -- see _collapsed_channels.
+    collapsed_channels: list[str] = field(default_factory=list)
+
+
+def _collapsed_channels(path: Path) -> list[str]:
+    """Attenuation channels that ended negative, i.e. permanently dead.
+
+    `beta_att` is unconstrained but the forward pass clamps its product with
+    depth at zero, so a channel driven negative has no gradient and its
+    attenuation term is fixed at exp(0) = 1 for the rest of training. Reading
+    the final row is therefore sufficient -- once negative, always negative.
+
+    Returns [] when the file is missing or has no medium columns, so a run
+    predating the diagnostics is treated as "not known to have collapsed"
+    rather than silently as "intact".
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            rows = [r for r in csv.DictReader(fh) if r.get("beta_att_r")]
+    except OSError:
+        return []
+    if not rows:
+        return []
+    last = rows[-1]
+    out = []
+    for c in ("r", "g", "b"):
+        try:
+            if float(last[f"beta_att_{c}"]) < 0:
+                out.append(c.upper())
+        except (KeyError, ValueError):
+            continue
+    return out
 
 
 def _read_json(path: Path) -> Optional[dict]:
@@ -134,6 +168,23 @@ def load_campaign(output_root: str | Path, split: str = "Test") -> list[Run]:
                                 "ratio_vs_this_baseline"):
                         if key in ms:
                             run.metrics[key] = float(ms[key])
+
+                # Medium-model collapse, carried as a covariate.
+                #
+                # Simplification perturbs medium identifiability (H4), and the
+                # outcome is BISTABLE: 6 of 12 A2 runs lost an attenuation
+                # channel permanently, spread across all four scenes, while the
+                # other 6 did not. Seed-conditioned, not scene-conditioned.
+                #
+                # A cell whose seeds are {collapsed, collapsed, intact} is two
+                # physically different models, and a mean over them measures
+                # neither. Fidelity metrics cannot separate them -- they score
+                # the composed image, which a saturated backscatter term still
+                # fits -- so the split has to come from the medium parameters
+                # themselves. See 13-campaign-addendum.md 13.10 and 13.13.
+                collapsed = _collapsed_channels(seed_dir / "diagnostics.csv")
+                run.collapsed_channels = collapsed
+                run.metrics["medium_collapsed"] = float(bool(collapsed))
 
                 cfg = _read_json(seed_dir / "run_config.json") or {}
                 run.gpu = (cfg.get("gpu") or {}).get("name", "")
@@ -436,6 +487,40 @@ def main() -> int:
         print(f"  *** WARNING: runs span {len(gpus)} GPUs: {gpus}. "
               f"Between-cell contrasts across different devices are not "
               f"comparable, and every conclusion here is such a contrast. ***")
+
+    # Medium-model collapse, reported before any contrast.
+    #
+    # The outcome is bistable and seed-conditioned: 6 of 12 A2 runs lost an
+    # attenuation channel permanently, across all four scenes, while the other
+    # 6 did not. A cell+scene whose seeds are {collapsed, collapsed, intact} is
+    # two physically different models, and the mean over them measures neither.
+    #
+    # This is printed rather than folded into the numbers because the right
+    # response depends on the question: for a fidelity contrast the mixture may
+    # be tolerable, for anything about the medium it certainly is not. Silently
+    # averaging would make that choice invisible.
+    collapsed = [r for r in runs if r.collapsed_channels]
+    if collapsed:
+        by_group: dict[tuple[str, str], list[Run]] = {}
+        for r in runs:
+            by_group.setdefault((r.cell, r.scene), []).append(r)
+        mixed = {k: v for k, v in by_group.items()
+                 if 0 < sum(1 for r in v if r.collapsed_channels) < len(v)}
+
+        print(f"\n  *** MEDIUM-MODEL COLLAPSE: {len(collapsed)} of {len(runs)} "
+              f"runs lost an attenuation channel permanently. ***")
+        for r in sorted(collapsed, key=lambda r: (r.cell, r.scene, r.seed)):
+            print(f"        {r.cell}/{r.scene}/s{r.seed}: "
+                  f"{','.join(r.collapsed_channels)} clamped at zero")
+        if mixed:
+            print(f"      {len(mixed)} cell+scene group(s) MIX collapsed and "
+                  f"intact seeds. A mean over these averages two physically "
+                  f"different models:")
+            for (cell, scene), v in sorted(mixed.items()):
+                n = sum(1 for r in v if r.collapsed_channels)
+                print(f"        {cell}/{scene}: {n} of {len(v)} seeds collapsed")
+        print(f"      Fidelity metrics cannot separate them -- they score the "
+              f"composed image, which a saturated backscatter term still fits.")
 
     metrics = args.metric or DEFAULT_METRICS
     results = {}

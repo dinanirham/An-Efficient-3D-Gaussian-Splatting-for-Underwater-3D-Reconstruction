@@ -588,3 +588,84 @@ not yet identified.
    unremarkable. A2's PSNR in this table is therefore **not** evidence that its
    medium model is intact; `tools/medium_collapse.py` must be run before any A2
    figure is reported.
+
+---
+
+## 13.13 H4 confirmed at n=12, and the collapse is seed-conditioned
+
+*Supersedes §13.10's `n=1` framing. This is the campaign's central hypothesis,
+established. `[measured n=12 for A2, n=12 for the A0 control]`*
+
+### The evidence
+
+`tools/medium_collapse.py` across all 26 completed runs:
+
+| | runs | lost an attenuation channel | largest drop sits on a simplification boundary |
+|---|---:|---:|---|
+| **A0** (control) | 12 | **0** | n/a — largest drops 4.8–33.6%, mostly at 10 000→10 500, the seathru warm-up |
+| **A2** | 12 | **6** | **12 of 12** — ten at 15 000→15 001, one at 15 500, one at 20 000 |
+| A1 | 1 | 1 | at 10 000→10 500 (A1 has no simplification event) |
+| A3 | 1 | 0 | at 10 000→10 500 |
+
+**Every A2 run's largest single-step attenuation drop lands on a simplification
+boundary**, at magnitudes of 25–195%. **No A0 run loses a channel.** That is the
+control §13.10 lacked, and it converts H4 from a single suggestive trajectory
+into a result.
+
+### The collapse is bistable, and conditioned on seed rather than scene
+
+```
+Curasao    XX.        IUI3-RedSea  X..
+Japanese   .X.        Panama       X.X          (X = lost a channel)
+```
+
+Six of twelve, in **all four scenes**. The same configuration on the same scene
+collapses on one seed and survives on another. So this is not "some scenes are
+harder": the medium model's survival of the population discontinuity is a
+**bistable outcome of a stochastic process**, and simplification decides which
+basin it lands in.
+
+That is a stronger and stranger claim than "pruning degrades the medium model",
+and it is what the data supports.
+
+### The consequence for every aggregate
+
+**A cell+scene group whose seeds are {collapsed, collapsed, intact} contains two
+physically different models, and a mean over them measures neither.** Curasao's
+A2 seeds are exactly that.
+
+Fidelity metrics cannot separate the two populations, because they score the
+composed image `Î` and a model with `Â ≈ 1` plus a saturated backscatter term
+still fits it. The split has to come from the medium parameters.
+
+`tools/analyse.py` now reads the final `beta_att` of every run, carries
+`collapsed_channels` on the `Run` record and `medium_collapsed` as a metric, and
+prints the affected runs and the mixed groups **before any contrast**. It does
+not fold the split into the numbers: whether a mixture is tolerable depends on
+the question — for a fidelity contrast possibly, for anything about the medium
+certainly not — and averaging silently would hide that choice rather than make
+it.
+
+### M1 perturbs it too, by a different route
+
+`A1/Curasao/s0` finished with `beta_att = (−0.023, 3.818, −0.014)`: red and blue
+clamped dead, green elevated fourfold. Its largest drop is at 10 000→10 500 —
+the seathru boundary, since A1 has no simplification event. At 299 196
+primitives there is an order of magnitude less geometry to explain the scene
+when the medium model activates, and identifiability appears to suffer for it.
+
+`[measured n=1]`; the remaining eleven A1 runs will settle whether it holds.
+
+### The finding this makes concrete
+
+**That run produced the best test PSNR in the campaign — 30.97, above A0's
+30.48 (§13.12).** Two of its three attenuation channels were permanently dead.
+
+The physics broke while the fidelity improved. No PSNR, SSIM or LPIPS figure in
+this study can certify that a medium model is intact, and any efficiency result
+reported without the collapse covariate may be describing a model that has
+quietly stopped being physical.
+
+That is the direct answer to the reviewers who asked why the mechanisms behave
+differently under underwater conditions, and it is not an answer the fidelity
+metrics could ever have produced.
