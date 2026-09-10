@@ -1531,6 +1531,35 @@ if __name__ == "__main__":
 
     print("Optimizing " + args.model_path)
 
+    # R-5.  Under dense initialization `opacity_reset_interval` must be pushed
+    # past the end of training, which is what EDGS does
+    # `[../EDGS/03-variables.md:116]` -- 30 000, equal to `iterations`.
+    #
+    # It gates TWO mechanisms, and that is easy to miss because the name
+    # mentions only one:
+    #
+    #   * `reset_opacity()`, which caps every opacity at 0.01; and
+    #   * `size_threshold`, which arms the size-based prune in `prune_only`
+    #     (screen radius > 20 px, or scale > 0.1 x cameras_extent).
+    #
+    # 3DGS ties the second to the first because after a reset the surviving
+    # primitives have been re-grown by densification and their scales are
+    # meaningful.  Under M1 densification never runs and the scales come from
+    # correspondence distance, so arming that prune removes most of the cloud
+    # with nothing to replace it: A1/Curasao/s0 fell 325,875 -> 36,575 at the
+    # first armed event, iteration 3,100.
+    #
+    # Setting the interval is preferred over gating each site separately --
+    # one value, EDGS's own mechanism, and it lands in the manifest.
+    if args.m1_dense_init and args.m1_reduce_opacity:
+        if args.opacity_reset_interval < args.iterations:
+            print(f"[M1] opacity_reset_interval {args.opacity_reset_interval} "
+                  f"-> {args.iterations}: under dense initialization the "
+                  f"continuous decay replaces the periodic reset, and this "
+                  f"gate also arms the size-based prune (EDGS sets it to "
+                  f"`iterations` for exactly this reason).")
+            args.opacity_reset_interval = args.iterations
+
     # M2: refuse to start a run that cannot answer the question it was
     # configured to ask.  Every check here guards a failure that is otherwise
     # silent -- see utils/preflight.py.

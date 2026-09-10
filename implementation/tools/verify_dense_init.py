@@ -288,9 +288,22 @@ def t7_cull_must_not_precede_the_medium_model():
     # continuous decay replaces it -- so the model must not apply one.
     # This is the half that was missed first time round: the reset was
     # dormant under the old schedule and became lethal under the new one.
-    reset_fires = not (opt.m1_dense_init and opt.m1_reduce_opacity)
+    # Under M1 the interval is pushed to `iterations`, which disables the
+    # periodic reset AND the size-based prune it also gates. Model the
+    # resolved value, not the default, or the test passes on a config the
+    # trainer never runs.
+    interval = int(opt.opacity_reset_interval)
+    if opt.m1_dense_init and opt.m1_reduce_opacity and interval < int(opt.iterations):
+        interval = int(opt.iterations)
+    if interval < int(opt.densify_until_iter):
+        return False, (
+            f"opacity_reset_interval {interval} is below densify_until_iter "
+            f"{opt.densify_until_iter}: under M1 this arms both the periodic "
+            f"reset and the size-based prune, and densification cannot "
+            f"replace what they remove"
+        )
     dies_at = _undefended_lifetime(
-        reset_interval=int(opt.opacity_reset_interval) if reset_fires else 0,
+        reset_interval=0,
         decay_interval=int(opt.m1_reduce_opacity_interval),
         decay_factor=float(opt.m1_reduce_opacity_factor),
         decay_from=seathru_at if opt.m1_decay_after_seathru else 0,
