@@ -739,12 +739,32 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                                 size_threshold, iteration=iteration
                             )
 
-                    # CD-3: retained even under dense initialization.  It is a
-                    # co-mechanism of L_op against water-column floaters, and
-                    # Mini-Splatting's silent removal of it is defensible only
-                    # because its depth reinit resets opacity anyway -- a
-                    # compensation this configuration does not have.
-                    if iteration % opt_params.opacity_reset_interval == 0 or (model_params.white_background and iteration == opt_params.densify_from_iter):
+                    # CD-3 retains the reset under M2.  It must NOT fire under
+                    # M1: EDGS replaces the periodic reset with its continuous
+                    # decay and disables the reset outright, setting
+                    # opacity_reset_interval to the iteration count
+                    # `[../EDGS/03-variables.md:116]`.  Running both is lethal
+                    # rather than conservative -- reset_opacity is
+                    # min(opacity, 0.01), a CAP, which leaves every primitive
+                    # 0.698 of logit above the 0.005 prune floor: 69 decay
+                    # events, 690 iterations.  With densification disabled
+                    # nothing undoes the cull.
+                    #
+                    # Measured: with the decay moved to [seathru, densify_until)
+                    # the reset at 12,000 predicted death at 12,695 and
+                    # A1/Curasao/s0 first rendered NaN at 12,810, ending at ONE
+                    # primitive.  CD-3's reasoning was developed for M2, where
+                    # Mini-Splatting removes the reset with nothing replacing
+                    # it; under M1 the decay IS the replacement.
+                    reset_due = (
+                        iteration % opt_params.opacity_reset_interval == 0
+                        or (model_params.white_background
+                            and iteration == opt_params.densify_from_iter)
+                    )
+                    if reset_due and opt_params.m1_dense_init and opt_params.m1_reduce_opacity:
+                        print(f"[{iteration}] opacity reset SKIPPED "
+                              f"(M1: the continuous decay replaces it)")
+                    elif reset_due:
                         print(f"[{iteration}] opacity reset")
                         gaussians.reset_opacity()
 
