@@ -165,6 +165,64 @@ every M1 cell.
 
 ---
 
+## 5b. A negative result: the geometric and physical diagnostics do not agree
+
+The two diagnostics this study added — the geometric one above and the medium-collapse
+detector of §13.13 — measure different things about the same runs. If they agreed, each would
+support the other and the geometric measure would have external validity beyond "it found
+something". **They were tested against each other, and they do not.**
+
+The test: does a scene whose baseline carries more detached geometry show a larger
+perturbation of the medium model when that geometry is removed?
+
+| scene | A0 occupancy | A0 detached (>5× r50) | mean β drop at simplification | A2 seeds collapsed |
+|---|---:|---:|---:|---:|
+| Curasao | 0.037% | **0.00%** | **107.6%** | 2/3 |
+| IUI3-RedSea | 0.513% | 1.69% | 101.3% | 1/3 |
+| Panama | 0.462% | **6.61%** | 81.3% | 2/3 |
+| JapaneseGardens | 3.696% | 0.00% | 55.0% | 1/3 |
+
+| correlation | Spearman ρ | exact two-sided p |
+|---|---:|---:|
+| **detached fraction vs β perturbation** | **−0.40** | — |
+| occupancy vs β perturbation | −0.80 | **0.333** |
+| occupancy vs collapse count | −0.60 | **0.500** |
+
+**The specific hypothesis fails, and fails with the wrong sign.** More detached geometry
+predicts *less* medium perturbation. Panama carries the largest detached fraction and a
+middling β drop; Curasao carries none and the largest drop.
+
+**The general form points the right way and is uninformative.** Overall pathology, measured by
+occupancy, correlates with β perturbation at ρ = −0.80 in the expected direction — but with
+four scenes, one ordering in three does this well by chance. It is not evidence.
+
+### A post-hoc explanation, labelled as such
+
+Curasao's pathology is the invisible halo of §2b, not detached clusters. A distant
+low-opacity primitive on an otherwise-empty ray still dominates `Z_raw/α` at that pixel, so a
+diffuse halo inflates `z_max` — which is exactly the quantity that destroys medium
+identifiability. Panama's detached clusters are near-camera haze geometry and do not stretch
+the depth range the same way.
+
+That is consistent with the two-mechanism finding of §2, but it is **reasoning backwards from
+the result**. It was not predicted, and it is recorded as a hypothesis for a future test rather
+than as an explanation that held.
+
+### What this costs, and what would settle it
+
+The geometric diagnostic has **no demonstrated agreement with an independent measure**. Its
+justification remains the failure modes it detects directly, not external validity. Any claim
+that it constitutes a validated evaluation metric is therefore **not available**, and the
+protocol framing of §6 is the defensible one.
+
+**Four scenes is the ceiling here** because the point cloud is written for one seed per cell.
+With `--save_ply_all_seeds` the same correlation could be run at the *run* level — twelve
+points instead of four — and would additionally test whether the seeds that collapsed are the
+ones whose geometry differs, which is the sharper question. That costs roughly 30 GB of
+storage and is the version worth doing if this line is pursued.
+
+---
+
 ## 6. What this adds to the thesis
 
 **A geometric failure mode invisible to every photometric metric in the study.** The baseline

@@ -62,6 +62,7 @@ submission.
 | E.6 | CD-6's medium re-identification burst restores β after a population change | **Contradicted** `[measured n=12]` | The `rewarm_end` row *is* the post-burst state, and β is already collapsed in it. 200 steps did not restore it in any of the six collapsed runs. A negative result about this work's own remedy `[§13.10, §13.13]` |
 | E.7 | Fidelity metrics cannot certify that the medium model is intact | **Supported** `[measured n=1, decisive]` | `A1/Curasao/s0` produced the campaign's **best test PSNR (30.97, above A0's 30.48)** with **two of three attenuation channels permanently dead**. PSNR, SSIM and LPIPS score the composed image, which a saturated backscatter term still fits `[§13.12, §13.13]` |
 | E.8 | M1 does not cost fidelity at 14× fewer primitives | **Not yet tested** `[measured n=1]` | A1/Curasao/s0 is **+0.49 dB test, +1.34 dB train** against A0 at 299,196 vs 4,285,043 primitives. Better on both splits. Against A0's 14.7% CV on this scene, one run is not evidence — needs S3's remaining eleven |
+| E.17 | The geometric diagnostic agrees with the medium-model diagnostic | **Contradicted** `[measured n=4]` | Detached fraction vs β perturbation gives ρ = **−0.40** — the wrong sign. The general form (occupancy vs β perturbation) is ρ = −0.80 at **p = 0.333**, which is not evidence. The geometric measure has **no demonstrated external validity**; its justification is the failure modes it detects directly `[results-02 §5b]` |
 | E.13 | The baseline carries geometric pathology invisible to every photometric metric | **Supported** `[measured n=1 per scene]` | Bounding box **96–99.96% empty**. Two distinct mechanisms: **detached rendered clusters** beyond 10× the median radius with a zero gap below them (IUI3 1.69%, Panama 6.61%) — degeneracy **D-4** identified geometrically — and a **diffuse invisible halo** on Curasao, where gating raises occupancy **77.5×**. JapaneseGardens has neither `[results-02]` |
 | E.14 | Simplification removes both pathologies, and does so incidentally | **Supported** `[measured n=1 per scene]` | A2 is clean on all four scenes: 0.00% beyond 5× r50, 89–96% of primitives rendered against A0's 26–44%. The importance metric's area normalisation was designed to suppress sky; near-camera haze and diffuse halos present the same way `[results-02 §3]` |
 | E.15 | The reported reduction depends on whether invisible primitives are counted | **Supported** `[measured n=4]` | A0 is **36%** visible, A2 **93%**. Raw reduction **18.7×**; visible-primitive reduction **6.7×**. Both honest, for different questions `[results-02 §4]` |
@@ -82,7 +83,7 @@ submission.
 |---|---:|
 | Supported | 15 |
 | Partially supported | 4 |
-| **Contradicted** | **5** |
+| **Contradicted** | **6** |
 | Not yet tested | 5 |
 | Methodologically untestable with the current design | 2 |
 
