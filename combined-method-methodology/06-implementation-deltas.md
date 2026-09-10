@@ -243,6 +243,46 @@ view-count constraint drives the initialization deficit in §13.12.
 This is §5.4's mechanism reached by primitive *placement* rather than primitive
 *reduction*.
 
+### Measured on this corpus `[measured n=1 per scene]`
+
+Regenerating all four clouds with the filter active:
+
+| scene | views | triangulated | **parallax-rejected** | `p^proj` + cheirality | kept |
+|---|---:|---:|---:|---:|---:|
+| Curasao | 18 | 360 000 | **66 438** (18.5%) | 855 | 292 707 |
+| IUI3-RedSea | 25 | 500 000 | **194 802** (39.0%) | 16 589 | 288 609 |
+| JapaneseGardens | 17 | 340 000 | **43 879** (12.9%) | 2 479 | 293 642 |
+| Panama | 15 | 300 000 | **55 530** (18.5%) | 273 | 244 197 |
+
+**EDGS's two filters together removed 20 196 of 1 500 000 triangulations —
+1.3%. The parallax filter removed 360 649 — 24.0%, which is 95% of all
+rejections.** Between 13.1% and 41.3% of each previously-accepted cloud was
+ill-conditioned geometry.
+
+This does not merely show that filtering helps. It shows that on this corpus the
+filters EDGS ships were doing almost nothing, while the degeneracy they are
+assigned to catch accounted for a quarter of everything triangulated.
+
+**The scene that lost most has the most views**, which inverts the naive
+expectation. The cause is the pairing rule rather than the view count: each
+reference is matched against its *nearest* views by pose distance, and nearest
+means smallest baseline, which means worst parallax. EDGS's neighbour selection
+systematically chooses the worst-conditioned pairs available, and how badly that
+bites depends on capture geometry — IUI3-RedSea's 29 frames along a reef wall
+put consecutive views nearly on top of one another. **The pairing heuristic and
+the missing filter interact, and neither alone explains 41%.**
+
+### Effect on the budget
+
+The clouds shrank and also became more uniform — a 1.58× spread across scenes
+before, 1.20× after, which is what a conditioning-based filter should do.
+
+`n_bud = 200 000` still binds on every scene and still clears preflight's 90%
+warning, but the margin narrowed on the binding scene: Panama went from 66.8% to
+**81.9%** of its cloud, so M2 now removes 18.1% of the M1 population there rather
+than 33%. That is the lever the A4 and A7 interactions have to work with, and it
+is smaller than it was.
+
 ### Cost and status
 
 **M1's results are not a reproduction of EDGS**, and that was already true — M2
