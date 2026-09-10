@@ -187,6 +187,120 @@ def t6_ply_roundtrip_and_hash():
     )
 
 
+def _opacity_schedule(
+    n_iterations: int = 15_000,
+    reset_interval: int | None = 3_000,
+    decay_until: int = 10_000,
+    decay_interval: int = 10,
+    start_opacity: float = 0.1,
+    prune_floor: float = 0.005,
+) -> int:
+    """Iterations an *undefended* primitive survives under M1's opacity schedule.
+
+    Pure logit arithmetic, no torch: the question is a schedule question. A
+    primitive the photometric loss never pushes upward is the worst case, and
+    under M1 the worst case decides the population, because `prune_only`
+    removes it and no densification puts it back.
+
+    `reset_interval=None` models EDGS, which sets `opacity_reset_interval` to
+    the iteration count so `reset_opacity()` never fires.
+    """
+    logit = math.log(start_opacity / (1.0 - start_opacity))
+    floor = math.log(prune_floor / (1.0 - prune_floor))
+    cap = math.log(0.01 / 0.99)          # reset_opacity caps at 0.01
+    step = math.log(0.99)
+
+    for it in range(1, n_iterations + 1):
+        if reset_interval and it % reset_interval == 0:
+            logit = min(logit, cap)      # reset is a CAP, not a raise
+        if it % decay_interval == 0 and it < decay_until:
+            logit += step
+        if logit < floor:
+            return it
+    return n_iterations
+
+
+def _undefended_lifetime(
+    reset_interval: int,
+    decay_interval: int,
+    decay_factor: float,
+    decay_from: int,
+    decay_until: int,
+    n_iterations: int,
+    start_opacity: float = 0.1,
+    prune_floor: float = 0.005,
+) -> int:
+    """Iteration at which a primitive the loss never defends crosses the floor.
+
+    Pure logit arithmetic; the question is a schedule question. Under M1 the
+    worst case decides the population, because `prune_only` removes it and no
+    densification puts it back. `reset_opacity()` is `min(opacity, 0.01)` -- a
+    cap, not a raise -- so it is modelled as such.
+    """
+    logit = math.log(start_opacity / (1.0 - start_opacity))
+    floor = math.log(prune_floor / (1.0 - prune_floor))
+    cap = math.log(0.01 / 0.99)
+    step = math.log(decay_factor)
+    for it in range(1, n_iterations + 1):
+        if reset_interval and it % reset_interval == 0:
+            logit = min(logit, cap)
+        if decay_interval and it % decay_interval == 0 and decay_from <= it < decay_until:
+            logit += step
+        if logit < floor:
+            return it
+    return n_iterations
+
+
+def t7_cull_must_not_precede_the_medium_model():
+    """Under M1, an undefended primitive must survive until the medium model is on.
+
+    EDGS's decay-and-cull removes "Gaussians the photometric loss does not
+    defend" `[../EDGS/02-pipeline.md]`. That is sound when the loss is a
+    complete statement of the objective. Under SeaSplat it is not: before
+    `seathru_from_iter` there is no medium term, so veiling haze must be
+    explained by geometry, and the photometric optimum is a handful of large
+    blobs -- SeaSplat's own degeneracy D-4. A cull run in that window decides
+    what is "needed" against an objective missing the medium model, and with
+    densification disabled nothing restores what it removes.
+
+    Measured: A1/IUI3-RedSea/s0 fell 471,531 -> 6,291 before iteration 10,000
+    with the medium off, then 6,291 -> 74 once L_op joined. Every frame
+    rendered empty and the run still reported success.
+
+    The invariant is a scheduling one and holds whichever remedy is chosen:
+    **an undefended primitive must not reach the prune floor before
+    `seathru_from_iter`.**
+    """
+    from argparse import ArgumentParser  # noqa: PLC0415
+
+    from arguments import OptimizationParams  # noqa: PLC0415
+
+    opt = OptimizationParams(ArgumentParser())
+    if getattr(opt, "m1_decay_after_seathru", None) is None:
+        return False, "m1_decay_after_seathru missing"
+
+    seathru_at = int(opt.seathru_from_iter)
+    if seathru_at > 100_000:            # upstream sentinel: seathru disabled
+        return True, "seathru disabled at defaults; scheduling invariant vacuous"
+
+    dies_at = _undefended_lifetime(
+        reset_interval=int(opt.opacity_reset_interval),
+        decay_interval=int(opt.m1_reduce_opacity_interval),
+        decay_factor=float(opt.m1_reduce_opacity_factor),
+        decay_from=seathru_at if opt.m1_decay_after_seathru else 0,
+        decay_until=int(opt.densify_until_iter),
+        n_iterations=int(opt.densify_until_iter),
+    )
+    if dies_at < seathru_at:
+        return False, (
+            f"an undefended primitive is culled at iteration {dies_at}, before "
+            f"the medium model activates at {seathru_at} -- the cull runs "
+            f"against an objective with no medium term, and M1 has no "
+            f"densification to restore what it removes"
+        )
+    return True, f"undefended primitive survives to {dies_at} >= seathru {seathru_at}"
+
+
 def main() -> int:
     check("T1 world_to_camera matches the repo's getWorld2View2", t1_convention_matches_repo)
     check("T2 intrinsics from FoV are correct", t2_intrinsics_sane)
@@ -194,6 +308,8 @@ def main() -> int:
     check("T4 reprojection error discriminates good from bad", t4_reprojection_error_discriminates)
     check("T5 cheirality detects points behind the camera", t5_cheirality_detects_points_behind)
     check("T6 ply round-trips and tampering is detected", t6_ply_roundtrip_and_hash)
+    check("T7 cull must not precede the medium model  <-- decisive",
+          t7_cull_must_not_precede_the_medium_model)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

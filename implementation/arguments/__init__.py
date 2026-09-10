@@ -255,7 +255,22 @@ class OptimizationParams(ParamGroup):
         self.m1_reduce_opacity = True            # continuous opacity decay
         self.m1_reduce_opacity_factor = 0.99     # logit += log(factor)
         self.m1_reduce_opacity_interval = 10     # ...every N iterations
-        self.m1_decay_stops_at_seathru = True    # stop once L_op is also acting
+        # The decay runs only once the medium model is active.  Its predecessor
+        # did the opposite -- it *stopped* at seathru_from_iter, on the reasoning
+        # that stacking with L_op risked over-pruning.  That gate confined the
+        # entire decay-and-cull to the window where there is no medium term, so
+        # veiling haze had to be explained by geometry (degeneracy D-4) and the
+        # cull decided what was "needed" against an objective missing half the
+        # model.  Measured consequence: A1/IUI3-RedSea/s0 fell 471,531 -> 6,291
+        # before iteration 10,000 and 6,291 -> 74 after, and every frame
+        # rendered empty.  See tools/verify_dense_init.py T7.
+        self.m1_decay_after_seathru = True       # decay only while the medium is on
+
+        # Below this many surviving primitives a run is not a result, it is a
+        # failure that happens to terminate.  A1 finished all 12 runs at 74-ish
+        # primitives with every frame empty, and the ledger marked them done.
+        # Recorded in eval_metrics.json and warned about at the end of training.
+        self.min_primitives_floor = 1_000
 
         # --- M2 sub-parameters (active only when m2_simplify) --------------
         self.simp_iteration1 = 15_000   # stochastic sampling to the budget
