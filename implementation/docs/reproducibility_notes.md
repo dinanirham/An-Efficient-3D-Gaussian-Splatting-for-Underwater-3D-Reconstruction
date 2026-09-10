@@ -429,6 +429,34 @@ Both fixes are strictly additive: an explicit include of a header the code
 already depends on cannot change behaviour, so runs before and after remain
 comparable.
 
+## 5d. Collecting results
+
+`tools/collect_results.py` merges the four per-run sources — `eval_metrics.json`,
+`model_size.json`, `run_config.json` and `diagnostics.csv` — into one view:
+
+```
+python -m tools.collect_results --output_root <root>
+```
+
+writing `results_runs.csv` (one row per run, 45 fields), `results_by_scene.csv`,
+`results_by_cell.csv` and a readable `results_summary.md`.
+
+It is a *view*, not a source: everything in it is recomputed from the run
+artifacts, so it can be regenerated at any point in the campaign and nothing
+depends on it having been run.
+
+Four conventions are enforced rather than left to the reader:
+
+- **Dispersion is never pooled across scenes**, because the measured
+  coefficient of variation ranges from 6.0% to 29.3% by scene.
+- **Both aggregation rules are emitted** — unweighted mean of scene means, and
+  image-weighted — because held-out frame counts are unequal (3/4/3/3) and the
+  two are different numbers.
+- **`n = 1` reports `n/a`, never `0.0`.** The standard deviation of one sample is
+  undefined, and printing zero reads as perfect reproducibility.
+- **Collapse state travels with every row**, and groups mixing collapsed and
+  intact seeds are flagged before any mean over them is shown.
+
 ## 6. Timing
 
 Reported as wall-clock **and effective optimizer steps**. They are not

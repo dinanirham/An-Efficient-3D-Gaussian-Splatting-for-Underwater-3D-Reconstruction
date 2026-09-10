@@ -1,7 +1,42 @@
 # Thesis Repositioning
 
 **Gate 2 deliverable.** Two candidate framings, a recommendation, and the revised research
-apparatus that follows from it. **Requires approval before any prose is written.**
+apparatus that follows from it.
+
+> ## ✅ APPROVED — Framing A, 2026-09-10
+>
+> Drafting proceeds in the order the brief sets: **Chapter 2 → Chapter 1 → Chapter 3 →
+> Chapter 4 → Chapter 5**. Chapter 2 is blocked on the six literature breakdowns
+> (`06-experiment-and-literature-plan.md` Part 1); Chapters 3 and §§4.1–4.3 are unblocked now.
+>
+> **What the approval commits to withdrawing:** the manuscript's headline M2 result under the
+> Mini-Splatting name (D-1), the AUV deployment framing (D-10), the composite PSNR/MB and
+> FPS/MB metrics (C.1), and the title's implicit method claim.
+
+### Evidence that has arrived since this section was written
+
+Three things strengthen Framing A rather than change it, and one narrows what may be claimed.
+
+**H4 is established.** §4.5 listed RQ3 as pending. It is now answered at **n=12 against a
+12-run control**: every A2 run's largest attenuation drop lands on a simplification boundary,
+no A0 run loses a channel, and the collapse is **bistable and seed-conditioned**
+`[13-campaign-addendum.md §13.13]`. Contribution #2 moves from "designed" to "demonstrated".
+
+**A fourth integration-boundary instance.** The A1 investigation cost three partial fixes,
+and the pattern is the finding: EDGS controls the periodic opacity reset *and* the size-based
+prune with a single parameter, and reimplementing them site by site re-armed each in turn.
+That is the same class as CD-22/CD-23 — a property of the seam, invisible to either
+component's documentation — and it is the most legible instance of the four.
+
+**E.7 answers the meta-review directly.** `A1/Curasao/s0` produced the campaign's best test
+PSNR with two of three attenuation channels permanently dead. *The physics broke while the
+fidelity improved.* This is the concrete answer to "why do these mechanisms behave differently
+under underwater conditions" — and it is not an answer PSNR, SSIM or LPIPS could produce.
+
+**What it narrows.** Because the collapse is seed-conditioned, cells with mixed seeds contain
+two physically different models. Every aggregate must carry the collapse covariate, and
+Chapter 4 must report it rather than pool over it. `analyse.py` now surfaces this before any
+contrast.
 
 ---
 
