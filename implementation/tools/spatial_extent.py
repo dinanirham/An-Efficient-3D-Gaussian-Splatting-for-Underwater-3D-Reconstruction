@@ -161,6 +161,35 @@ def analyse_ply(path: Path) -> Optional[dict[str, Any]]:
                 full["volume"] / gated["volume"] if gated["volume"] > 0 else float("inf")
             )
 
+    # Per-axis inflation. The diagonal averages direction away, and a floater
+    # tail is usually directional -- "spiky at the back and above the scene" is
+    # a statement about two axes, not about a scalar. The worst axis and its
+    # ratio say which way the box is being stretched.
+    per_axis = []
+    for ax in "xyz":
+        fe, re_ = full[f"extent_{ax}"], rob[f"extent_{ax}"]
+        ratio = fe / re_ if re_ > 0 else float("inf")
+        out[f"inflation_{ax}"] = ratio
+        per_axis.append((ratio, ax))
+    worst = max(per_axis)
+    out["worst_axis"] = worst[1]
+    out["worst_axis_inflation"] = worst[0]
+
+    # Extent including each primitive's own footprint, not just its centre.
+    # A splat viewer's reported dimensions may be either, and the difference is
+    # not small for a cloud of few large primitives; this makes the comparison
+    # checkable rather than assumed.
+    if all(k in f for k in ("scale_0", "scale_1", "scale_2")):
+        smax = np.exp(np.stack([f["scale_0"], f["scale_1"], f["scale_2"]],
+                               axis=1)).max(axis=1)
+        flo = (xyz - 3.0 * smax[:, None]).min(axis=0)
+        fhi = (xyz + 3.0 * smax[:, None]).max(axis=0)
+        fext = fhi - flo
+        out["footprint_extent_x"] = fext[0]
+        out["footprint_extent_y"] = fext[1]
+        out["footprint_extent_z"] = fext[2]
+        out["footprint_diagonal"] = float(np.linalg.norm(fext))
+
     # Radial spread about the median point: a floater tail shows as a long
     # upper quantile relative to the bulk.
     centre = np.median(xyz, axis=0)
@@ -251,18 +280,23 @@ def main() -> int:
         for r in rows:
             w.writerow(r)
 
-    print(f"\n{'run':<34} {'points':>10} {'full diag':>10} {'p1-99 diag':>11} "
-          f"{'inflation':>10} {'vis%':>6}")
-    print("-" * 86)
+    print(f"\n{'run':<30} {'points':>10} {'X':>8} {'Y':>8} {'Z':>8} "
+          f"{'infl':>6} {'axis':>5} {'vis%':>6}")
+    print("-" * 88)
     for r in sorted(rows, key=lambda r: (r["scene"], r["cell"], r["seed"])):
-        print(f"{r['cell'] + '/' + r['scene'] + '/s' + str(r['seed']):<34} "
-              f"{r['n_points']:>10,} {r['full_diagonal']:>10.2f} "
-              f"{r['p1_diagonal']:>11.2f} {r['inflation_diagonal']:>9.2f}x "
+        print(f"{r['cell'] + '/' + r['scene'] + '/s' + str(r['seed']):<30} "
+              f"{r['n_points']:>10,} "
+              f"{r['full_extent_x']:>8.2f} {r['full_extent_y']:>8.2f} "
+              f"{r['full_extent_z']:>8.2f} {r['inflation_diagonal']:>5.1f}x "
+              f"{str(r.get('worst_axis', '-')):>5} "
               f"{100 * r.get('frac_visible', float('nan')):>5.1f}%")
 
-    print(f"\nfull      min/max over every primitive")
-    print(f"p1-99     the 1st-99th percentile box -- the scene proper")
-    print(f"inflation full diagonal / robust diagonal; near 1 means no tail")
+    print(f"\nX Y Z     full min/max extent per axis -- compare directly against a")
+    print(f"          viewer's reported dimensions.  These are splat CENTRES; the")
+    print(f"          CSV also carries footprint_* which adds each primitive's own")
+    print(f"          3-sigma radius, in case the viewer reports that instead.")
+    print(f"axis      the axis whose box is most inflated by the outer 2%")
+    print(f"infl      full diagonal / robust diagonal; near 1 means no tail")
     print(f"vis%      primitives with alpha >= {VISIBLE_ALPHA}")
     print(f"\nwritten: {out_dir / 'spatial_extent.csv'}")
     return 0
