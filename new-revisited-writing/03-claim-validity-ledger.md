@@ -24,8 +24,8 @@ submission.
 
 | # | Claim | Verdict | Basis |
 |---|---|---|---|
-| B.1 | **"Mini-Splatting importance-based budget pruning gives the best overall balance — ~72% reduction in model size and Gaussian count for a 0.05 dB average PSNR decrease"** | **Contradicted as attributed** | **D-1.** The implemented mechanism was `opacity × scale` with deterministic top-k, firing once. Mini-Splatting's method is accumulator-based importance with *stochastic* sampling at two iterations — and Mini-Splatting's own paper rejects top-k as destroying local geometry (S-4). The number may describe a real behaviour of *that* pruning rule; it is not evidence about Mini-Splatting |
-| B.2 | The same, as a *magnitude* | **Contradicted** | **D-5.** 0.05 dB from single runs, against measured per-scene CV of 6–29% on primitive count. Not interpretable without dispersion |
+| B.1 | **"Mini-Splatting importance-based budget pruning gives the best overall balance — ~72% reduction in model size and Gaussian count for a 0.05 dB average PSNR decrease"** | **Contradicted — now on three independent grounds** | **D-1.** The implemented mechanism was `opacity × scale` with deterministic top-k, firing once. Mini-Splatting's method is accumulator-based importance with *stochastic* sampling at two iterations — and Mini-Splatting's own paper rejects top-k as destroying local geometry (S-4). The number may describe a real behaviour of *that* pruning rule; it is not evidence about Mini-Splatting |
+| B.2 | The same, as a *magnitude* | **Contradicted** `[measured]` | **A0's per-scene PSNR sd is 0.22–0.70 dB**, so the design resolves ~±0.5 dB at three seeds. The claimed 0.05 dB is a tenth of the noise floor and was reported from single runs. The correctly-implemented mechanism reduces **18.7×**, not 3.6×, and costs a large *perceptual* penalty PSNR does not register `[results-01 §6]` |
 | B.3 | "CompGS-style post-training attribute quantisation mainly reduces storage" | **Partially supported**, wrongly attributed | **D-2.** Post-hoc k-means at k=256 is the condition CompGS-VQ's C-1 identifies as the problem it solves. Direction is plausible; the mechanism is not CompGS-VQ |
 | B.4 | "Deterministic initialization trades substantial quality for more aggressive compaction" | **Not yet tested** in the current codebase | Prior A1 used a different pipeline. Current M1 (RoMa + cheirality + hash-verified clouds) is implemented but unrun — S3 |
 | B.5 | The three mechanisms are orthogonal / "leave submodules untouched by construction" | **Partially supported** | True of the medium *modules*; **false of the medium model's identifiability** — pruning rescales Ẑ and thereby β `[05-constraints.md §5.4]`. R1.3 also flags the phrasing |
@@ -62,6 +62,9 @@ submission.
 | E.6 | CD-6's medium re-identification burst restores β after a population change | **Contradicted** `[measured n=12]` | The `rewarm_end` row *is* the post-burst state, and β is already collapsed in it. 200 steps did not restore it in any of the six collapsed runs. A negative result about this work's own remedy `[§13.10, §13.13]` |
 | E.7 | Fidelity metrics cannot certify that the medium model is intact | **Supported** `[measured n=1, decisive]` | `A1/Curasao/s0` produced the campaign's **best test PSNR (30.97, above A0's 30.48)** with **two of three attenuation channels permanently dead**. PSNR, SSIM and LPIPS score the composed image, which a saturated backscatter term still fits `[§13.12, §13.13]` |
 | E.8 | M1 does not cost fidelity at 14× fewer primitives | **Not yet tested** `[measured n=1]` | A1/Curasao/s0 is **+0.49 dB test, +1.34 dB train** against A0 at 299,196 vs 4,285,043 primitives. Better on both splits. Against A0's 14.7% CV on this scene, one run is not evidence — needs S3's remaining eleven |
+| E.10 | Simplification removes 18.7x of the population with no resolvable PSNR change | **Supported** `[measured n=12 vs n=12]` | Max effect 1.05 sd across four scenes. A0's per-scene PSNR sd is 0.22-0.70 dB `[results-01]` |
+| E.11 | The fidelity metrics disagree in order of perceptual sensitivity, and LPIPS resolves what PSNR cannot | **Supported** `[measured n=12 vs n=12]` | PSNR +0.21 dB (unresolvable), SSIM -0.004 (2/4 scenes), **LPIPS +0.048 worse on all four at 4.1-19.4 sd**. Reporting PSNR alone inverts the conclusion `[results-01 §2]` |
+| E.12 | M3 delivers storage compression and no frame-rate gain | **Partially supported** `[measured n=1]` | 2.73x bytes/primitive; fps **-0.16 sd** against A0's three-seed distribution. Predicted in advance from CD-8 and sh_degree=0 `[results-01 §7]` |
 | E.9 | Frame-rate gain is sub-linear in primitive reduction, and not a single exponent | **Supported** `[measured n=1/cell]` | A1: 14.3× fewer → **1.48×** fps. A2: 29.7× fewer → **4.27×**. Per-primitive rasterization cost differs by cell, so a count ratio does not predict a frame-rate ratio `[§13.12]` |
 | E.3 | Converged primitive count carries 6–29% run-to-run dispersion, seeding notwithstanding | **Supported** | 12 A0 runs + 3+3 replication `[measured n=3/scene]` |
 | E.4 | Detaching alpha gradients from densification yields ~6× fewer primitives at ~−0.1 dB | **Not yet tested** | `[measured n=1]` against a *defective* baseline, different seeds. Not claimable until S6 `[12-novelty-defensibility.md §12.6.2]` |
@@ -73,8 +76,8 @@ submission.
 
 | Verdict | Count |
 |---|---:|
-| Supported | 9 |
-| Partially supported | 3 |
+| Supported | 11 |
+| Partially supported | 4 |
 | **Contradicted** | **5** |
 | Not yet tested | 5 |
 | Methodologically untestable with the current design | 2 |

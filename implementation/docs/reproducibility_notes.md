@@ -457,6 +457,34 @@ Four conventions are enforced rather than left to the reader:
 - **Collapse state travels with every row**, and groups mixing collapsed and
   intact seeds are flagged before any mean over them is shown.
 
+## 5e. Spatial extent — a geometric test for floaters
+
+```
+python -m tools.spatial_extent --output_root <root>
+```
+
+Every fidelity measure in this study is photometric, and SeaSplat's degeneracy
+D-4 — opaque low-texture primitives placed near the camera to reproduce veiling
+haze as geometry — is photometrically *excellent*. It is visible in the geometry
+and nowhere else, so nothing else the campaign records would detect it.
+
+Reported per stored cloud: the full min/max box, the 1st–99th percentile box,
+and the **inflation ratio** between them. A cloud whose inflation is near 1 has
+no significant tail; one inflated by an order of magnitude is being stretched by
+a small number of outlying primitives.
+
+Extents are also computed over primitives above a visibility threshold
+(α ≥ 0.05), because a primitive at α = 0.001 contributes nothing to the render
+and should not enlarge a reported extent. **The gap between gated and ungated
+extent is itself the diagnostic**: a large gap means the tail is invisible and
+cosmetic, a small gap means it is being rendered.
+
+Opacity is stored as a logit and scale as a logarithm; both are inverted before
+use, since comparing raw stored values across cells would be meaningless.
+
+Reads `point_cloud.ply`, which is written for **seed 0 only** unless
+`--save_ply_all_seeds` was passed.
+
 ## 6. Timing
 
 Reported as wall-clock **and effective optimizer steps**. They are not
