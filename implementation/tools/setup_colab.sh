@@ -159,18 +159,35 @@ fi
 # failed build prints "See above for output" pointing at output that -q has
 # already discarded, which leaves nothing to diagnose from.
 build_ext() {
+    # -v is load-bearing.  Without it pip prints "See above for output" and
+    # suppresses nvcc's actual diagnostics, so a failed build reports only
+    # that it failed.  That happened once and cost a session to re-run.
     local name="$1" path="$2" out
     echo "--- building $name ---"
-    if ! out="$(pip install "$path" 2>&1)"; then
-        echo "$out" | tail -50
+    if ! out="$(pip install -v "$path" 2>&1)"; then
+        echo "    ---- compiler errors ----"
+        echo "$out" | grep -E "error:|fatal error|undefined|no member named|expected " | head -40
         echo
-        echo "!!! $name failed to build -- see the compiler output above."
+        echo "    ---- last 60 lines ----"
+        echo "$out" | tail -60
+        echo
+        echo "!!! $name failed to build.  Toolchain is printed above the build."
         return 1
     fi
     echo "    ok"
 }
 
 echo
+echo
+echo "--- toolchain (printed BEFORE building: the ERR trap aborts before the"
+echo "    import check, so a failed run must still say what it built against) ---"
+printf '  torch        : '; python -c "import torch;print(torch.__version__)" 2>&1 | tail -1
+printf '  torch cuda   : '; python -c "import torch;print(torch.version.cuda)" 2>&1 | tail -1
+printf '  python       : '; python -c "import sys;print(sys.version.split()[0])" 2>&1 | tail -1
+printf '  nvcc         : '; (nvcc --version 2>/dev/null | grep -i release || echo "not found")
+echo   "  known-good   : torch 2.11.0+cu128, cuda 12.8, python 3.13"
+echo
+
 build_ext "diff_gaussian_rasterization_ms (Mini-Splatting fork)" "$RASTERIZER"
 build_ext "simple_knn" "$SIMPLE_KNN"
 
