@@ -8,6 +8,7 @@
  *
  * For inquiries contact  george.drettakis@inria.fr
  */
+#include <cstdint>   // fixed-width ints: not transitively guaranteed
 
 #include "backward.h"
 #include "auxiliary.h"

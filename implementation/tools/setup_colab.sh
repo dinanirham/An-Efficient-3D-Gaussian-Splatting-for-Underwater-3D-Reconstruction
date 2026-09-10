@@ -185,6 +185,14 @@ printf '  torch        : '; python -c "import torch;print(torch.__version__)" 2>
 printf '  torch cuda   : '; python -c "import torch;print(torch.version.cuda)" 2>&1 | tail -1
 printf '  python       : '; python -c "import sys;print(sys.version.split()[0])" 2>&1 | tail -1
 printf '  nvcc         : '; (nvcc --version 2>/dev/null | grep -i release || echo "not found")
+# The host compiler matters as much as nvcc and is invisible in every version
+# string above it.  nvcc compiles host-side code with g++ and takes its C++
+# standard library headers from libstdc++, so a base-image bump can remove a
+# transitive include and break the build while torch, CUDA and Python all still
+# report the known-good stack.  That is exactly what happened once: <cstdint>
+# stopped arriving via <iostream>.
+printf '  g++          : '; (g++ --version 2>/dev/null | head -1 || echo "not found")
+printf '  libstdc++    : '; (find /usr/lib/x86_64-linux-gnu -name 'libstdc++.so.6.*' 2>/dev/null | sort | tail -1 || echo "not found")
 echo   "  known-good   : torch 2.11.0+cu128, cuda 12.8, python 3.13"
 echo
 

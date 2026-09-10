@@ -407,6 +407,28 @@ finished training run.
 First measured value, A0/Curasao/s0 at 4,285,043 primitives: **69.17 fps**,
 14.46 ms/frame, 3,587 MB peak. Training wall clock 4,682 s.
 
+## 5c. Build fragility: transitive includes
+
+Two in-tree fixes to the reference CUDA sources, both the same defect class and
+both invisible until a host-compiler change exposed them.
+
+`simple_knn.cu` used `FLT_MAX` without `<float.h>`. Thirteen files across both
+rasterizer forks and simple-knn used `uint32_t`, `uint64_t` and
+`std::uintptr_t` while including only `<iostream>`, `<vector>` and CUDA
+headers — relying on libstdc++ to pull `<cstdint>` in transitively. Recent
+libstdc++ releases dropped many such transitive includes.
+
+**The failure mode is what makes this worth recording.** nvcc, CUDA, torch and
+Python all reported the exact known-good stack — `torch 2.11.0+cu128`,
+`cuda 12.8`, `python 3.13.15` — while the build failed on code that had
+compiled in the same configuration earlier in the campaign. The variable that
+moved was the host compiler, and nothing in the diagnostic showed it. `g++` and
+`libstdc++` are now printed alongside the rest.
+
+Both fixes are strictly additive: an explicit include of a header the code
+already depends on cannot change behaviour, so runs before and after remain
+comparable.
+
 ## 6. Timing
 
 Reported as wall-clock **and effective optimizer steps**. They are not
