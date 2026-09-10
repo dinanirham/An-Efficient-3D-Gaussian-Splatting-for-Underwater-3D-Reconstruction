@@ -752,20 +752,30 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                 # alpha-prune above into a decay-and-cull -- the smooth
                 # analogue of the periodic reset.
                 #
-                # Gated to stop at seathru_from_iter by default: L_op already
-                # pushes opacity down for backscatter-dominated primitives, and
-                # neither source method faced that combination, so stacking the
-                # two risks over-pruning.  The gate is a config value rather
-                # than a constant precisely so the choice is recorded in the
-                # manifest and can be ablated.
+                # Gated to run only ONCE THE MEDIUM MODEL IS ACTIVE.
+                #
+                # EDGS's cull removes "Gaussians the photometric loss does not
+                # defend", which is sound when the loss is a complete statement
+                # of the objective.  Under SeaSplat it is not: before
+                # seathru_from_iter there is no medium term, so veiling haze
+                # must be explained by geometry, and the photometric optimum for
+                # a hazy image is a handful of large blobs -- SeaSplat's own
+                # degeneracy D-4.  A cull run in that window decides what is
+                # "needed" against an objective missing the medium model, and
+                # M1 has no densification to restore what it removes.
+                #
+                # The gate also stops at densify_until_iter, because prune_only
+                # stops there: decaying past it would dim every primitive with
+                # nothing to remove the ones that fall through the floor.
+                decay_window = iteration < opt_params.densify_until_iter and (
+                    not opt_params.m1_decay_after_seathru
+                    or iteration >= opt_params.seathru_from_iter
+                )
                 if (
                     opt_params.m1_dense_init
                     and opt_params.m1_reduce_opacity
                     and iteration % opt_params.m1_reduce_opacity_interval == 0
-                    and not (
-                        opt_params.m1_decay_stops_at_seathru
-                        and iteration >= opt_params.seathru_from_iter
-                    )
+                    and decay_window
                 ):
                     gaussians.reduce_opacity_step(opt_params.m1_reduce_opacity_factor)
 
@@ -1000,6 +1010,16 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
     '''
     eval images
     '''
+    n_final = gaussians.get_xyz.shape[0]
+    if n_final < opt_params.min_primitives_floor:
+        print("!" * 70)
+        print(f"[COLLAPSE] {n_final} primitives survive, below the floor of "
+              f"{opt_params.min_primitives_floor}.")
+        print("[COLLAPSE] The model almost certainly renders empty frames, and")
+        print("[COLLAPSE] the metrics below describe a blank image, not a result.")
+        print("[COLLAPSE] Recorded as cost.population_collapsed in eval_metrics.json.")
+        print("!" * 70, flush=True)
+
     print("Running metrics")
     from utils.metrics_conventions import (
         aggregate_images,
@@ -1032,6 +1052,14 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
             # stochastic and driven by device-computed probabilities, so it
             # varies run to run even at a fixed seed.
             "n_primitives_final": int(gaussians.get_xyz.shape[0]),
+            # A1's collapse (471,531 -> 74 primitives, every frame empty)
+            # completed and reported success: nothing asserted that the model
+            # still rendered anything.  A cell that fails this completely must
+            # not look like a result, so the count is checked against the floor
+            # below and the run is marked in its own metrics.
+            "population_collapsed": bool(
+                gaussians.get_xyz.shape[0] < opt_params.min_primitives_floor
+            ),
             # Rendering throughput.  The design rests two predictions on this --
             # that the quantization cell shows approximately no gain, and that
             # gains from primitive reduction are sub-linear -- and neither is

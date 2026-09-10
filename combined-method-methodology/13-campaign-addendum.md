@@ -424,3 +424,83 @@ into a scientific necessity `[new-revisited-writing/01-discrepancy-ledger.md D-9
 
 `tools/medium_collapse.py` scans every run for negative-and-frozen attenuation channels and
 saturated backscatter, so this is detected across the campaign rather than found by eye.
+
+
+---
+
+## 13.11 A1's population collapse: a cull run against the wrong objective
+
+*Revises §05 (the A1 risk register) and §06 (R-5). `[measured n=1 trajectory, n=12 outcome]`*
+
+### What happened
+
+All twelve A1 runs produced test images of 4–5 KB — essentially solid colour — and
+`train.log` repeatedly printed `[training] everything is nan`. That message is upstream
+SeaSplat's `[repo: seasplat/train.py:227]` and fires when `Z_raw / alpha` is non-finite at
+**every** pixel, which happens only when alpha is zero everywhere. It does not indicate
+numerical instability. It indicates an empty frame.
+
+A1/IUI3-RedSea/s0:
+
+| phase | window | primitives | |
+|---|---|---:|---|
+| dense-cloud init | 0 | 471 531 | |
+| EDGS decay + `prune_only`, **medium off** | 1 – 10 000 | 6 291 | −98.7% |
+| `L_op` + `prune_only`, **medium on** | 10 000 – 15 000 | 74 | −98.8% of survivors |
+| frozen (`prune_only` gated by `densify_until_iter`) | 15 000 – 30 000 | 74 | |
+
+**74 primitives represented the scene for the final half of training.**
+
+### The mechanism
+
+EDGS's decay-and-cull removes "Gaussians the photometric loss does not defend"
+`[../EDGS/02-pipeline.md]`. That is sound **when the loss is a complete statement of the
+objective**. Under SeaSplat it is not.
+
+Before `seathru_from_iter` there is no medium term, so veiling haze must be explained by
+geometry — and the photometric optimum for a hazy image is a handful of large blobs, which is
+SeaSplat's own degeneracy **D-4**. The original gate stopped the decay *at*
+`seathru_from_iter`, on the reasoning that stacking with `L_op` risked over-pruning. That gate
+confined the entire cull to the window where the objective was missing the medium model, so
+the cull decided what was "needed" against half a model. With densification disabled, nothing
+restored any of it.
+
+The two forces never stacked; **they relayed.** The decay emptied the cloud before iteration
+10 000, and `L_op` took over at exactly the point the decay stopped.
+
+### What was corrected, and what was not
+
+`m1_decay_stops_at_seathru` is replaced by **`m1_decay_after_seathru`** (default `True`): the
+decay now runs in `[seathru_from_iter, densify_until_iter)`. An undefended primitive reaches
+the prune floor at iteration ~10 690 instead of ~3 090 — after the medium model is live rather
+than 7 000 iterations before it.
+
+`verify_dense_init.py` **T7** encodes the invariant, and it is deliberately framed as a
+scheduling property rather than as a parameter value: *an undefended primitive must not reach
+the prune floor before `seathru_from_iter`.* It fails against the old configuration and passes
+against the new one.
+
+**A wrong first diagnosis, recorded because it shaped the fix.** The periodic opacity reset —
+retained under CD-3, and disabled outright by EDGS, which sets `opacity_reset_interval` to the
+iteration count — looked like the cause: `reset_opacity()` is `min(opacity, 0.01)`, a cap, and
+it leaves every primitive only 690 iterations above the prune floor. The schedule test refuted
+it. By iteration 3 000 the decay has already carried an undefended primitive *below* the cap,
+so `min` changes nothing and the cull happens at 3 090 either way. The reset remains a
+fidelity deviation from EDGS worth revisiting; it is **not** what emptied A1.
+
+### The gap this exposed independent of the cause
+
+**All twelve runs completed, were marked `done`, and produced an `eval_metrics.json`.** No
+assertion checked that a model still rendered anything. A cell could fail this completely and
+be indistinguishable from a result in the ledger.
+
+`cost.population_collapsed` is now written into every run's metrics, with a loud terminal
+banner, against `min_primitives_floor = 1000` `[repo: train.py, arguments/__init__.py]`.
+
+### Consequences
+
+- **The twelve A1 runs are invalidated** and re-queued.
+- **A4, A5 and A7 are affected** — every M1 cell — but had not run.
+- §5.5's standing warning that "primitives can only ever decrease after initialization … a
+  one-way ratchet" is upgraded from a risk to a **measured failure**, with the specific
+  mechanism identified.
