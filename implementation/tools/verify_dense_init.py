@@ -276,6 +276,7 @@ def t7_cull_must_not_precede_the_medium_model():
     from arguments import OptimizationParams  # noqa: PLC0415
 
     opt = OptimizationParams(ArgumentParser())
+    opt.m1_dense_init = True          # T7 is a statement about the M1 schedule
     if getattr(opt, "m1_decay_after_seathru", None) is None:
         return False, "m1_decay_after_seathru missing"
 
@@ -283,8 +284,13 @@ def t7_cull_must_not_precede_the_medium_model():
     if seathru_at > 100_000:            # upstream sentinel: seathru disabled
         return True, "seathru disabled at defaults; scheduling invariant vacuous"
 
+    # The reset does not fire under M1 -- EDGS disables it because the
+    # continuous decay replaces it -- so the model must not apply one.
+    # This is the half that was missed first time round: the reset was
+    # dormant under the old schedule and became lethal under the new one.
+    reset_fires = not (opt.m1_dense_init and opt.m1_reduce_opacity)
     dies_at = _undefended_lifetime(
-        reset_interval=int(opt.opacity_reset_interval),
+        reset_interval=int(opt.opacity_reset_interval) if reset_fires else 0,
         decay_interval=int(opt.m1_reduce_opacity_interval),
         decay_factor=float(opt.m1_reduce_opacity_factor),
         decay_from=seathru_at if opt.m1_decay_after_seathru else 0,
