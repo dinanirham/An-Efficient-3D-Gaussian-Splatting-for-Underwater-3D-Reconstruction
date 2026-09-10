@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include <cstdint>   // fixed-width ints: not transitively guaranteed
 
 #include <iostream>
 #include <vector>

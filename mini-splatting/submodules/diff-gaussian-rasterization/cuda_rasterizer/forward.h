@@ -11,6 +11,7 @@
 
 #ifndef CUDA_RASTERIZER_FORWARD_H_INCLUDED
 #define CUDA_RASTERIZER_FORWARD_H_INCLUDED
+#include <cstdint>   // fixed-width ints: not transitively guaranteed
 
 #include <cuda.h>
 #include "cuda_runtime.h"

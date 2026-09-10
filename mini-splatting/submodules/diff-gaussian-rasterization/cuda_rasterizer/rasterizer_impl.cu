@@ -8,6 +8,7 @@
  *
  * For inquiries contact  george.drettakis@inria.fr
  */
+#include <cstdint>   // fixed-width ints: not transitively guaranteed
 
 #include "rasterizer_impl.h"
 #include <iostream>
