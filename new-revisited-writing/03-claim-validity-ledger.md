@@ -58,8 +58,11 @@ submission.
 | # | Claim | Verdict | Basis |
 |---|---|---|---|
 | E.1 | An integration boundary can preserve every forward value and still change which gradients drive densification | **Supported** | **D-3.** Bracketed at three configurations; the fix verified to indistinguishability at n=3 `[05-constraints.md §5.6]` |
-| E.2 | A scene-global medium model whose only spatial input is per-frame min–max-normalised depth is not invariant to primitive-count reduction | **Partially supported** `[measured n=1]` | First evidence: A2/IUI3-RedSea/s0's β_att falls **94% in one step** at simplification and two channels enter a permanent clamp trap; A0 never does. The effect is *larger* than the hypothesis predicted, and the Ẑ rescale alone does not account for it `[13-campaign-addendum.md §13.10]`. Needs seeds and scenes |
-| E.6 | CD-6's medium re-identification burst restores β after a population change | **Contradicted** `[measured n=1]` | The `rewarm_end` row *is* the post-burst state, and β_att is already collapsed in it. 200 steps did not restore it. First evidence either way, since the burst has been unconditionally enabled `[§13.10]` |
+| E.2 | A scene-global medium model whose only spatial input is per-frame min–max-normalised depth is not invariant to primitive-count reduction | **Supported** `[measured n=12 + 12 control]` | **12 of 12** A2 runs have their largest attenuation drop on a simplification boundary (25–195%); **0 of 12** A0 runs lose a channel. The collapse is **bistable and seed-conditioned** — 6 of 12, across all four scenes `[§13.13]` |
+| E.6 | CD-6's medium re-identification burst restores β after a population change | **Contradicted** `[measured n=12]` | The `rewarm_end` row *is* the post-burst state, and β is already collapsed in it. 200 steps did not restore it in any of the six collapsed runs. A negative result about this work's own remedy `[§13.10, §13.13]` |
+| E.7 | Fidelity metrics cannot certify that the medium model is intact | **Supported** `[measured n=1, decisive]` | `A1/Curasao/s0` produced the campaign's **best test PSNR (30.97, above A0's 30.48)** with **two of three attenuation channels permanently dead**. PSNR, SSIM and LPIPS score the composed image, which a saturated backscatter term still fits `[§13.12, §13.13]` |
+| E.8 | M1 does not cost fidelity at 14× fewer primitives | **Not yet tested** `[measured n=1]` | A1/Curasao/s0 is **+0.49 dB test, +1.34 dB train** against A0 at 299,196 vs 4,285,043 primitives. Better on both splits. Against A0's 14.7% CV on this scene, one run is not evidence — needs S3's remaining eleven |
+| E.9 | Frame-rate gain is sub-linear in primitive reduction, and not a single exponent | **Supported** `[measured n=1/cell]` | A1: 14.3× fewer → **1.48×** fps. A2: 29.7× fewer → **4.27×**. Per-primitive rasterization cost differs by cell, so a count ratio does not predict a frame-rate ratio `[§13.12]` |
 | E.3 | Converged primitive count carries 6–29% run-to-run dispersion, seeding notwithstanding | **Supported** | 12 A0 runs + 3+3 replication `[measured n=3/scene]` |
 | E.4 | Detaching alpha gradients from densification yields ~6× fewer primitives at ~−0.1 dB | **Not yet tested** | `[measured n=1]` against a *defective* baseline, different seeds. Not claimable until S6 `[12-novelty-defensibility.md §12.6.2]` |
 | E.5 | A0 is indistinguishable from unmodified SeaSplat | **Supported**, Curasao only | 3+3 runs, ratio 1.036. Should not be stated for all scenes |
@@ -70,17 +73,23 @@ submission.
 
 | Verdict | Count |
 |---|---:|
-| Supported | 6 |
-| Partially supported | 4 |
+| Supported | 9 |
+| Partially supported | 3 |
 | **Contradicted** | **5** |
 | Not yet tested | 5 |
 | Methodologically untestable with the current design | 2 |
 
 ### Two claims have moved since this ledger was first written
 
-**E.2 is now partially supported**, and the measured effect is more severe than the hypothesis
-stated: attenuation falls 94% in a single step and two of three channels enter a dead-gradient
-trap they cannot leave.
+**E.2 is now supported at n=12 with a 12-run control** — the campaign's central hypothesis,
+established. Every A2 run drops on a simplification boundary; no A0 run loses a channel. The
+collapse turns out to be **bistable and seed-conditioned** rather than scene-conditioned, which
+is a stranger claim than the hypothesis made and is what the data supports.
+
+**E.7 is the finding that answers the reviewers.** `A1/Curasao/s0` produced the best test PSNR
+in the campaign with two of three attenuation channels dead. The physics broke while the
+fidelity improved — which is the direct answer to *"why do these mechanisms behave differently
+under underwater conditions"*, and not one the fidelity metrics could have produced.
 
 **E.6 is contradicted** — CD-6, this thesis's own proposed remedy, did not restore β. That is
 the first evidence either way, because the burst has been unconditionally enabled since it was

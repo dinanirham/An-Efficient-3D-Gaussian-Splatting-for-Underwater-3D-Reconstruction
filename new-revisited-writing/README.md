@@ -1,9 +1,13 @@
 # Revisited Thesis — Audit and Revision Plan
 
-**Status: audit complete, prose not started.** `THESIS.md` requires the diagnostic package
-before any rewriting: *"Do not begin full prose rewriting during the initial audit."*
+**Status: Gate 2 passed — Framing A approved 2026-09-10. Drafting may begin.**
 
-This folder holds that package. Chapter drafts will be added here after Gate 2 approval.
+This folder holds the diagnostic package `THESIS.md` required before any rewriting. Chapter
+drafts land here next, in the brief's order: **Ch. 2 → Ch. 1 → Ch. 3 → Ch. 4 → Ch. 5.**
+
+**Immediately unblocked:** Chapter 3 (the implementation exists and is documented) and
+Chapter 4 §§4.1–4.3 (baseline, replication, dispersion — S1 and S2 are complete).
+**Blocked:** Chapter 2, on the six literature breakdowns; Chapter 1, on Chapter 2.
 
 ---
 
