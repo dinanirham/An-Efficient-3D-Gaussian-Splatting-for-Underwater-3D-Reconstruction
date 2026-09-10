@@ -96,7 +96,7 @@ Run top to bottom.
 | 2 GPU | `A100 … sm_80` | wrong GPU → change runtime type, rerun |
 | 3 Clone | one-line git log | private repo → set `GITHUB_TOKEN` in the cell |
 | 4 Build | ~5 min, then `extensions import OK` | see *Build fails* below |
-| 5 **Verify rasterizer** | **8/8** | **stop** — see below |
+| 5 **Verify rasterizer** | **9/9** | **stop** — see below |
 | 6 Suites | ten × `PASSED` | stop and report |
 | 7 Dataset | `21 / 29 / 20 / 18` | counts wrong → check the upload |
 | 8 Undistort | ~5 min, `OPENCV → PINHOLE` ×4 | `colmap` missing → rerun the install cell |
@@ -106,7 +106,7 @@ Run top to bottom.
 **Cell 5 is the gate.** The rasterizer merge rests on one identity: for a
 single Gaussian at depth `z` the probe gives `Z_raw = α·z`, so `Z_raw/α` must
 recover `z` on every covered pixel. It was verified to ~1e-7 on sm_86 during
-development, and 8/8 including T7 and T8, which assert where alpha's gradient
+development, and 9/9 including T7 and T8, which assert where alpha's gradient
 goes rather than what the renderer returns. If T3, T7 or T8 fails, **stop** —
 every cell of the matrix is built on these and nothing downstream would be
 trustworthy.
