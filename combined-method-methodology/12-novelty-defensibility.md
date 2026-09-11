@@ -405,7 +405,8 @@ require a controlled comparison this study is not running.
 | `p^proj` cannot detect it | analytical, plus simulation at 0.5 px matcher noise: a 0.0014° pair recovers median depth 3.1 against a true 4 000, 48.6% behind a camera |
 | **`p^proj` and cheirality demonstrably do not catch it on real data** | `[measured n=1 per scene]` — across four scenes they removed **1.3%** of 1 500 000 triangulations; the parallax filter removed **24.0%**, which is **95% of all rejections**. 13.1–41.3% of each previously-accepted cloud was ill-conditioned |
 | It has a measurable consequence here | `[measured n=1]` — `z_max` 122 673, `Ẑ ∈ [0, 0.0007]`, two attenuation channels clamped dead |
-| The corrected initializer behaves better | **`[pending]`** — clouds regenerated, M1 cells not yet re-run |
+| The corrected initializer behaves better | **Supported** `[measured n=1 per scene]` — `z_max` 122 673 → 74–123 on all four scenes, no negative attenuation channel anywhere, bounding box 156 172 → 112 on the worst axis, occupancy 0.01% → 0.96%, and β_att ordered R > G > B on three of four `[06-implementation-deltas §6.8]` |
 
-The last row is the one that matters for a results chapter, and it is not yet
-available.
+Every row is now supported. The claim is bounded as stated above: EDGS's remedy
+for its own D-2 does not address D-2, and it matters below a view-count
+threshold this study observes one point on the wrong side of.
