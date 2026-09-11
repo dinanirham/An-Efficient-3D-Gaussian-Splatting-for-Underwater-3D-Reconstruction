@@ -403,6 +403,7 @@ require a controlled comparison this study is not running.
 |---|---|
 | The degeneracy exists and EDGS names it | quoted from the source `[../EDGS/05-constraints.md]` |
 | `p^proj` cannot detect it | analytical, plus simulation at 0.5 px matcher noise: a 0.0014° pair recovers median depth 3.1 against a true 4 000, 48.6% behind a camera |
+| **`p^proj` and cheirality demonstrably do not catch it on real data** | `[measured n=1 per scene]` — across four scenes they removed **1.3%** of 1 500 000 triangulations; the parallax filter removed **24.0%**, which is **95% of all rejections**. 13.1–41.3% of each previously-accepted cloud was ill-conditioned |
 | It has a measurable consequence here | `[measured n=1]` — `z_max` 122 673, `Ẑ ∈ [0, 0.0007]`, two attenuation channels clamped dead |
 | The corrected initializer behaves better | **`[pending]`** — clouds regenerated, M1 cells not yet re-run |
 
