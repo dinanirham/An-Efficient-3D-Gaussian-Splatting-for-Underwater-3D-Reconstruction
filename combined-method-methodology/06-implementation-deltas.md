@@ -283,6 +283,48 @@ warning, but the margin narrowed on the binding scene: Panama went from 66.8% to
 than 33%. That is the lever the A4 and A7 interactions have to work with, and it
 is smaller than it was.
 
+### The corrected initializer, measured `[measured n=1 per scene]`
+
+All four M1 cells re-run against the regenerated clouds:
+
+| scene | init | final | kept | **z_max** | β_att R / G / B |
+|---|---:|---:|---:|---:|---|
+| Curasao | 292 707 | 241 195 | 82.4% | **123.3** | 4.172 / 3.387 / 2.385 |
+| IUI3-RedSea | 288 609 | 220 551 | 76.4% | **87.3** | 2.251 / 2.299 / 2.470 |
+| JapaneseGardens | 293 642 | 231 758 | 78.9% | **74.7** | 6.235 / 5.351 / 4.502 |
+| Panama | 244 197 | 196 773 | 80.6% | **76.3** | 2.331 / 1.733 / 1.426 |
+
+**`z_max` returned to scene scale on every scene** — 74–123 against the
+pre-filter 122 673 — and **no attenuation channel is negative anywhere**, against
+red and blue both clamped dead before. The causal chain closes end to end:
+parallax filter → bounded depths → intact per-frame normalisation →
+identifiable β.
+
+**β_att is ordered R > G > B on three of four scenes**, which is physically
+correct for water and matches the ordering the vanilla-SeaSplat replication
+produced `[§13.3]`. IUI3-RedSea inverts it — but so does the *baseline* on two
+of its three seeds, so that is a property of the scene rather than of M1.
+
+Geometry, same runs:
+
+| A1/Curasao | before | after |
+|---|---:|---:|
+| bounding box | 38 895 × 31 415 × 156 172 | **48.3 × 53.9 × 111.7** |
+| inflation | 2 447× | **3.1×** |
+| box occupancy | 0.01% | **0.96%** |
+| rendered fraction | 94.6% | 86.7% |
+
+A 1 398-fold reduction in Z extent. **M1 is now geometrically healthier than the
+baseline on three of four scenes** — 86.7% of its primitives rendered against
+A0's 25.8% on Curasao, with a box two orders of magnitude smaller.
+
+JapaneseGardens is again the exception: A1's box there is *larger* than A0's
+(51 × 21 × 68 against 24 × 16 × 32) and its occupancy lower. That is the same
+scene on which A0 carries no pathology and on which M2 also fails to help
+`[new-revisited-writing/results-02 §2c]`. **Where the baseline's geometry is
+already sound, neither intervention improves it**, and having a scene that
+behaves that way is what makes the other three interpretable.
+
 ### Cost and status
 
 **M1's results are not a reproduction of EDGS**, and that was already true — M2
