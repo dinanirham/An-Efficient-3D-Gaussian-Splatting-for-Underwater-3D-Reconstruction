@@ -85,6 +85,26 @@ GATES   it_st  = seathru_from_iter = 10 000                       [SS repo: READ
 13          FOR each match k:
 14              μ_k ← argmin_x ‖A x + b‖²  via lstsq   ⧉           [ED paper Eq.7] [ED repo: corr_init.py:471-472]
 15              ε_ij^k ← max( ‖π(P^i,μ_k) − (u_i,v_i)‖₂ , ‖π(P^j,μ_k) − (u_j,v_j)‖₂ )   [ED paper Eq.8]
+15a             θ_k ← ∠( C_i − μ_k , C_j − μ_k )   ⧉ parallax      [PI — CD-26]
+15b             KEEP only if  ε < τ_proj  AND  z_i > 0  AND  z_j > 0  AND  θ ≥ 1°
+                        ▲ cheirality [PI — CD-16] and parallax [PI — CD-26].
+                          EDGS has NEITHER.
+                        ▲▲ EDGS's D-2 states the degeneracy exactly — "nearly
+                           parallel ⇒ unstable in depth, ARBITRARILY FAR,
+                           ARBITRARILY WRONG" — and assigns it to ε (Eq.8).
+                           ε cannot detect it: the point lies ON both rays, so
+                           it reprojects close to both pixels and the error is
+                           small BECAUSE the geometry is ill-conditioned.  ε
+                           addresses ED's D-4 (confident hallucinations that
+                           happen to triangulate), a different failure.
+                           At 0.5 px matcher noise a 0.0014° pair recovers
+                           median depth 3.1 against a true 4 000, with 48.6%
+                           behind a camera.  Invisible at EDGS's 180 reference
+                           views; dominant at this corpus's 15–25.
+                           Measured consequence of omitting it: z_max 122 673
+                           against a baseline ~50, Ẑ ∈ [0, 0.0007], and two
+                           attenuation channels clamped dead.
+                                                    [06-implementation-deltas §6.8]
 16          APPEND Gaussians:
 17              f_dc  ← RGB2SH(I_i[u_i,v_i] / 255)                 [ED repo: corr_init.py:658]
 18              f_rest ← ∅        ⚠ NOT 0 — the field does not exist here
@@ -255,11 +275,40 @@ GATES   it_st  = seathru_from_iter = 10 000                       [SS repo: READ
 
      ── density control ───────────────────────────────────────────────────────────────
 83     ⟨if M1⟩                                                       ── densification OFF
-84         ⟨if i mod 10 == 0 AND i < 15 000⟩  o ← log(exp(o)·0.99)   [ED repo: trainer.py:81-85]
-                        ▲ ≈1500 applications ⇒ cumulative logit shift ≈ −15. UNDOCUMENTED.
-                          opacity_lr is ALSO halved (0.025 vs 0.05). Both collide with L_op
+                        ▲▲ opacity_reset_interval ← iterations, as EDGS sets it
+                           `[ED 03-variables:116]`.  ONE parameter gates TWO
+                           mechanisms and the name mentions only one:
+                             (a) reset_opacity(), and
+                             (b) size_threshold, which arms the size-based
+                                 prune on line 85.
+                           3DGS ties (b) to (a) because after a reset the
+                           survivors have been re-grown by densification and
+                           their scales are meaningful.  Under M1 densification
+                           never runs and scales come from correspondence
+                           distance, so arming (b) removes most of the cloud
+                           with nothing to replace it: 325 875 → 36 575 at the
+                           first armed event, iteration 3 100.
+                                                    [PI — measured n=1, 13-addendum §13.11]
+84         ⟨if i mod 10 == 0 AND it_st ≤ i < 15 000⟩  o ← log(exp(o)·0.99)
+                                                                   [ED repo: trainer.py:81-85]
+                        ▲ EDGS decays from step 0.  Here the window starts at
+                          seathru_from_iter, NOT before it.
+                        ▲▲ EDGS's cull removes "Gaussians the photometric loss
+                           does not defend", which is sound when the loss is a
+                           complete statement of the objective.  Before it_st
+                           there is no medium term, so veiling haze must be
+                           explained by GEOMETRY and the photometric optimum is
+                           a few large blobs — degeneracy D-4.  A cull run in
+                           that window decides what is "needed" against an
+                           objective missing half the model, and M1 has no
+                           densification to restore it: 471 531 → 6 291 before
+                           iteration 10 000.
+                                                    [PI — measured n=1, 13-addendum §13.11]
+                        ▲ opacity_lr is ALSO halved upstream (0.025 vs 0.05);
+                          not adopted here.  Collides with L_op either way
                                                                    [ED 05-constraints M-5] [03-variables IC-1]
-85         ⟨if i < 15 000⟩  PRUNE o < 0.005                         [ED repo: trainer.py:258-264]
+85         ⟨if i < 15 000⟩  PRUNE o < 0.005  (size_threshold DISABLED, see 83)
+                                                                   [ED repo: trainer.py:258-264]
 86     ⟨else⟩                                                        ── 3DGS ADC
 87         ⟨if i < 15 000⟩  add_densification_stats(vs_pts, vis)
 88             ⟨if i mod 100 == 0 AND i > 500⟩ densify_and_prune(τ=2e-4, o_min=0.005)

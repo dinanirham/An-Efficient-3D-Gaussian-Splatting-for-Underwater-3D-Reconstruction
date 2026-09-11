@@ -297,6 +297,64 @@ across the campaign. If it is growing faster than ~120 MB per run, check that
 
 ---
 
+## Diagnostics — run these alongside the campaign, not after it
+
+Three tools read the run artifacts and need no GPU. A CPU runtime in a second
+notebook is enough, and none of them interferes with a worker session.
+
+```bash
+python -m tools.collect_results  --output_root "$DRIVE_ROOT"   # everything, one view
+python -m tools.medium_collapse  --output_root "$DRIVE_ROOT"   # is the physics intact?
+python -m tools.spatial_extent   --output_root "$DRIVE_ROOT"   # is the geometry intact?
+```
+
+### `collect_results` — the single view
+
+Merges `eval_metrics.json`, `model_size.json`, `run_config.json` and
+`diagnostics.csv` into `analysis/results_runs.csv` (45 fields per run), per-scene
+and per-cell aggregates, and a readable `results_summary.md`.
+
+It is a *view*, not a source — everything recomputes from the artifacts, so run
+it at any point and nothing depends on it having been run.
+
+Three conventions it enforces rather than leaving to the reader: dispersion is
+**never pooled across scenes** (the measured CV runs 6.0%–29.3% by scene), both
+aggregation rules are emitted (frame counts are 3/4/3/3, so unweighted and
+image-weighted differ), and `n = 1` reports `n/a` rather than `0.0` — the
+standard deviation of one sample is undefined, and printing zero reads as
+perfect reproducibility.
+
+### `medium_collapse` — is the physics intact?
+
+`beta_att` is unconstrained but its product with depth is clamped at zero, so a
+channel driven negative has no gradient and is **frozen for the rest of
+training**, with its attenuation fixed at `exp(0) = 1`. That is SeaSplat's D-1
+"no medium" degeneracy reached one channel at a time.
+
+**No fidelity metric can see it.** They score the composed image, which a model
+with `Â ≈ 1` and a saturated backscatter term still fits. One run in this
+campaign produced the highest test PSNR recorded *with two of three channels
+dead*.
+
+Run it after every stage. A collapsed channel invalidates any physical claim
+about that run, and — because the collapse is seed-conditioned — a cell whose
+seeds are mixed cannot be averaged at all.
+
+### `spatial_extent` — is the geometry intact?
+
+Bounding box, robust box, per-axis inflation, **occupancy** (the share of the box
+containing anything), opacity-gated variants, and radial concentration.
+
+Occupancy is the one to read. A box that is 99.96% empty is being held open by
+material occupying almost none of it — which is what a detached floater cluster
+looks like, and what SeaSplat's D-4 predicts. The gated variants separate
+*rendered* pathology from *cosmetic* pathology.
+
+Reads `point_cloud.ply`, written for **seed 0 only** unless
+`--save_ply_all_seeds` was passed.
+
+---
+
 ## What "done" looks like
 
 - `run_ledger status` — 96 `done`, 0 pending, 0 failed
