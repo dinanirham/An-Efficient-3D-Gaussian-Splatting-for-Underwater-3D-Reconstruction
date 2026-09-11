@@ -61,7 +61,11 @@ submission.
 | E.2 | A scene-global medium model whose only spatial input is per-frame min–max-normalised depth is not invariant to primitive-count reduction | **Supported** `[measured n=12 + 12 control]` | **12 of 12** A2 runs have their largest attenuation drop on a simplification boundary (25–195%); **0 of 12** A0 runs lose a channel. The collapse is **bistable and seed-conditioned** — 6 of 12, across all four scenes `[§13.13]` |
 | E.6 | CD-6's medium re-identification burst restores β after a population change | **Contradicted** `[measured n=12]` | The `rewarm_end` row *is* the post-burst state, and β is already collapsed in it. 200 steps did not restore it in any of the six collapsed runs. A negative result about this work's own remedy `[§13.10, §13.13]` |
 | E.7 | Fidelity metrics cannot certify that the medium model is intact | **Supported** `[measured n=1, decisive]` | `A1/Curasao/s0` produced the campaign's **best test PSNR (30.97, above A0's 30.48)** with **two of three attenuation channels permanently dead**. PSNR, SSIM and LPIPS score the composed image, which a saturated backscatter term still fits `[§13.12, §13.13]` |
-| E.8 | M1 does not cost fidelity at 14× fewer primitives | **Not yet tested** `[measured n=1]` | A1/Curasao/s0 is **+0.49 dB test, +1.34 dB train** against A0 at 299,196 vs 4,285,043 primitives. Better on both splits. Against A0's 14.7% CV on this scene, one run is not evidence — needs S3's remaining eleven |
+| E.8 | M1 does not cost fidelity at ~12× fewer primitives | **Supported** `[measured n=3 on 3 scenes, n=1 on Panama]` | PSNR **+0.605 dB** mean, higher on every complete scene, resolvable on JapaneseGardens at **3.30 sd**. LPIPS ≈ baseline (better on one scene, unchanged on another). **Panama reverses the sign at n=1** and is not yet settled `[results-03]` |
+| E.19 | M1 nearly removes run-to-run variance in primitive count | **Supported** `[measured n=3]` | A1 CV **0.18–1.16%** against A0's 6.0–14.7% — a 6–52× reduction. Densification never runs under M1, so the amplification that drives the baseline's dispersion has nothing to act on `[results-03 §3]` |
+| E.20 | It is the population *discontinuity*, not the population *size*, that breaks the medium model | **Supported** `[measured n=10 vs n=12]` | A1 (~230k primitives) loses **0 of 10** attenuation channels; A2 (~145k) loses **6 of 12**, every drop on a simplification boundary. Comparable final counts, opposite outcomes. A sharper statement of H4 than the hypothesis made `[results-03 §4]` |
+| E.21 | M2 and M1 are distinguishable only under a perceptual metric | **Supported** `[measured n=12 vs n=10]` | On PSNR they differ by 0.4 dB, within noise. On LPIPS M2 is worse on **all four** scenes at 4.1–19.4 sd while M1 is at baseline on two of three. Reporting PSNR alone would make them look equivalent `[results-01, results-03 §1]` |
+
 | E.17 | The geometric diagnostic agrees with the medium-model diagnostic | **Contradicted** `[measured n=4]` | Detached fraction vs β perturbation gives ρ = **−0.40** — the wrong sign. The general form (occupancy vs β perturbation) is ρ = −0.80 at **p = 0.333**, which is not evidence. The geometric measure has **no demonstrated external validity**; its justification is the failure modes it detects directly `[results-02 §5b]` |
 | E.18 | EDGS's stated remedy for its own D-2 does not address D-2 | **Supported** `[analytical + measured]` | EDGS names the degeneracy — *"arbitrarily far, arbitrarily wrong"* — and assigns it to its reprojection filter. That filter cannot detect it: the point lies on both rays, so it reprojects close to both pixels and the error is small **because** the geometry is ill-conditioned. Simulated at 0.5 px matcher noise, a 0.0014° pair recovers median depth **3.1 against a true 4,000**, with 48.6% behind a camera. The gap is invisible at 180 reference views and dominant at 15–25 `[06-implementation-deltas.md §6.8]` |
 | E.13 | The baseline carries geometric pathology invisible to every photometric metric | **Supported** `[measured n=1 per scene]` | Bounding box **96–99.96% empty**. Two distinct mechanisms: **detached rendered clusters** beyond 10× the median radius with a zero gap below them (IUI3 1.69%, Panama 6.61%) — degeneracy **D-4** identified geometrically — and a **diffuse invisible halo** on Curasao, where gating raises occupancy **77.5×**. JapaneseGardens has neither `[results-02]` |
@@ -82,10 +86,10 @@ submission.
 
 | Verdict | Count |
 |---|---:|
-| Supported | 16 |
+| Supported | 20 |
 | Partially supported | 4 |
 | **Contradicted** | **6** |
-| Not yet tested | 5 |
+| Not yet tested | 4 |
 | Methodologically untestable with the current design | 2 |
 
 ### Two claims have moved since this ledger was first written
