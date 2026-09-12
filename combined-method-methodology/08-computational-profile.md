@@ -8,10 +8,14 @@ There is no `draft-thesis-output/`, no `master_metrics.csv`, no per-scene result
 TensorBoard event files. The only directory named `results/` anywhere in scope belongs to
 `../CompGS/` and holds that method's own artifacts.
 
-Consequently **every cell of every combined-method table in this section reads
-`NO RESULTS FOUND`.** They are laid out as empty tables rather than omitted, because the
-shape of the table is itself a deliverable: it specifies exactly what has to be measured,
-in what units, with what normalisation, for the study to answer its own question.
+When this section was written, **every cell of every combined-method table read
+`NO RESULTS FOUND`** — the tables were laid out empty rather than omitted, because the shape
+of a table is itself a deliverable: it specifies exactly what has to be measured, in what
+units, with what normalisation, for the study to answer its own question.
+
+**§8.3 is now populated for A0–A3 at n=12 per cell, and for A4 on one scene.** The units and
+normalisation are unchanged from the empty version, which is the point of having specified
+them in advance. A5–A7 and every interaction term remain unmeasured.
 
 The individually reported figures below are real and citable; they belong to *other papers
 on other hardware and (except SeaSplat) other data*, and the section is organised so that
@@ -260,24 +264,72 @@ the same device; ≥3 seeds per cell with dispersion reported; metrics per
 `10-reproducibility.md` §10.3; `--eval` asserted non-empty; primitive counts measured as
 **rendered Gaussians** (per `../comparison-glossary.md` §3.2).
 
-### Table 8.3a — Quality (per scene, then unweighted scene mean)
+### Table 8.3a — Quality, per scene `[measured n=3 per cell per scene]`
 
-| Cell | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
-|---|---|---|---|
-| A0 baseline | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
-| A1 init | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
-| A2 prune | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
-| A3 quant | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
-| A4 init+prune | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
-| A5 init+quant | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
-| A6 prune+quant | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
-| A7 stacked | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
+**Reported per scene, not pooled.** Per-scene dispersion differs roughly 5× across this
+corpus, so a scene mean is a summary of four incommensurable quantities and is given only as
+the last column, for continuity with the sources' reporting convention. Every contrast in
+Chapter 4 is per scene.
 
-### Table 8.3b — Efficiency
+**PSNR (pooled convention) ↑** — A0's own per-scene sd in parentheses, as the noise floor any
+difference must clear.
 
-| Cell | `N_rend` (10⁶) | Model size (MB) | Train wall-clock | **Effective optimizer steps** | Render FPS | Peak VRAM |
-|---|---|---|---|---|---|---|
-| A0 … A7 | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
+| Cell | Curasao | IUI3-RedSea | JapaneseGardens | Panama | scene mean |
+|---|---:|---:|---:|---:|---:|
+| **A0** baseline | 30.15 (±0.70) | 26.89 (±0.49) | 23.01 (±0.22) | 28.75 (±0.62) | 27.20 |
+| **A1** init | 30.63 | 27.54 | 23.70 | 28.95 | 27.70 |
+| **A2** prune | 30.54 | 27.26 | 23.14 | 28.69 | 27.41 |
+| **A3** quant | 29.79 | 27.24 | 23.19 | 29.16 | 27.34 |
+| **A4** init+prune | 30.55 | — | — | — | *(Curasao only)* |
+| A5 – A7 | *pending S4/S5* | | | | |
+
+**LPIPS ↓** — the metric that separates the mechanisms; PSNR does not.
+
+| Cell | Curasao | IUI3-RedSea | JapaneseGardens | Panama | scene mean |
+|---|---:|---:|---:|---:|---:|
+| **A0** baseline | 0.185 | 0.210 | 0.185 | 0.147 | 0.182 |
+| **A1** init | 0.185 | 0.268 | 0.179 | 0.162 | 0.198 |
+| **A2** prune | 0.215 | 0.289 | 0.216 | 0.201 | 0.230 |
+| **A3** quant | 0.188 | 0.236 | 0.186 | 0.147 | 0.189 |
+| **A4** init+prune | 0.215 | — | — | — | *(Curasao only)* |
+
+**SSIM ↑** — A0 0.904 / 0.867 / 0.866 / 0.903 (mean 0.885); A1 0.908 / 0.857 / 0.890 / 0.905
+(0.890); A2 0.904 / 0.854 / 0.871 / 0.893 (0.881); A3 0.903 / 0.864 / 0.870 / 0.907 (0.886).
+SSIM separates nothing here and is reported for completeness.
+
+> **The A2 column carries a covariate.** Six of its twelve runs have a collapsed attenuation
+> channel — Curasao 2/3, IUI3 1/3, JapaneseGardens 1/3, Panama 2/3 — so every A2 cell above
+> averages over two physically different models. The figure is correct as an average and
+> misleading as a description of a model. `analyse.py` surfaces the collapse count before any
+> contrast `[13-campaign-addendum §13.13]`.
+
+### Table 8.3b — Efficiency, scene means `[measured n=12 per cell]`
+
+Efficiency quantities are ratios against A0 on the same scene, so the scene mean is better
+behaved here than for quality. Per-scene figures are in `results_by_scene.csv`.
+
+| Cell | `N_rend` | vs A0 | Model size (MB) | vs A0 | Train wall-clock | Eff. steps | Render FPS | vs A0 | Peak VRAM (MB) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **A0** baseline | 2 709 310 | 1.00× | 144.7 | 1.00× | 60.0 min | 43 000 | 117.6 | 1.00× | 2 518 |
+| **A1** init | 222 498 | **12.2×** | 11.9 | **12.2×** | 49.5 min | 43 000 | 214.7 | 1.83× | 936 |
+| **A2** prune | 141 856 | **19.1×** | 7.6 | **19.1×** | 45.2 min | 43 400 | 311.7 | 2.65× | 959 |
+| **A3** quant | 2 653 827 | 1.02× | 52.0 | **2.78×** | 62.9 min | 43 000 | 130.1 | 1.11× | 2 639 |
+| **A4** init+prune | 129 473 | 20.9× | 6.9 | 20.9× | 54.8 min | 43 400 | 223.1 | 1.90× | 935 |
+| A5 – A7 | *pending S4/S5* | | | | | | | | |
+
+*A4 is Curasao only (n=3); its ratios are against A0 on Curasao, not against the scene mean.*
+
+**Two of §8.4's advance predictions are now settled by this table.** Frame-rate gain is
+**sub-linear in count reduction and not a single exponent** — A1 buys 1.83× from 12.2×, A2
+buys 2.65× from 19.1×, so per-primitive rasterization cost differs by cell and a count ratio
+does not predict a frame-rate ratio. And **A3 delivers storage compression with essentially no
+frame-rate gain** (2.78× bytes, 1.11× fps), as predicted in advance from CD-8 and
+`sh_degree = 0`. Both predictions were registered before the instrument existed (CD-24).
+
+**The compression ratio is smaller than the count ratio suggests it should be**, and the
+reason is structural: `bytes_per_primitive` is 56.0 in every unquantized cell and 20.6 under
+M3, a 2.72× ratio against CompGS-VQ's published 41–65×, because this baseline stores 14 floats
+per primitive where the compression literature assumes 59. §8.2(1) develops this.
 
 > **Model size must include**: unquantized `.ply` (`μ` float32 + `o`) + index streams +
 > codebooks + `kmeans_args.npy` + `backscatter_*.pth` + `attenuate_*.pth` (`02-pipeline.md`
@@ -288,10 +340,22 @@ the same device; ≥3 seeds per cell with dispersion reported; metrics per
 ### Table 8.3c — Diagnostic quantities specific to this study `[PI — CD-12]`
 
 Nothing in the sources logs these; they exist to make the interaction hypotheses measurable.
+They are the reason H4 is answerable at all, and the column that carries the campaign's
+central finding is the second.
 
-| Cell | `Ẑ_min`/`Ẑ_max` **before → after** each simplification event | `β_att`, `β_bs`, `B^∞` at 15 K / 20 K / 30 K | `N` immediately post-init vs post-settling | `Ĵ` self-consistency PSNR vs the unquantized run |
+| Cell | `Ẑ` range across each simplification event | `β` across 15 K / 20 K / 30 K | `N` post-init vs post-settling | `Ĵ` self-consistency |
 |---|---|---|---|---|
-| A0 … A7 | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND | NO RESULTS FOUND |
+| **A0** | no event | **stable — 0 of 12 runs lose a channel** | n/a | n/a |
+| **A1** | no event | 0 of 10 runs lose a channel post-CD-26; pre-CD-26, `z_max` reached 122 673 and two channels died | 244k–294k init → 196k–243k final | n/a |
+| **A2** | rescaled at both events | **12 of 12 runs place their largest attenuation drop on a simplification boundary; 6 of 12 collapse outright** | n/a | n/a |
+| **A3** | no event | 0 of 12 | n/a | *not yet computed* |
+| **A4** | rescaled at both events | **0 of 3 collapse** (Curasao) — if this survives the remaining scenes it is the campaign's most interesting interaction | 292 707 init → 129 473 final | n/a |
+
+Column 1 tests interaction candidate **IC-2**; column 2 tests whether the CD-6 re-warm-up
+re-identifies `β` — **it does not** `[E.6]`. Column 3 disambiguates EDGS's opacity-masked
+candidates from surviving primitives. Column 4 is the only available proxy for quantization
+damage to the restoration output, which has no ground truth, and is **still not computed** —
+the one diagnostic obligation of this table that remains open.
 
 Column 1 tests interaction candidate **IC-2** — whether pruning actually rescales the medium
 model's input, and by how much. Column 2 tests whether the CD-6 re-warm-up re-identifies `β`,
@@ -353,11 +417,12 @@ pruning branch vs 8.2% without `[unverified — Phase 0 web fetch]`) would local
 | Claim | Type | Verdict |
 |---|---|---|
 | The medium model adds `O(1)` parameters — 9 scalars, independent of `N`, resolution, and view count | **Asymptotic, true, and unaffected by any mechanism** | ✅ No mechanism adds a medium parameter. The claim survives all eight cells intact. `[../seasplat/08-… §8.5]` |
-| Fewer Gaussians ⇒ faster rendering | **Asymptotic in `N`**, since rasterization is `O(Σ_tiles Gaussians-per-tile)` | ✅ but **sub-linear**: Mini-Splatting's 8.5× count reduction bought 4.18× FPS `[../mini-splatting/08-… §8.4]`. Predict sub-linear for A2. |
+| Fewer Gaussians ⇒ faster rendering | **Asymptotic in `N`**, since rasterization is `O(Σ_tiles Gaussians-per-tile)` | ✅ and **confirmed sub-linear here** `[measured n=12]`: A2's 19.1× count reduction bought 2.65× fps, A1's 12.2× bought 1.83×. The prediction held; the exponent is not shared between cells. Mini-Splatting's own figure was 8.5× → 4.18× `[../mini-splatting/08-… §8.4]`. |
 | VQ storage goes from `N·d` floats to `K_cb·d` floats + `N` indices | **Structural, true for `N ≫ K_cb`** | ✅ — but the *ratio* is capped by §8.2(1). `[../compact3d/08-… §8.4]` |
 | EDGS's initialization is `O(num_refs × nns × H·W)`, **independent of the iteration count** | **Structural, and correctly not framed as an asymptotic win** | ✅ `[../EDGS/08-… §8.4]`. Here `num_refs = min(180, V) ≤ 29` (CD-2), so the constant is far smaller than in EDGS's own experiments — the initialization should be cheap. |
 | "SeaSplat preserves the computational efficiency of 3DGS" | **Empirical, unnamed hardware, 4 scenes** | ⚠️ It is a **2×** regression on both train and render. Cite the numbers, not the adjective. `[../seasplat/08-… §8.5]` |
-| **Any combined-method efficiency claim** | — | ❌ **NO RESULTS FOUND.** Nothing may be claimed. |
+| **Combined-method efficiency claims for A0–A3** | **Measured** `[n=12 per cell]` | ✅ Claimable per scene, with dispersion, and with the A2 collapse covariate carried. See §8.3. |
+| **Any A5–A7 efficiency claim, and any interaction term** | — | ❌ **Not yet measured.** S4 is partially complete (A4 on Curasao only); S5 has not run. Nothing may be claimed for the compound cells. |
 
 ---
 

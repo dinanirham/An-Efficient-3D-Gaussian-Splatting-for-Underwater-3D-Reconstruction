@@ -26,7 +26,12 @@ stated as *what would have to be done*, never as *what was done*.
 
 **How to close.** Re-run §11 with those paths in scope. It is the first section to revisit.
 
-### OQ-2 — No combined-method results exist anywhere in scope
+### OQ-2 — No combined-method results exist anywhere in scope — ✅ **CLOSED**
+
+> **Closed by the campaign.** A0–A3 are complete at twelve runs each, A4 has three runs
+> on one scene, and the figures are in `08-computational-profile.md` §8.3. A5–A7
+> remain unmeasured, which is a far narrower gap than this entry describes. The original
+> text is retained for the audit trail.
 
 **Unknown.** Every quality and efficiency figure for cells A1–A7.
 
@@ -62,7 +67,14 @@ or removed.
 
 ## B. Evidence-quality gaps in the sources
 
-### OQ-4 — SeaSplat never reports Gaussian count or model size
+### OQ-4 — SeaSplat never reports Gaussian count or model size — ✅ **CLOSED**
+
+> **Closed, and the blocking dependency it describes was removed rather than satisfied.**
+> A0's converged count is measured: a four-scene median of 2.48M, scene means 2.24M–3.76M
+> with 6.0–29.3% run-to-run dispersion. But CD-25 severed the dependency — `n_bud` is
+> fixed pre-campaign by a binding rule, so the matrix never needed this number in order to
+> be configured. The "largest single practical gap" below was real, and is no longer
+> load-bearing.
 
 **Unknown.** `N_rend` and on-disk size for the baseline, on these exact scenes.
 
@@ -158,7 +170,16 @@ The value is **kept at 10 000** so that A0 and A1 differ in exactly one factor
 wrong choice for the method. **A first-order follow-up**, and cheap: log per-frame `Ẑ`
 variance across iterations in an A1 run.
 
-### OQ-10 — How long must the post-simplification medium re-warm-up be?
+### OQ-10 — How long must the post-simplification medium re-warm-up be? — ⚠️ **ANSWERED NEGATIVELY**
+
+> **200 steps do not suffice, and the question has changed shape.** In all six collapsed A2
+> runs the `rewarm_end` diagnostic row — which *is* the post-burst state — already
+> shows the collapsed β `[measured n=12, E.6]`. So the answer is not simply a larger `n`;
+> it is not established that any `n` works. The live question is whether the remedy is
+> **under-budgeted or misconceived**: if per-frame min–max normalisation makes β
+> unrecoverable once the depth range has moved, then no amount of medium-only re-fitting
+> restores it and the fix has to act on the normalisation instead. That is now the most
+> valuable open question in this document.
 
 CD-6 is the central `[proposed integration]` of this work, and its length is specified only
 by analogy with SeaSplat's existing 1 000-step warm-up and 50-step bursts. **Whether `n`

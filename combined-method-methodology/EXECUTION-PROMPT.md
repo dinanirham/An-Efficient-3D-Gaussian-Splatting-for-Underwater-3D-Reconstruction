@@ -226,8 +226,12 @@ hash is reproducible across two invocations at the same seed.
   against top-k because importance is spatially autocorrelated and thresholding removes whole
   regions; with densification off in A4/A7 there is nothing left to recover what gets stripped.
 - Second event at 20 000: deterministic CDF prune retaining the top 99% of importance mass.
-- **Explicit primitive budget `n_bud`, not a sampling ratio** (CD-5), set from A0's converged
-  count. A real `--no_reorg` off-switch (R-9) — not a `hasattr` guard, which is always true.
+- **Explicit primitive budget `n_bud`, not a sampling ratio** (CD-5). ~~Set from A0's
+  converged count.~~ **REVISED by CD-25:** fixed pre-campaign at 200 000 by the binding
+  rule — below the smallest population any other enabled mechanism produces. A budget
+  derived from A0 would sit an order of magnitude above every dense-init cloud and make M2
+  inert under M1. A real `--no_reorg` off-switch (R-9) — not a `hasattr` guard, which is
+  always true.
 - **Scope: simplification only** (CD-4). No blur split, no depth reinitialization. Name it
   *Mini-Splatting's simplification stage* in every artifact, or a reader assumes the full
   method.
@@ -325,9 +329,12 @@ Per `06-evaluation-metrics.md`. The non-negotiables:
 
 ## 5. Gates that must be resolved with data, not assumption
 
-**G-1 — A0's converged primitive count.** Sets `n_bud` (CD-5). Unreported in any publication
-of the baseline. **The matrix cannot be configured until A0 has run.** This is a hard
-sequencing dependency, not a preference.
+**G-1 — A0's converged primitive count.** ~~Sets `n_bud` (CD-5); the matrix cannot be
+configured until A0 has run.~~ **GATE DISSOLVED by CD-25.** The budget is now fixed
+pre-campaign by the binding rule, so this is no longer a sequencing dependency — which
+also removed S1 as a hard prerequisite for S2. The count is still unreported in any
+publication of the baseline and is still measured, but for its own sake: a four-scene
+median of 2.48M, with 6.0–29.3% run-to-run dispersion `[measured n=12]`.
 
 **G-2 — Does the budget bind?** If A1's converged count sits below `n_bud`, the pruning step is
 a no-op and **A4 ≡ A1, A7 ≡ A5** — two of eight cells silently do not exist. The previous

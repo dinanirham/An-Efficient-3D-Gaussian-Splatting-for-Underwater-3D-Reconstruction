@@ -372,6 +372,12 @@ re-identification burst works, the discontinuity is absorbed within the burst. I
 appears, the hypothesis is refuted. This costs one logging statement and converts an
 analytical argument into a measurement.
 
+**Both halves of that test have since been run, and they fell apart.** The discontinuity is
+present in every one of twelve pruned runs, and absent from all twelve untreated controls.
+The burst did not absorb it: the post-burst state is already collapsed. The hypothesis is
+therefore confirmed and the remedy refuted — an outcome the diagnostic was designed to be
+able to report, and the reason it was specified before the runs rather than after.
+
 It is worth stating why this failure mode would otherwise go undetected. It does not crash, it
 does not warn, and it does not produce a visibly broken image. **It manifests as slightly
 worse numbers in the pruned configurations — which is precisely what one expects from
@@ -384,7 +390,8 @@ report it.
 ## 3.4.8 The remaining integration decisions
 
 The medium re-identification burst is the most substantive of this work's integration
-decisions but not the only one. Those that change what the experiment *measures*, as opposed
+decisions but not the only one — and, as §3.4.7 records, the one measurement subsequently
+showed to be inadequate. Those that change what the experiment *measures*, as opposed
 to how it runs, are set out here; the full set, with justifications and costs, appears in the
 technical breakdown.
 
@@ -412,14 +419,22 @@ iterations anyway; under the simplification-only scoping adopted here that compe
 mechanism largely disappears, and the reset is a co-mechanism of the opacity prior in
 suppressing water-column floaters.
 
-**The primitive budget is an explicit count, not a sampling ratio**, and it is set from the
-untreated baseline's converged count. This makes the budget bind in every configuration. Left
-as a ratio, the budget might not bind at all when dense initialization has already produced a
-small population, in which case the pruning step becomes a no-op and two cells of the matrix
-silently collapse onto two others — producing a "no interaction" result that is an artifact of
-configuration rather than a finding. This is a sequencing dependency: the baseline must be run
-and measured before the matrix can be configured, because the baseline's primitive count is
-not reported anywhere in its publication.
+**The primitive budget is an explicit count, not a sampling ratio**, and it is fixed before
+the campaign by a binding rule rather than derived from the untreated baseline. The rule is
+that the budget must sit below the smallest population any other enabled mechanism produces.
+Left as a ratio, the budget might not bind at all when dense initialization has already
+produced a small population, in which case the pruning step becomes a no-op and two cells of
+the matrix silently collapse onto two others — producing a "no interaction" result that is an
+artifact of configuration rather than a finding.
+
+The specification this replaces — deriving the budget from the untreated baseline's converged
+count — does not survive measurement, and the margin is not close. That count has a four-scene
+median of 2.48 million, while every dense-initialization cloud falls between 244 000 and
+294 000. Any fraction of the baseline's count would therefore sit an order of magnitude above
+every such cloud, and the degeneracy the explicit budget exists to prevent would have been
+realised rather than avoided. Fixing the budget in advance also removes the sequencing
+dependency the original specification carried: the matrix no longer requires the baseline to
+be run and measured before it can be configured.
 
 **One codebook is dropped.** The quantization mechanism groups parameters into four codebooks:
 zero-order colour, higher-order harmonics, scale, and rotation. On this baseline the
