@@ -22,6 +22,17 @@ Chapter 4 §§4.1–4.3 (baseline, replication, dispersion — S1 and S2 are com
 | 4 | [`04-repositioning.md`](04-repositioning.md) | Two candidate framings, a recommendation, revised RQs and contributions — **Gate 2, needs approval** |
 | 5 | [`05-surgical-plan.md`](05-surgical-plan.md) | Section-by-section actions — **Gate 3** |
 | 6 | [`06-experiment-and-literature-plan.md`](06-experiment-and-literature-plan.md) | Minimum additional work, costed |
+| 7 | [`07-supervisor-persona.md`](07-supervisor-persona.md) | A reading persona — the three questions and six standing objections to apply to any draft before a committee does |
+| 8 | [`08-supervisory-review.md`](08-supervisory-review.md) | **Deep analysis of the implementation and results.** Restates the central claim, derives why CD-6 could not have worked, and names one quantity the campaign has never measured |
+
+**Results, as they land:**
+
+| | File | Covers |
+|---|---|---|
+| R0 | [`results-00-executive-summary.md`](results-00-executive-summary.md) | A0–A3 per scene, with spatial extent and the collapse covariate |
+| R1 | [`results-01-m2-main-effect.md`](results-01-m2-main-effect.md) | Simplification: 19× reduction, LPIPS cost on all four scenes |
+| R2 | [`results-02-geometric-pathology.md`](results-02-geometric-pathology.md) | Bounding box, occupancy, detached fraction — and E.17, the correlation that came out the wrong sign |
+| R3 | [`results-03-m1-main-effect.md`](results-03-m1-main-effect.md) | Dense initialization after CD-26: fidelity at ~12× fewer primitives |
 
 ---
 
@@ -50,6 +61,17 @@ the missing rate–distortion sweep — needs compute.
 **4. Chapter 4 must be rebuilt, and about 60% of the thesis can be written now.**
 Chapters 2, 1, 3 and §§4.1–4.3 are unblocked by the running campaign. Chapter 4's existing
 tables come from a different codebase with documented fidelity gaps and cannot be retained.
+
+**5. The central claim is understated, and the supervisory review sharpens it.**
+The working claim is that efficiency mechanisms perturb the medium model through the shared
+depth variable. The evidence supports something stronger: **the medium model was never
+identified in absolute terms**, because a scene-global β is fitted against a per-frame
+renormalised depth, so its value is a compromise over the training set's depth-range
+distribution rather than a property of the medium. That reframes the finding as a claim about
+SeaSplat as published, explains why CD-6 could not have worked, and yields a falsifiable
+prediction the campaign cannot yet test — because the diagnostics log one sampled frame's
+depth range, not the distribution. See [`08-supervisory-review.md`](08-supervisory-review.md)
+§§2–4.
 
 ---
 
