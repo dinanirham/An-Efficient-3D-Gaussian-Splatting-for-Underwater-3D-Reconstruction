@@ -1,0 +1,111 @@
+%% Figure 1 — Detailed methodology pipeline, portrait.
+%% Shape conventions (ANSI/ISO flowchart):
+%%   ([  ])  terminal        — start / end
+%%   [/  /]  data            — input or output
+%%   [   ]   process         — an operation
+%%   [[  ]]  predefined      — a named sub-procedure from a source method
+%%   {   }   decision        — a branch
+%%   [(  )]  stored data     — a persisted, hashed artifact
+%%   {{  }}  preparation     — a scheduled state change
+%% Colour encodes ORIGIN, not function. Badges M1/M2/M3/CD carry identity.
+
+flowchart TB
+
+%% ─────────────────────────── PREPROCESSING ───────────────────────────
+subgraph PRE["① PREPROCESSING — offline, once per scene, frozen before training"]
+  direction TB
+  S([Start]) --> IN[/"SeaThru-NeRF corpus<br/>4 scenes · 88 images · COLMAP poses"/]
+  IN --> UND["<b>CD</b> · Undistort OPENCV → PINHOLE<br/><i>the rasteriser ignores distortion coefficients</i>"]
+  UND --> SPL["Hold out every 8th frame by index"]
+  SPL --> DAT[/"75 training views · 13 held-out frames"/]
+end
+
+%% ─────────────────────────── INITIALIZATION ──────────────────────────
+DAT --> Q1{"M1 enabled?"}
+
+subgraph INI["② INITIALIZATION — the M1 contrast"]
+  direction TB
+  Q1 -->|"no · baseline"| SFM[/"COLMAP sparse cloud<br/>~26 000 points"/]
+  Q1 -->|"yes · M1"| ROMA[["<b>M1</b> · RoMa dense correspondence<br/>K_ref = min 180, view count"]]
+  ROMA --> TRI["Triangulate correspondences"]
+  TRI --> Q2{"Well<br/>conditioned?"}
+  Q2 -->|"parallax &lt; 1° &nbsp;or&nbsp; behind camera"| REJ["<b>CD</b> · Reject<br/><i>24% of all triangulations</i>"]
+  Q2 -->|"accept"| PLY[("Hashed dense cloud<br/>244k – 294k points · SHA-256")]
+  SFM --> GAU["Initialise Gaussian primitives<br/>position, scale, rotation, opacity, colour"]
+  PLY --> GAU
+end
+
+GAU --> IT(("iteration<br/>i = 1"))
+
+%% ─────────────────────────── TRAINING ────────────────────────────────
+subgraph TRN["③ TRAINING — 30 000 iterations"]
+  direction TB
+
+  subgraph PH1["③a · GEOMETRY-ONLY REGIME — iterations 1 → 10 000"]
+    direction TB
+    IT --> R1["Rasterise → radiance, depth, alpha"]
+    R1 --> L1["Loss compares the <b>raw render</b> against the capture<br/><i>veiling haze must be explained by geometry</i>"]
+    L1 --> B1["Backpropagate → geometry only"]
+    B1 --> D1{"Density<br/>control"}
+    D1 -->|"baseline"| ADC["Adaptive density control<br/>clone · split · prune"]
+    D1 -->|"M1"| PRN["<b>M1</b> · Prune only<br/><i>densification disabled</i>"]
+  end
+
+  ADC --> SW{{"i = 10 000<br/>image formation model ACTIVATES"}}
+  PRN --> SW
+
+  subgraph PH2["③b · PHYSICS-AWARE REGIME — iterations 10 001 → 30 000"]
+    direction TB
+    SW --> R2["Rasterise → radiance J, depth Z, alpha"]
+    R2 --> NRM["Normalise depth per frame by its own min / max"]
+    NRM --> CMP["<b>Image formation model</b><br/>I = J · exp(−β_att · Z) + σ(B∞) · (1 − exp(−β_bs · Z))"]
+    CMP --> L2["Loss compares the <b>composed image</b> against the capture"]
+    L2 --> B2["Backpropagate → geometry <b>and</b> 9 medium scalars"]
+
+    B2 --> E2{{"i = 15 000 / 20 000"}}
+    E2 -->|"M2"| SMP[["<b>M2</b> · Importance-weighted simplification<br/>cut to 200 000 primitives"]]
+    SMP --> RWM["<b>CD</b> · Medium re-identification burst<br/><i>measured insufficient</i>"]
+    E2 -->|"M3 · i ≥ 22 000"| QNT[["<b>M3</b> · Quantization-aware training<br/>3 codebooks · straight-through estimator"]]
+  end
+
+  RWM --> NXT{"i = 30 000?"}
+  QNT --> NXT
+  NXT -->|"no"| R2
+end
+
+%% ─────────────────────────── EVALUATION ──────────────────────────────
+NXT -->|"yes"| OUT[/"Trained model + 9 medium scalars"/]
+
+subgraph EVA["④ EVALUATION"]
+  direction TB
+  OUT --> FID["Fidelity on held-out frames<br/>PSNR both conventions · SSIM · LPIPS"]
+  OUT --> EFF["Efficiency<br/>primitive count · storage · fps · peak memory"]
+  OUT --> DIA["<b>CD</b> · Diagnostics<br/>medium-model collapse · box occupancy · detached population"]
+  FID --> REC[("Per-run record<br/>45 fields, hashed provenance")]
+  EFF --> REC
+  DIA --> REC
+  REC --> END([End])
+end
+
+%% ─────────────────────────── STYLE ───────────────────────────────────
+classDef inherited fill:#EDF2F2,stroke:#94A9A8,stroke-width:1px,color:#10201F
+classDef mech      fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,color:#10201F
+classDef ours      fill:#FBEFEC,stroke:#C8462E,stroke-width:1.5px,color:#10201F
+classDef medium    fill:#EFEAF6,stroke:#7A5CA8,stroke-width:1.5px,color:#10201F
+classDef gate      fill:#FFFFFF,stroke:#94A9A8,stroke-width:1px,color:#10201F
+classDef term      fill:#10201F,stroke:#10201F,color:#FFFFFF
+
+class S,END term
+class IN,DAT,SFM,SPL,GAU,R1,L1,B1,ADC,R2,L2,B2,FID,EFF,OUT,IT inherited
+class ROMA,TRI,PRN,SMP,QNT mech
+class UND,REJ,RWM,DIA ours
+class NRM,CMP medium
+class Q1,Q2,D1,E2,NXT,SW gate
+class PLY,REC inherited
+
+style PRE fill:#F4F7F7,stroke:#CFDBDA,stroke-width:1px,color:#48605F
+style INI fill:#F4F7F7,stroke:#CFDBDA,stroke-width:1px,color:#48605F
+style TRN fill:#F1F5F5,stroke:#CFDBDA,stroke-width:1px,color:#48605F
+style PH1 fill:#FAFCFC,stroke:#DBE5E4,stroke-dasharray:4 3,color:#48605F
+style PH2 fill:#F7F4FB,stroke:#C9BBE0,stroke-dasharray:4 3,color:#48605F
+style EVA fill:#F4F7F7,stroke:#CFDBDA,stroke-width:1px,color:#48605F

@@ -1,0 +1,38 @@
+%% Figure 0 — High-level schematic, in the style source papers use for 3DGS
+%% and SeaSplat: the optimisation loop only, with the three efficiency
+%% mechanisms shown as what they are — three insertions into one cycle.
+%%
+%% Read the cycle clockwise. The dashed return edge is the optimisation.
+
+flowchart TB
+
+IMG[/"Multi-view underwater images"/] --> INIT["Initialise primitives"]
+INIT --> GS["3D Gaussian primitives<br/><i>position · covariance · opacity · colour</i>"]
+GS --> RAS["Differentiable rasterisation"]
+
+RAS --> J["<b>J</b> — medium-free radiance<br/><i>the scene with the water removed</i>"]
+RAS --> Z["<b>Z</b> — rendered depth"]
+
+J --> IFM
+Z --> IFM
+
+IFM["<b>Image formation model</b><br/>I = J · exp(−β_att·Z) + σ(B∞)·(1 − exp(−β_bs·Z))<br/><i>9 scene-global medium scalars</i>"]
+
+IFM --> IHAT["<b>I</b> — composed underwater image"]
+IHAT --> LOSS{{"Photometric loss<br/>against the capture"}}
+LOSS -.->|"gradients"| GS
+LOSS -.->|"gradients"| IFM
+
+M1>"<b>M1</b> initialization<br/>dense correspondences<br/>replace the sparse cloud"] -.-> INIT
+M2>"<b>M2</b> simplification<br/>cut the population<br/>to a fixed budget"] -.-> GS
+M3>"<b>M3</b> quantization<br/>attributes become<br/>codebook indices"] -.-> GS
+
+classDef base   fill:#EDF2F2,stroke:#94A9A8,stroke-width:1px,color:#10201F
+classDef medium fill:#EFEAF6,stroke:#7A5CA8,stroke-width:2px,color:#10201F
+classDef mech   fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,color:#10201F
+classDef gate   fill:#FFFFFF,stroke:#94A9A8,stroke-width:1px,color:#10201F
+
+class IMG,INIT,GS,RAS,J,Z,IHAT base
+class IFM medium
+class M1,M2,M3 mech
+class LOSS gate
