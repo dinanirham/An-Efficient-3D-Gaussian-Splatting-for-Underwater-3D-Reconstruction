@@ -113,6 +113,47 @@ def analyse(path: Path) -> Optional[dict[str, Any]]:
     # [0,1], which saturates the backscatter term into a constant colour.
     bs = [v for c in CHANNELS if (v := res["beta_bs_final"][c]) is not None]
     res["bs_saturated"] = bool(bs) and min(bs) > 5.0
+
+    # CD-27: the cross-frame depth-range dispersion across each simplification
+    # boundary.  The prediction under test is that collapse tracks the CHANGE
+    # in this dispersion rather than the change in primitive count -- beta is
+    # fitted against a per-frame renormalisation, so it follows the spread of
+    # the per-frame ranges, and a distribution that merely translates leaves
+    # its compromise attainable while one that broadens does not.
+    #
+    # Read here rather than left in the CSV because an instrument is not
+    # finished until something reads it (the CD-24 lesson).  Absent on runs
+    # predating the instrument, which is reported as absent, never as zero.
+    swept = [(it, r) for it in its for r in d[it]
+             if _f(r, "zr_cv") is not None and r.get("event") in
+             ("pre_simp", "post_simp", "rewarm_end")]
+    res["zr"] = [
+        {
+            "iteration": it,
+            "event": r.get("event"),
+            "n_views": int(float(r["zr_n_views"])) if r.get("zr_n_views") else None,
+            "cv": _f(r, "zr_cv"),
+            "mean": _f(r, "zr_mean"),
+        }
+        for it, r in swept
+    ]
+
+    # Pair each pre_simp with the post_simp that follows it, and report the
+    # ratio of dispersions.  > 1 means the population change broadened the
+    # distribution, which is the predicted precondition for collapse.
+    res["zr_cv_ratio"] = []
+    for i, a in enumerate(res["zr"]):
+        if a["event"] != "pre_simp":
+            continue
+        b = next((x for x in res["zr"][i + 1:] if x["event"] == "post_simp"), None)
+        if b and a["cv"] and a["cv"] > 0:
+            res["zr_cv_ratio"].append({
+                "at": a["iteration"],
+                "cv_before": round(a["cv"], 6),
+                "cv_after": round(b["cv"], 6),
+                "ratio": round(b["cv"] / a["cv"], 4),
+            })
+
     return res
 
 
@@ -170,6 +211,33 @@ def main() -> int:
             print(f"  {rid:<34} {100 * d['fraction']:>5.1f}%  at {where}")
         print("\nA drop coincident with simp_iteration1/2 is the signature of\n"
               "simplification perturbing medium identifiability (H4), not of drift.")
+
+    # CD-27.  The prediction: collapse tracks the change in cross-frame
+    # dispersion of the depth range, not the change in primitive count.  A run
+    # predating the instrument reports nothing here rather than a zero.
+    swept = {rid: r for rid, r in report.items() if r.get("zr_cv_ratio")}
+    if swept:
+        print("\ncross-frame depth-range dispersion across each simplification event:")
+        print(f"  {'run':<34} {'at':>6} {'cv before':>10} {'cv after':>10} "
+              f"{'ratio':>7}  collapsed")
+        print("  " + "-" * 78)
+        for rid, r in swept.items():
+            bad = bool(r["collapsed"] or r["bs_saturated"])
+            for e in r["zr_cv_ratio"]:
+                print(f"  {rid:<34} {e['at']:>6} {e['cv_before']:>10.4f} "
+                      f"{e['cv_after']:>10.4f} {e['ratio']:>7.3f}  "
+                      f"{'yes' if bad else 'no'}")
+        print("\nThe prediction is that ratio > 1 -- a distribution that BROADENED --\n"
+              "separates the collapsed runs from the intact ones. A distribution that\n"
+              "merely translates leaves beta's compromise attainable. If ratio does\n"
+              "not separate them, the identifiability account in\n"
+              "08-supervisory-review is wrong and should be withdrawn rather than\n"
+              "qualified.")
+    elif report:
+        print(f"\n[CD-27] no cross-frame sweep in any of {len(report)} runs -- they\n"
+              "        predate the instrument. The dispersion prediction cannot be\n"
+              "        tested on them, which is why it is reported as untested\n"
+              "        rather than as unsupported.")
 
     if args.json:
         Path(args.json).write_text(json.dumps(report, indent=2), encoding="utf-8")

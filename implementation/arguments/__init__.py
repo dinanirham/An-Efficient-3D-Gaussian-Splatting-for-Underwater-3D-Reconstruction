@@ -319,6 +319,13 @@ class OptimizationParams(ParamGroup):
         # Run-harness controls (not part of the method).
         self.allow_any_gpu = False   # bypass the A100 check; invalidates cross-cell contrasts
         self.diag_interval = 500     # iterations between unconditional diagnostic rows
+        # CD-27.  The cross-frame depth-range sweep: one render per training
+        # view, under no_grad, at this interval and unconditionally at every
+        # simplification boundary.  Coarser than diag_interval because it costs
+        # 15-25 renders rather than nothing.  0 disables the periodic sweep;
+        # the boundary sweeps still fire, since they are what the identifiability
+        # prediction is about.
+        self.zsweep_interval = 2500
 
         super().__init__(parser, "Optimization Parameters")
 

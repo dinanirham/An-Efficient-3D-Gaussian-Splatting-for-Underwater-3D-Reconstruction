@@ -38,6 +38,7 @@ from arguments import (
 )
 from utils.preflight import preflight_args, preflight_scene, write_manifest
 from utils.diagnostics import DiagnosticLogger
+from utils.depth_stats import normalise_depth, sweep_depth_ranges
 from source.simplify import accumulate_importance, cdf_keep_mask, sample_to_budget
 from source.quantize import AttributeQuantizer
 from source.storage import measure_model_size, write_compressed_model
@@ -326,32 +327,22 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
         else:
             image = rendered_image
 
-        depth_image = render_depth_pkg["depth"]
         # CD-12: the per-frame depth normalisation constants. Recorded because
         # beta is only identifiable relative to them, so any change in the
         # primitive population rescales the medium model's only spatial input.
-        depth_norm_min = None
-        depth_norm_max = None
-        if opt_params.filter_depth:
-            depth_image = depth_image / image_alpha
-            if torch.any(torch.logical_or(torch.isnan(depth_image), torch.isinf(depth_image))):
-                valid_depth_vals = depth_image[torch.logical_not(torch.logical_or(torch.isnan(depth_image), torch.isinf(depth_image)))]
-                if len(valid_depth_vals) == 0:
-                    print(f"[training] everything is nan")
-                    not_nan_max = 100.0
-                else:
-                    not_nan_max = torch.max(valid_depth_vals).item()
-                depth_image = torch.nan_to_num(depth_image, not_nan_max, not_nan_max)
-            depth_image = depth_image / opt_params.normalize_depth
-            if opt_params.norm_depth_max:
-                # Capture the constants BEFORE applying them: afterwards they
-                # are 0 and 1 by construction and carry no information.
-                depth_norm_min = depth_image.min().item()
-                depth_norm_max = depth_image.max().item()
-                if depth_image.min() != depth_image.max():
-                    depth_image = (depth_image - depth_image.min()) / (depth_image.max() - depth_image.min())
-                else:
-                    depth_image = depth_image / depth_image.max()
+        #
+        # CD-27: delegated to utils.depth_stats so that the optimiser and the
+        # cross-frame instrument cannot compute this by different paths.  A
+        # drifted second implementation would measure a depth range that beta
+        # is not actually fitted against -- the CD-22/CD-23 failure mode, where
+        # every forward value is right and only the destination is wrong.
+        depth_image, depth_norm_min, depth_norm_max = normalise_depth(
+            render_depth_pkg["depth"],
+            image_alpha,
+            opt_params.normalize_depth,
+            opt_params.filter_depth,
+            opt_params.norm_depth_max,
+        )
 
         if opt_params.use_gt_depth:
             assert viewpoint_cam.original_depth_image is not None
@@ -544,6 +535,24 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
 
         loss.backward()
 
+        def _zsweep():
+            """CD-27: the cross-frame depth-range distribution, or empty.
+
+            Iterates the training cameras in order rather than drawing from the
+            shuffled viewpoint stack, so the RNG stream is untouched and an
+            instrumented run stays comparable with the runs already completed.
+            """
+            return sweep_depth_ranges(
+                scene.getTrainCameras(),
+                gaussians,
+                render_depth,
+                pipe_params,
+                bg,
+                opt_params.normalize_depth,
+                opt_params.filter_depth,
+                opt_params.norm_depth_max,
+            )
+
         # CD-12: one unconditional diagnostic row every diag_interval steps.
         # Unconditional matters: upstream printed a primitive count only when
         # something was actually pruned, which makes silence ambiguous between
@@ -560,6 +569,12 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                 loss=loss.item(),
                 z_min=depth_norm_min,
                 z_max=depth_norm_max,
+                depth_ranges=(
+                    _zsweep()
+                    if opt_params.zsweep_interval > 0
+                    and iteration % opt_params.zsweep_interval == 0
+                    else None
+                ),
             )
 
         '''
@@ -604,6 +619,9 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                         at_model=at_model,
                         z_min=depth_norm_min,
                         z_max=depth_norm_max,
+                        # CD-27: whether the burst moved the distribution back
+                        # is the direct test of why it fails to restore beta.
+                        depth_ranges=_zsweep(),
                         note=f"steps={opt_params.m2_rewarm_steps}",
                     )
                 continue
@@ -816,6 +834,10 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                     at_model=at_model if opt_params.do_seathru else None,
                     z_min=depth_norm_min,
                     z_max=depth_norm_max,
+                    # CD-27: unconditional here regardless of the interval.
+                    # The pre/post pair across this boundary is the whole
+                    # measurement -- a run that skipped it would answer nothing.
+                    depth_ranges=_zsweep(),
                 )
 
                 importance, _ = accumulate_importance(
@@ -878,6 +900,15 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                     n_primitives=n_after,
                     bs_model=bs_model if opt_params.do_seathru else None,
                     at_model=at_model if opt_params.do_seathru else None,
+                    # CD-27.  This is the half of the measurement that did not
+                    # exist before: the row carries no z_min/z_max because the
+                    # last render predates the prune, so the only way to learn
+                    # what the population change did to the depth-range
+                    # distribution is to re-render against the new population.
+                    # Paired with the pre_simp sweep, this is the prediction's
+                    # test -- collapse should track the change in zr_cv, not
+                    # the change in primitive count.
+                    depth_ranges=_zsweep(),
                     note=note,
                 )
 

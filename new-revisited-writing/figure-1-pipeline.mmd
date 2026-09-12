@@ -1,0 +1,128 @@
+%% Figure 1 — Detailed methodology pipeline, portrait.
+%%
+%% Shape conventions (ANSI/ISO flowchart):
+%%   ([  ])  terminal        — start / end
+%%   [/  /]  data            — input or output
+%%   [   ]   process         — an operation
+%%   [[  ]]  predefined      — a named sub-procedure from a source method
+%%   {   }   decision        — a branch
+%%   [(  )]  stored data     — a persisted, hashed artifact
+%%   (( ))   connector       — ON-PAGE CONNECTOR. Two circles with the same
+%%                             letter are the same point in the flow; the reader
+%%                             matches them by label. Used instead of a long
+%%                             backward edge, which would cross the phase blocks.
+%%
+%% Colour encodes ORIGIN, not function. Badges M1/M2/M3/D/CD carry identity.
+%%
+%% NOTE on the schedule: the two training regimes are drawn as a BRANCH rather
+%% than as nested blocks, because the gates overlap. Density control runs to
+%% iteration 15 000 — i.e. 5 000 iterations INTO the physics-aware regime — so a
+%% nested block would misstate it.
+
+flowchart TB
+
+%% ─────────────────────────── ① PREPROCESSING ─────────────────────────
+subgraph PRE["① PREPROCESSING — offline, once per scene, frozen before training"]
+  direction TB
+  S([Start]) --> IN[/"SeaThru-NeRF corpus<br/>4 scenes · 88 images · COLMAP poses"/]
+  IN --> UND["<b>CD</b> · Undistort OPENCV → PINHOLE"]
+  UND --> SPL["Hold out every 8th frame by index"]
+  SPL --> DAT[/"75 training views · 13 held-out frames"/]
+end
+
+DAT --> Q1{"M1<br/>enabled?"}
+
+%% ─────────────────────────── ② INITIALIZATION ────────────────────────
+subgraph INI["② INITIALIZATION"]
+  direction TB
+  Q1 -->|"no · baseline"| SFM[/"COLMAP sparse cloud · ~26 000 points"/]
+  Q1 -->|"yes · M1"| ROMA[["<b>M1</b> · RoMa dense correspondence"]]
+  ROMA --> TRI["Triangulate"]
+  TRI --> Q2{"Well<br/>conditioned?"}
+  Q2 -->|"parallax &lt; 1°<br/>or behind camera"| REJ["<b>CD</b> · Reject — 24% of triangulations"]
+  Q2 -->|"accept"| PLY[("Hashed dense cloud · 244k – 294k points")]
+  SFM --> GAU["Initialise Gaussian primitives"]
+  PLY --> GAU
+end
+
+GAU --> ENT(("A"))
+
+%% ─────────────────────────── ③ TRAINING ──────────────────────────────
+subgraph TRN["③ TRAINING — 30 000 iterations"]
+  direction TB
+
+  ENT --> RAS["Rasterise → radiance J, depth Z, alpha"]
+
+  RAS --> QM{"i &gt; 10 000?<br/><b>image formation model</b>"}
+
+  QM -->|"NO · geometry-only regime"| L1["Loss vs the <b>RAW render</b><br/><i>veiling haze must be paid for by geometry</i>"]
+
+  QM -->|"YES · physics-aware regime"| NRM["Normalise depth per frame by its own min / max"]
+  NRM --> CMP["<b>Image formation model</b><br/>Î = J·exp&lpar;−β_att·Z&rpar; + σ&lpar;B∞&rpar;·&lpar;1−exp&lpar;−β_bs·Z&rpar;&rpar;"]
+  CMP --> L2["Loss vs the <b>COMPOSED image</b>"]
+
+  L1 --> BP["Backpropagate"]
+  L2 --> BP2["Backpropagate → geometry <b>and</b> 9 medium scalars"]
+
+  BP --> ACC{"Densification signal<br/>composition"}
+  BP2 --> ACC
+  ACC -->|"baseline"| SIG["accumulate image <b>+ alpha</b> gradients"]
+  ACC -->|"D"| SIGD["<b>D</b> · accumulate image gradients only<br/><i>alpha detached · cell A0D, not yet run</i>"]
+
+  SIG --> QD{"i &lt; 15 000?"}
+  SIGD --> QD
+  QD -->|"yes"| DC{"Density<br/>control"}
+  DC -->|"baseline"| ADC["Adaptive density control — clone · split · prune"]
+  DC -->|"M1"| PRN["<b>M1</b> · Prune only — <i>densification disabled</i>"]
+
+  QD -->|"no"| EV{"Scheduled<br/>event?"}
+  ADC --> EV
+  PRN --> EV
+
+  EV -->|"M2 · i = 15 000 / 20 000"| SMP[["<b>M2</b> · Importance-weighted simplification<br/>cut to 200 000 primitives"]]
+  SMP --> RWM["<b>CD</b> · Medium re-identification burst<br/><i>measured insufficient</i>"]
+  EV -->|"M3 · i ≥ 22 000"| QNT[["<b>M3</b> · Quantization-aware training<br/>3 codebooks · straight-through estimator"]]
+  EV -->|"none"| NXT
+
+  RWM --> NXT{"i = 30 000?"}
+  QNT --> NXT
+  NXT -->|"no · i ← i+1"| RET(("A"))
+end
+
+%% ─────────────────────────── ④ EVALUATION ────────────────────────────
+NXT -->|"yes"| OUT[/"Trained model + 9 medium scalars"/]
+
+subgraph EVA["④ EVALUATION"]
+  direction TB
+  OUT --> FID["Fidelity on held-out frames<br/>PSNR both conventions · SSIM · LPIPS"]
+  OUT --> EFF["Efficiency<br/>count · storage · fps · peak memory"]
+  OUT --> DIA["<b>CD</b> · Diagnostics<br/>medium collapse · occupancy · detached population"]
+  FID --> REC[("Per-run record · 45 fields, hashed provenance")]
+  EFF --> REC
+  DIA --> REC
+  REC --> END([End])
+end
+
+%% ─────────────────────────── STYLE ───────────────────────────────────
+classDef inherited fill:#EDF2F2,stroke:#94A9A8,stroke-width:1px,color:#10201F
+classDef mech      fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,color:#10201F
+classDef supp      fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,stroke-dasharray:5 3,color:#10201F
+classDef ours      fill:#FBEFEC,stroke:#C8462E,stroke-width:1.5px,color:#10201F
+classDef medium    fill:#EFEAF6,stroke:#7A5CA8,stroke-width:1.5px,color:#10201F
+classDef gate      fill:#FFFFFF,stroke:#94A9A8,stroke-width:1px,color:#10201F
+classDef term      fill:#10201F,stroke:#10201F,color:#FFFFFF
+classDef conn      fill:#FFFFFF,stroke:#48605F,stroke-width:2px,color:#10201F
+
+class S,END term
+class IN,DAT,SFM,SPL,GAU,RAS,L1,L2,BP,BP2,SIG,ADC,FID,EFF,OUT,PLY,REC inherited
+class ROMA,TRI,PRN,SMP,QNT mech
+class SIGD supp
+class UND,REJ,RWM,DIA ours
+class NRM,CMP medium
+class Q1,Q2,QM,ACC,QD,DC,EV,NXT gate
+class ENT,RET conn
+
+style PRE fill:#F4F7F7,stroke:#CFDBDA,color:#48605F
+style INI fill:#F4F7F7,stroke:#CFDBDA,color:#48605F
+style TRN fill:#F1F5F5,stroke:#CFDBDA,color:#48605F
+style EVA fill:#F4F7F7,stroke:#CFDBDA,color:#48605F

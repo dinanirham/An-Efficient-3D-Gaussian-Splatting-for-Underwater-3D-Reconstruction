@@ -79,9 +79,10 @@ could be answered by a two-configuration experiment. And that pruning and quanti
 interact sub-additively while initialization and quantization do not, the first inherited from
 another paper's founding premise and testable in both directions.
 
-Two design hazards are controlled in advance rather than discovered: a primitive budget set
-from the baseline's converged count so that it binds in every configuration, preventing two
-cells from silently collapsing onto two others; and the disabling of the quantization
+Two design hazards are controlled in advance rather than discovered: a primitive budget fixed
+before the campaign, below the smallest population any other enabled mechanism produces, so
+that it binds in every configuration, preventing two cells from silently collapsing onto two
+others; and the disabling of the quantization
 mechanism's own count-reduction machinery, without which the pruning and quantization factors
 would not be independent.
 
@@ -105,8 +106,9 @@ The results chapter inherits four obligations, in order of priority.
 **First, environment validity.** The untreated configuration must reproduce the baseline's
 published reconstruction quality on these four scenes within run-to-run variation. Until it
 does, no other configuration is interpretable, and this is the first check rather than the
-last. It also produces the converged primitive count that the pruning budget depends upon and
-that no publication of the baseline reports.
+last. It also produces the converged primitive count that no publication of the baseline
+reports — the quantity the pruning budget was originally to be derived from, and which is now
+recorded for its own sake rather than as a precondition.
 
 **Second, the identifiability hypothesis.** The depth-normalisation constants and medium
 coefficients across the simplification boundary must be reported, for the pruning

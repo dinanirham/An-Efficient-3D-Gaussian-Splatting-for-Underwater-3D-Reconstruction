@@ -135,8 +135,10 @@ check that it stayed disabled.
 
 **A degenerate cell, controlled.** If dense initialization converges below the pruning budget,
 the pruning step becomes a no-op and two configurations collapse onto two others, producing a
-spurious null interaction. The budget is set from the untreated baseline's converged count so
-that it binds everywhere, and whether it bound is reported per run.
+spurious null interaction. The budget is fixed before the campaign, below the smallest
+population any other enabled mechanism produces, so that it binds everywhere; preflight
+refuses any run where it would not, reading the population from the cloud's file header, and
+whether it bound is reported per run.
 
 **Silent no-ops.** Two of the three mechanisms are inert at their upstream defaults — one
 defaults its training-epoch count to zero, the other defaults its quantization start iteration
@@ -207,9 +209,12 @@ and image-weighted scene means; primitive counts reported as rendered primitives
 reported as an absolute figure with the per-primitive normalisation stated alongside any
 ratio.
 
-**A stated sequencing dependency.** The untreated configuration runs first, on all scenes and
-seeds, because its converged primitive count sets the pruning budget and is not reported
-anywhere in the baseline's publication.
+**A sequencing dependency, since removed.** The untreated configuration was originally
+required to run first, on all scenes and seeds, because its converged primitive count was to
+set the pruning budget. Fixing the budget in advance by the binding rule removed that
+requirement. The untreated configuration still runs first, but now as a validity check rather
+than as a precondition, and the count it produces — unreported in any publication of the
+baseline — is recorded for its own sake.
 
 ## 3.8.7 What reproducibility cannot reach here
 

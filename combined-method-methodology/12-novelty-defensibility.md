@@ -11,9 +11,18 @@
 > discontinuity injected from outside the objective. Every well-posedness mechanism SeaSplat
 > provides (gradient detachment, alternating optimization, global homogeneity) defends
 > against the optimizer *finding* D-2; **none defends against D-2 being handed to it.**
-> This work identifies that failure, specifies the fix (a medium-only re-identification burst
-> immediately after each population change), and situates it inside a factorial study of
-> three efficiency mechanisms on a physically-grounded underwater baseline.
+> This work identifies that failure, specifies a candidate fix (a medium-only
+> re-identification burst immediately after each population change), **measures the failure at
+> n=12 against a 12-run control, and measures the candidate fix to be insufficient**, and
+> situates both inside a factorial study of three efficiency mechanisms on a
+> physically-grounded underwater baseline.
+
+**A note on what that second measurement does to the claim.** The contribution is the
+identified coupling and the instrument that detects it, not the remedy — CD-6 is reported as
+a negative result about this work's own proposal `[03-claim-validity-ledger E.6]`. A
+diagnosis without a working cure is a weaker contribution than a diagnosis with one, and the
+honest framing says so rather than letting the specified-but-untested remedy stand in for a
+demonstrated one.
 
 **Claim type: (c) — a required well-posedness / integration fix — supported by (a), a
 genuine prior-art gap. Claim (b) is not available: no combined-method measurements exist in
@@ -122,10 +131,17 @@ This is the objection to answer, and it has three parts.
 
 ### Part 1 — "you have not measured anything"
 
-**The evidence does not answer this. It is conceded.** `08-computational-profile.md` §8.0
-records it as a fact rather than working around it: no combined-method metrics, logs,
-checkpoints, or renders exist anywhere in the evidence base available to this pass. Every
-efficiency and quality cell reads `NO RESULTS FOUND`.
+**As written, this was conceded in full.** `08-computational-profile.md` §8.0 recorded it
+as a fact rather than working around it: at the time of the synthesis pass, no
+combined-method metrics, logs, checkpoints, or renders existed anywhere in the evidence
+base, and every efficiency and quality cell read `NO RESULTS FOUND`.
+
+**The objection has since been half answered.** §8.3 is populated for A0–A3 at twelve
+runs per cell, with per-scene dispersion, and A4 has three runs on one scene. What remains
+unmeasured is the part the objection was really about: **no interaction term has been
+estimated**, so the compound cells that would distinguish composition from accumulation
+are still open. The concession below therefore stands for claim (b) and no longer stands
+for the main effects.
 
 What the work does instead is make the measurement obligation **precise**: the eight-cell
 matrix, the additive null hypothesis and its two contrast forms (`10-reproducibility.md`

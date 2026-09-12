@@ -2,7 +2,14 @@
 
 **Working title of the method:** *An Efficient 3D Gaussian Splatting for Underwater 3D
 Reconstruction* — SeaSplat's physically-grounded underwater 3DGS baseline extended with
-three orthogonal efficiency mechanisms, applied individually, pairwise, and fully stacked.
+three efficiency mechanisms, applied individually, pairwise, and fully stacked.
+
+> **The title carries a method claim the evidence does not support, and it is being
+> withdrawn.** `new-revisited-writing/04-repositioning.md` (Framing A, approved
+> 2026-09-10) reframes the work as a controlled factorial *study* rather than an efficient
+> *method*. The mechanisms are also **not orthogonal on this baseline** — that is the
+> study's central finding rather than an aside. §1 develops it and
+> `13-campaign-addendum` §13.13 measures it.
 
 **Location rationale.** This folder is `my-research/combined-method-methodology/`. It is a
 new sibling of the nine reference-method folders, deliberately *not*
@@ -55,11 +62,18 @@ nine breakdowns, so a reader can always trace back one more level:
   source repository, and not measured. Every such line is a claim about what *would have to*
   be done, not a report of what *was* done.
 
-The `[proposed integration]` tag is the honest core of this document. The combined method
-has no published paper and — as Phase 0 established — **no measured results are present
-anywhere under `my-research/` outside the two excluded paths**. Anything that would normally
-be `[paper]` or `[repo]` for the combined method is therefore either inherited from a source
-or `[proposed integration]`.
+The `[proposed integration]` tag is the honest core of this document *as it was first
+written*. The combined method has no published paper, and at the time of the synthesis pass
+**no measured results existed anywhere under `my-research/` outside the two excluded
+paths**, so anything that would normally be `[paper]` or `[repo]` for the combined method
+was either inherited from a source or `[proposed integration]`.
+
+**That is no longer the state.** The campaign has since produced measured results for cells
+A0–A3 at twelve runs each, plus A4 on one scene, and a fifth tag is now in use
+throughout: `[measured n=k]`, where `k` is the number of runs behind the statement. Where a
+`[proposed integration]` has been executed and measured, the measurement supersedes the
+proposal — including where it **refuted** it, which is what happened to the most
+substantive one (CD-6, `03-claim-validity-ledger` E.6).
 
 ---
 
@@ -125,8 +139,10 @@ rasterized depth `Ẑ` — before the photometric loss is applied. The medium is
 scalars** for the whole scene, kept well-posed by five auxiliary priors, systematic gradient
 detachment, and a bursty alternating-optimization schedule. Onto this baseline the combined
 method grafts three mechanisms that are orthogonal *in air*: **(1)** EDGS's one-shot dense
-initialization, which triangulates RoMa correspondences into ~10⁶ Gaussians and switches
-densification off; **(2)** Mini-Splatting's importance-weighted stochastic subsampling to a
+initialization, which triangulates RoMa correspondences into a dense cloud — **244 000
+to 294 000 points on this corpus** `[measured n=1/scene]`, far below EDGS's own ~10⁶,
+because this corpus has 15–25 training views and because CD-26's parallax filter rejects
+24% of all triangulations — and switches densification off; **(2)** Mini-Splatting's importance-weighted stochastic subsampling to a
 fixed primitive budget, optionally with its depth-reinitialization densifier; and **(3)**
 CompGS-VQ's K-means vector quantization of per-Gaussian attributes. The eight resulting
 configurations form a 2³ factorial matrix.
@@ -143,9 +159,14 @@ and they are the basis of the novelty claim assessed in `12-novelty-defensibilit
 
 **The claim type the evidence supports is (c) — a required well-posedness / integration
 fix — supported by (a), a genuine prior-art gap. Claim (b), a measured non-additive
-interaction effect, is *not* supported: no combined-method measurements exist in the
-evidence base available to this pass.** See `12-novelty-defensibility.md` for the reasoning
-and `open-questions.md` for what would close it.
+interaction effect, is *still not* supported**, though the reason has changed: measurements
+now exist for the single-mechanism cells, but no interaction term has been estimated, and
+the measured run-to-run dispersion means an interaction — a difference of differences,
+carrying roughly twice the variance of a main effect — may not clear the noise floor even
+after all 108 runs. **A null interaction and an unresolvable one are different findings**,
+and the analysis tooling emits `UNDETERMINED` rather than rounding the second to the first.
+See `12-novelty-defensibility.md` §12.6 for the reasoning and `open-questions.md` for
+what would close it.
 
 > **Read `13-campaign-addendum.md` first if you are reading this after implementation.**
 > Sections 01–12 were a synthesis pass written *before any code ran*. Section 13 records what

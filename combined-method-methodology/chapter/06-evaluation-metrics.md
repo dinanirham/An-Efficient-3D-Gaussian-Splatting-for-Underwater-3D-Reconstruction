@@ -182,8 +182,18 @@ device-independent and is the quantity to compare against a method that reports 
 
 ### Rendering frame rate and peak memory
 
-Frame rate is measured over the held-out views on the named device. Peak memory is recorded
-for both training and rendering.
+Frame rate is measured over the held-out views on the named device.
+
+**Peak memory is recorded for rendering only.** The figure is taken during the dedicated
+rendering pass, after the allocator's peak counter has been reset, so it measures what
+displaying the model costs rather than what producing it cost. Training peak memory is *not*
+instrumented. It could be, cheaply, but it would be a poor measurement in this system: the
+training peak is set by the largest transient allocation anywhere in a heterogeneous loop
+whose composition differs by configuration — three rasterization passes, an importance
+accumulation over every training view at two scheduled iterations, and a codebook update at a
+third — so a single number would compare configurations that spend their memory on
+different things. The rendering figure is the one that transfers to a deployment question, and
+it is the one reported.
 
 One expectation should be set in advance to avoid a misreading. The quantization mechanism's
 published two-to-three-fold rendering speedup comes from its opacity sparsity penalty and the
@@ -215,12 +225,70 @@ simplification event. These test the study's central hypothesis directly and are
 instrument that can distinguish "pruning cost quality" from "pruning broke medium
 identifiability", since both present identically in the quality metrics.
 
-**Water-column diagnostics.** The population of high-opacity, low-texture primitives near the
-camera, as a proxy for the floater degeneracy the baseline's opacity prior exists to suppress.
-A competing underwater method reports an analogous ratio and shows it moving from over eight
-per cent to just over one per cent when its pruning branch is enabled, which establishes both
-that the quantity is measurable and that it is sensitive to the kind of intervention studied
-here.
+**Geometric extent and occupancy.** This replaces a diagnostic specified earlier in the
+design and never built. The original specification was a population count of high-opacity,
+low-texture primitives near the camera, by analogy with a competing underwater method that
+reports a floater ratio moving from over eight per cent to just over one per cent when its
+pruning branch is enabled. That specification was abandoned for a practical reason: "near the
+camera" and "low-texture" both require thresholds with no principled value on this corpus, and
+the resulting number would have been a tuned quantity presented as a measurement. What was
+built instead measures the *geometry of the primitive cloud itself*, which needs no such
+choice, and it is described here in the form it actually takes.
+
+Five families of quantity are computed from each stored model, all in the scene's own
+coordinate units and therefore comparable only within a scene:
+
+*Extent.* The full axis-aligned bounding box, and a **robust box** taken between the first and
+ninety-ninth percentile of each axis independently — the scene proper. The ratio of the two,
+per axis, is the **inflation**, and the worst axis is named. A cloud whose geometry is compact
+but whose bounding box is enormous has inflation concentrated on one or two axes.
+
+*Opacity gating.* Every extent quantity is computed twice: over all primitives, and over
+**rendered** primitives only, defined as opacity at or above 0.05. The threshold is not tuned
+to an outcome; it marks the point below which a primitive contributes nothing visible to an
+image. The distinction is load-bearing rather than cosmetic, because **a bounding box held
+open by invisible material is a different pathology from one held open by rendered material**,
+and the two call for different remedies. On this corpus the distinction separated a diffuse
+low-opacity halo on one scene, where gating raised occupancy seventy-seven-fold, from
+genuinely rendered detached clusters on two others.
+
+*Occupancy.* The fraction of a fixed sixty-four-cubed voxel grid, spanning the full box, that
+contains at least one primitive. This exists because the percentile box has a blind spot that
+took a viewer to notice: **it only catches a tail thinner than its own percentile.** At two
+million primitives the outer one per cent is twenty thousand points, so a dense detached blob
+of that size sits *inside* the robust box and never registers as inflation at all, while being
+immediately obvious to anyone rotating the model in a viewer. Occupancy is the measure that
+matches what the eye sees — a low value means the box is being held open by material that
+fills almost none of it.
+
+*Radial concentration.* The share of primitives within two, five and ten times the median
+radius about the **median** primitive position, the median rather than the mean because the
+statistic must not be dragged by the very outliers it is meant to detect. A cloud whose box is
+held open by detached clusters shows a high share near the centre together with a populated
+tail far beyond it — which is a different signature from a cloud that is merely diffuse.
+
+*Radial spread.* The fiftieth, ninetieth, ninety-ninth and hundredth percentiles of that
+radius, and the ratio of the last to the first. This single ratio is the most legible summary:
+a value in the low tens is an ordinary scene, and four figures indicate a triangulation
+placing primitives at distances unrelated to the geometry.
+
+**What the protocol found is why it is reported.** Across the untreated baseline the bounding
+box is between ninety-six and ninety-nine point nine six per cent empty, and the emptiness has
+**two mechanisms that no single number separates** — detached rendered clusters beyond ten
+times the median radius with a zero gap below them, and a diffuse invisible halo. One of the
+four scenes has neither and serves as the control. The simplification mechanism removes both,
+and removes them *incidentally*: its importance metric normalises by projected area, which was
+designed to suppress sky, and near-camera haze and diffuse halos present to that metric the
+same way sky does.
+
+**It also makes one reported efficiency figure ambiguous, which is a result in itself.**
+Primitive-count reduction under simplification is nineteen-fold measured raw
+`[measured n=12]`. Gating at the same opacity threshold, the untreated baseline is only about
+thirty-six per cent rendered while the simplified model is about ninety-three per cent, so the
+reduction in *rendered* primitives is closer to seven-fold `[measured n=1 per scene]`. Both
+figures are honest and they answer different questions — how much storage was saved, and how
+much of the model was ever contributing. A reduction ratio quoted without saying which one it
+is cannot be interpreted, and this study reports both.
 
 **Qualitative restoration comparison.** Side-by-side restored renders across configurations,
 presented as evidence about a quantity with no ground truth and labelled accordingly. Every
@@ -243,7 +311,7 @@ primitive count, observable directly; quantization targets bits per primitive, o
 model size. Frame rate is the one measure all three affect, and it is the one that matters
 most for the deployment scenario that motivates the study.
 
-**Two instrument failures are acknowledged rather than worked around.**
+**Three limitations are acknowledged rather than worked around.**
 
 The first is structural and cannot be fixed. The restored image is what a
 physically-grounded method exists to produce, and it has no ground truth. Quantization error
@@ -266,6 +334,27 @@ low values and squared error is correspondingly small. That is a *second, indepe
 incomparability beyond the signal-to-noise convention, and both are stated wherever a
 cross-method number appears.
 
+The third concerns the geometric protocol of §3.7.4 and bounds what may be claimed for it.
+**The geometric measures have no demonstrated external validity.** The obvious hypothesis —
+that a geometrically pathological model also has a perturbed medium model, so that extent
+could serve as a cheap proxy for identifiability — was tested and **failed**. The correlation
+between detached primitive fraction and medium-coefficient perturbation came out at minus
+zero point four zero: not weak, but the **wrong sign**. The more general form, occupancy
+against the same perturbation, reached minus zero point eight zero at a significance of zero
+point three three three, which on four scenes is not evidence of anything. The two diagnostics
+disagree, and the disagreement is recorded as a negative result rather than resolved by
+choosing the flattering one.
+
+The consequence is a restriction on how the protocol is used, not a reason to drop it. It is
+justified **by the failure modes it detects directly** — an eighty-thousand-unit bounding box,
+a cloud ninety-nine point nine per cent empty, a maximum radius twenty-three thousand times
+the median — each of which is a defect on its own terms and each of which is invisible to
+every photometric metric in §3.7.2. It is *not* justified as a proxy for medium health, it is
+never substituted for the medium-parameter trajectories that test the central hypothesis, and
+no claim in this study rests on a correlation between the two. The honest description is a
+**direct instrument for a failure mode the fidelity metrics cannot see**, which is a narrower
+claim than the one originally hoped for and is the one the measurements support.
+
 ## 3.7.6 Summary of the metric hierarchy
 
 **Primary — fidelity:** peak signal-to-noise ratio under both conventions, structural
@@ -274,13 +363,17 @@ in-medium render against the held-out capture; reported as mean and standard dev
 three seeds, per scene and aggregated under both weightings.
 
 **Primary — efficiency:** rendered primitive count at five checkpoints, complete model size in
-megabytes, training wall-clock and effective optimizer steps, rendering frame rate, peak
-memory for training and rendering.
+megabytes, training wall-clock and effective optimizer steps, rendering frame rate, and peak
+rendering memory. Training peak memory is not instrumented, for the reason given in
+§3.7.3.
 
 **Secondary:** restored-image self-consistency against the unquantized model, medium
-parameter and depth-normalisation trajectories, water-column floater diagnostics, and
-qualitative restoration comparisons.
+parameter and depth-normalisation trajectories, geometric extent and occupancy — full and
+opacity-gated bounding boxes, per-axis inflation, voxel occupancy, radial concentration and
+spread — and qualitative restoration comparisons.
 
 **Not reported as a headline:** any compression ratio without its per-primitive
 normalisation stated; any timing figure without its device named; any signal-to-noise value
-without its convention labelled.
+without its convention labelled; any primitive-count reduction without saying whether it is
+raw or opacity-gated; and no geometric quantity as a proxy for medium identifiability, which
+it has been measured not to be.

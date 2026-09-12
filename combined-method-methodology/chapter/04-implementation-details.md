@@ -198,8 +198,9 @@ the baseline's opacity prior.
 ### Pruning mechanism
 
 Simplification at fifteen and twenty thousand iterations. The **primitive budget replaces the
-upstream sampling ratio** and is set from the untreated baseline's converged primitive count,
-so that it binds in every configuration; the realised post-simplification count is reported
+upstream sampling ratio** and is fixed before the campaign at two hundred thousand primitives
+by the binding rule of §3.6.7 — below the smallest population any other enabled mechanism
+produces — so that it binds in every configuration; the realised post-simplification count is reported
 per run, because the subsampling is stochastic and driven by device-computed probabilities and
 therefore varies run to run even at a fixed seed. The deterministic prune at the second event
 retains the top ninety-nine per cent of cumulative importance mass. The importance metric is

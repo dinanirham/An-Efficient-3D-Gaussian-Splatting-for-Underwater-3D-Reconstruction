@@ -164,7 +164,7 @@ was doing exactly what it was written to do.
 | **CD-22** | **Share one `screenspace_points` buffer between the colour pass and the alpha probe**, so `α`'s gradient reaches density control | CD-13 solved alpha's *value* and never asked where its *gradient* went. SeaSplat reads `α` from the colour pass, so `α`-derived losses feed `add_densification_stats`; a probe with its own buffer silently removes that term. Every forward-output check passed throughout `[05-constraints.md §5.6]` | none in isolation — but see CD-23, which shows this fix alone is insufficient and slightly harmful |
 | **CD-23** | **Give `α` its own `[0,1,0]` probe** and leave depth on a separate pass, so density control sees image + `α` and **not** depth | Sharing the combined `[z,1,0]` probe admits depth-loss gradients that SeaSplat's separate depth pass excludes. The two partially cancel: image-only gives 743 457 primitives, image+`α`+depth gives **635 038** — *worse* than not fixing it — and image+`α` reproduces vanilla's 4.46M. That ordering is not derivable from the source; it had to be measured `[measured n=1 each]` | **a third rasterization per iteration.** Falls on every cell equally, so it cancels in every between-cell contrast, but it is visible in absolute wall-clock and wall-clock is a reported result. Behind `separate_alpha_probe`, recorded in every manifest |
 | **CD-24** | **Measure rendering throughput and peak render memory**, over the held-out views, colour pass only, CUDA-synchronised, after discarded warm-up frames | The methodology chapter asserted frame rate "is measured"; nothing measured it. Two stated predictions — that A3 shows ≈no frame-rate gain, and that gains from count reduction are sub-linear — had no instrument behind them. Adding the instrument was also not enough: `analyse.py`'s default metric list omitted it, so the contrasts that actually run would still have skipped it | ~1 s per 78-minute run. **An instrument is not finished until something reads it** |
-| **CD-25** | **`n_bud` fixed pre-campaign by a binding rule**, replacing CD-5's "set from A0's converged count" | A0's median is 2 482 200, so any fraction of it exceeds every M1 cloud (299 368 – 471 531) and M2 would be inert under M1 — A4 ≡ A1, A7 ≡ A5, read as a null interaction. The rule is: `n_bud` below the smallest count any other enabled mechanism produces. It also removes S1 as a hard prerequisite for S2 | none. Preflight enforces it from the cloud's PLY header and has already rejected one wrong value `[repo: utils/preflight.py]` |
+| **CD-25** | **`n_bud` fixed pre-campaign by a binding rule**, replacing CD-5's "set from A0's converged count" | A0's median is 2 482 200, so any fraction of it exceeds every M1 cloud (299 368 – 471 531 as measured when CD-25 was written; 244 197 – 293 642 after CD-26 regenerated them, which only widens the gap) and M2 would be inert under M1 — A4 ≡ A1, A7 ≡ A5, read as a null interaction. The rule is: `n_bud` below the smallest count any other enabled mechanism produces. It also removes S1 as a hard prerequisite for S2 | none. Preflight enforces it from the cloud's PLY header and has already rejected one wrong value `[repo: utils/preflight.py]` |
 
 > **CD-22 and CD-23 are the two that mattered**, and they are a matched pair: CD-22 alone
 > makes the result *worse* than leaving the defect in place. Neither was reachable from the
@@ -337,3 +337,110 @@ Requires regenerating every dense cloud and re-running every M1 cell. Guarded by
 rejects the ill-conditioned pair, **and that the existing filters accept it** —
 so the reason for the deviation is encoded in a test rather than described in a
 comment.
+
+---
+
+## 6.9 CD-27 — the instrument the central hypothesis needed and did not have
+
+*Added after the supervisory review. Unlike CD-22 … CD-26 this corrects no
+defect in anyone's code: every line involved did exactly what its specification
+said. **The specification was wrong**, which is why no amount of checking the
+implementation against it could have found this.*
+
+### The argument that produced it
+
+The medium coefficients enter the image formation model only through the
+product `β·Ẑ`, and `Ẑ` is the rendered depth renormalised by **each frame's
+own** extrema `[repo: train.py:349-352]`. Imposing the physical attenuation law
+on frame *f* therefore requires
+
+```
+β = β_phys · ( M_f − m_f )
+```
+
+whose right-hand side depends on the frame. A single scene-global `β` cannot
+satisfy that across frames unless the depth range is constant across the
+training set, and nothing makes it so. **The fitted `β` is a compromise over the
+*distribution* of per-frame depth ranges** — a function of the primitive
+population, not of the medium alone.
+
+Two things the project already recorded separately turn out to be this one fact:
+that `β` "carries no physical interpretation, being expressed in normalised
+per-frame depth" (`chapter/09-summary.md`), and that `β` collapses at
+simplification boundaries (E.2). A parameter defined only relative to a
+normalisation must move when the normalisation moves. The boundary did not break
+the medium model; it revealed that the model had never been identified.
+
+### What was wrong with CD-12
+
+CD-12 logs `z_min` and `z_max` — from the **single training view sampled at that
+iteration**. That is one draw from the distribution the argument is about, not a
+statistic of it, so the logged `z_range` varies frame to frame independently of
+anything a mechanism does. Two consequences:
+
+- **`z_range` is noisy by construction.** Any trend read from it conflates the
+  sampled frame with the population change. Nothing in the results documents
+  currently rests on such a trend; that was verified rather than assumed.
+- **The quantity the hypothesis is about was never measured** — not once across
+  the campaign, because nothing in twenty-six methodology documents, a claim
+  ledger, or a reproduction checklist asked for it.
+
+### What was added
+
+A sweep over every training view at each checkpoint, recording the distribution
+of `(m_f, M_f)` rather than one sample: eight columns `zr_n_views`, `zr_mean`,
+`zr_sd`, **`zr_cv`**, `zr_min`, `zr_max`, `zm_mean`, `zM_mean`
+`[repo: utils/depth_stats.py]`. `zr_cv` is the quantity of interest —
+dimensionless, so comparable across scenes whose units differ.
+
+Fires unconditionally at `pre_simp`, `post_simp` and `rewarm_end`, and
+periodically at `zsweep_interval` (default 2 500, coarser than `diag_interval`
+because it costs renders rather than nothing). `post_simp` matters most: that
+row previously carried **no** depth constants at all, because the last render
+predates the prune, so re-rendering against the new population is the only way
+to see what the population change did.
+
+**Cost.** 15–25 renders per sweep under `no_grad`; well under a second against a
+run of roughly fifty minutes.
+
+### The prediction it exists to test
+
+> Collapse at a simplification event is governed by the **change in cross-frame
+> dispersion** of the depth range — not by primitive count, not by the count
+> ratio, not by the mean depth range. A distribution that merely translates
+> leaves `β`'s compromise attainable; one that broadens does not.
+
+This is what separates the restated claim from the working one, and it also
+supplies the missing mechanism for E.20 (M1's dense cloud is uniform across
+views; M2's subsampling removes near-camera material *differentially*, so equal
+counts move the distribution unequally) and for the seed-conditioned bistability
+(which frames move is a draw, so whether the post-event compromise is attainable
+is a draw). `tools/medium_collapse.py` reports the pre/post dispersion ratio
+beside the collapse verdict — **an instrument is not finished until something
+reads it** (the CD-24 lesson), and this one is falsifiable in the direction that
+would sink the account rather than confirm it.
+
+### Two invariants, both tested
+
+`tools/verify_depth_stats.py`, 13 checks, CPU-only.
+
+- **T7 — one implementation.** `train.py` now delegates its normalisation to the
+  same function the sweep calls. A drifted second copy would measure a depth
+  range that `β` is not actually fitted against: the CD-22/CD-23 failure mode,
+  where every forward value is right and only the destination is wrong. The
+  extraction immediately caught one such divergence — the degenerate
+  `min == max` branch divides by the maximum rather than leaving the frame
+  alone, and T6 now pins that value rather than merely asserting finiteness.
+- **T8 — no randomness consumed.** The sweep iterates the camera list in order
+  rather than drawing from the shuffled viewpoint stack, so an instrumented run
+  stays comparable with the runs already completed. A sweep that advanced the
+  RNG stream would invalidate a campaign silently.
+
+### Status
+
+**Runs completed before this instrument cannot be retrofitted** — the
+distribution was never stored and the models alone cannot recover it at the
+checkpoints that matter. The prediction is therefore *untested*, which is
+reported as untested and not as unsupported. It applies from the next run
+onward; S5 and S6 will carry it, and S4 will if it can be paused cheaply.
+

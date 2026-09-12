@@ -12,6 +12,15 @@ spatial input, mid-training, by a factor nothing measures -- which is formally
 indistinguishable from a change in the coefficients themselves. Logging
 `z_min`/`z_max` across a simplification event is the direct test.
 
+`z_min`/`z_max` come from the **single view sampled at that iteration**, so
+they are one draw from a distribution rather than a statistic of it, and they
+vary frame to frame independently of anything a mechanism does. Any trend read
+from `z_range` alone therefore carries an uncontrolled term. The `zr_*` columns
+(CD-27) carry the cross-frame distribution instead, which is the quantity the
+identifiability argument is actually about -- a scene-global beta is fitted
+against a per-frame renormalisation, so it tracks the *dispersion* of the
+per-frame ranges, not any one of them. See `utils/depth_stats.py`.
+
 **Medium coefficients.** A discontinuity in beta at a simplification boundary is
 the signature of that failure; its absorption inside the re-identification
 burst is the signature of the fix. Under quantization, drift relative to an
@@ -41,9 +50,18 @@ class DiagnosticLogger:
         "iteration",
         "event",          # periodic | pre_simp | post_simp | rewarm_end | init | settled
         "n_primitives",
-        "z_min",
+        "z_min",          # single sampled view -- one draw, not a statistic
         "z_max",
         "z_range",
+        # CD-27: the cross-frame distribution, swept over all training views.
+        "zr_n_views",
+        "zr_mean",
+        "zr_sd",
+        "zr_cv",           # the predicted driver of medium collapse
+        "zr_min",
+        "zr_max",
+        "zm_mean",
+        "zM_mean",
         "alpha_mean",
         "beta_att_r", "beta_att_g", "beta_att_b",
         "beta_bs_r", "beta_bs_g", "beta_bs_b",
@@ -110,6 +128,7 @@ class DiagnosticLogger:
         note: str = "",
         z_min: Optional[float] = None,
         z_max: Optional[float] = None,
+        depth_ranges: Any = None,
     ) -> None:
         """Write one row.
 
@@ -129,6 +148,12 @@ class DiagnosticLogger:
             row["z_max"] = round(float(z_max), 8)
         if z_min is not None and z_max is not None:
             row["z_range"] = round(float(z_max) - float(z_min), 8)
+
+        # CD-27. Absent on most rows by design: the sweep costs one render per
+        # training view and fires at the boundaries plus a coarse interval, so
+        # a blank here means "not swept", never "dispersion was zero".
+        if depth_ranges is not None:
+            row.update(depth_ranges.as_row())
 
         if alpha_image is not None:
             row["alpha_mean"] = round(alpha_image.detach().mean().item(), 8)
