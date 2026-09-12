@@ -182,8 +182,18 @@ device-independent and is the quantity to compare against a method that reports 
 
 ### Rendering frame rate and peak memory
 
-Frame rate is measured over the held-out views on the named device. Peak memory is recorded
-for both training and rendering.
+Frame rate is measured over the held-out views on the named device.
+
+**Peak memory is recorded for rendering only.** The figure is taken during the dedicated
+rendering pass, after the allocator's peak counter has been reset, so it measures what
+displaying the model costs rather than what producing it cost. Training peak memory is *not*
+instrumented. It could be, cheaply, but it would be a poor measurement in this system: the
+training peak is set by the largest transient allocation anywhere in a heterogeneous loop
+whose composition differs by configuration — three rasterization passes, an importance
+accumulation over every training view at two scheduled iterations, and a codebook update at a
+third — so a single number would compare configurations that spend their memory on
+different things. The rendering figure is the one that transfers to a deployment question, and
+it is the one reported.
 
 One expectation should be set in advance to avoid a misreading. The quantization mechanism's
 published two-to-three-fold rendering speedup comes from its opacity sparsity penalty and the
@@ -353,8 +363,9 @@ in-medium render against the held-out capture; reported as mean and standard dev
 three seeds, per scene and aggregated under both weightings.
 
 **Primary — efficiency:** rendered primitive count at five checkpoints, complete model size in
-megabytes, training wall-clock and effective optimizer steps, rendering frame rate, peak
-memory for training and rendering.
+megabytes, training wall-clock and effective optimizer steps, rendering frame rate, and peak
+rendering memory. Training peak memory is not instrumented, for the reason given in
+§3.7.3.
 
 **Secondary:** restored-image self-consistency against the unquantized model, medium
 parameter and depth-normalisation trajectories, geometric extent and occupancy — full and

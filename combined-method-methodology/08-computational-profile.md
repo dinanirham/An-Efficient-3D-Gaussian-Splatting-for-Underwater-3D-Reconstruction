@@ -308,7 +308,7 @@ SSIM separates nothing here and is reported for completeness.
 Efficiency quantities are ratios against A0 on the same scene, so the scene mean is better
 behaved here than for quality. Per-scene figures are in `results_by_scene.csv`.
 
-| Cell | `N_rend` | vs A0 | Model size (MB) | vs A0 | Train wall-clock | Eff. steps | Render FPS | vs A0 | Peak VRAM (MB) |
+| Cell | `N_rend` | vs A0 | Model size (MB) | vs A0 | Train wall-clock | Eff. steps | Render FPS | vs A0 | Peak render VRAM (MB) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | **A0** baseline | 2 709 310 | 1.00× | 144.7 | 1.00× | 60.0 min | 43 000 | 117.6 | 1.00× | 2 518 |
 | **A1** init | 222 498 | **12.2×** | 11.9 | **12.2×** | 49.5 min | 43 000 | 214.7 | 1.83× | 936 |
