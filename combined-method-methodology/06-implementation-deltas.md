@@ -337,3 +337,110 @@ Requires regenerating every dense cloud and re-running every M1 cell. Guarded by
 rejects the ill-conditioned pair, **and that the existing filters accept it** —
 so the reason for the deviation is encoded in a test rather than described in a
 comment.
+
+---
+
+## 6.9 CD-27 — the instrument the central hypothesis needed and did not have
+
+*Added after the supervisory review. Unlike CD-22 … CD-26 this corrects no
+defect in anyone's code: every line involved did exactly what its specification
+said. **The specification was wrong**, which is why no amount of checking the
+implementation against it could have found this.*
+
+### The argument that produced it
+
+The medium coefficients enter the image formation model only through the
+product `β·Ẑ`, and `Ẑ` is the rendered depth renormalised by **each frame's
+own** extrema `[repo: train.py:349-352]`. Imposing the physical attenuation law
+on frame *f* therefore requires
+
+```
+β = β_phys · ( M_f − m_f )
+```
+
+whose right-hand side depends on the frame. A single scene-global `β` cannot
+satisfy that across frames unless the depth range is constant across the
+training set, and nothing makes it so. **The fitted `β` is a compromise over the
+*distribution* of per-frame depth ranges** — a function of the primitive
+population, not of the medium alone.
+
+Two things the project already recorded separately turn out to be this one fact:
+that `β` "carries no physical interpretation, being expressed in normalised
+per-frame depth" (`chapter/09-summary.md`), and that `β` collapses at
+simplification boundaries (E.2). A parameter defined only relative to a
+normalisation must move when the normalisation moves. The boundary did not break
+the medium model; it revealed that the model had never been identified.
+
+### What was wrong with CD-12
+
+CD-12 logs `z_min` and `z_max` — from the **single training view sampled at that
+iteration**. That is one draw from the distribution the argument is about, not a
+statistic of it, so the logged `z_range` varies frame to frame independently of
+anything a mechanism does. Two consequences:
+
+- **`z_range` is noisy by construction.** Any trend read from it conflates the
+  sampled frame with the population change. Nothing in the results documents
+  currently rests on such a trend; that was verified rather than assumed.
+- **The quantity the hypothesis is about was never measured** — not once across
+  the campaign, because nothing in twenty-six methodology documents, a claim
+  ledger, or a reproduction checklist asked for it.
+
+### What was added
+
+A sweep over every training view at each checkpoint, recording the distribution
+of `(m_f, M_f)` rather than one sample: eight columns `zr_n_views`, `zr_mean`,
+`zr_sd`, **`zr_cv`**, `zr_min`, `zr_max`, `zm_mean`, `zM_mean`
+`[repo: utils/depth_stats.py]`. `zr_cv` is the quantity of interest —
+dimensionless, so comparable across scenes whose units differ.
+
+Fires unconditionally at `pre_simp`, `post_simp` and `rewarm_end`, and
+periodically at `zsweep_interval` (default 2 500, coarser than `diag_interval`
+because it costs renders rather than nothing). `post_simp` matters most: that
+row previously carried **no** depth constants at all, because the last render
+predates the prune, so re-rendering against the new population is the only way
+to see what the population change did.
+
+**Cost.** 15–25 renders per sweep under `no_grad`; well under a second against a
+run of roughly fifty minutes.
+
+### The prediction it exists to test
+
+> Collapse at a simplification event is governed by the **change in cross-frame
+> dispersion** of the depth range — not by primitive count, not by the count
+> ratio, not by the mean depth range. A distribution that merely translates
+> leaves `β`'s compromise attainable; one that broadens does not.
+
+This is what separates the restated claim from the working one, and it also
+supplies the missing mechanism for E.20 (M1's dense cloud is uniform across
+views; M2's subsampling removes near-camera material *differentially*, so equal
+counts move the distribution unequally) and for the seed-conditioned bistability
+(which frames move is a draw, so whether the post-event compromise is attainable
+is a draw). `tools/medium_collapse.py` reports the pre/post dispersion ratio
+beside the collapse verdict — **an instrument is not finished until something
+reads it** (the CD-24 lesson), and this one is falsifiable in the direction that
+would sink the account rather than confirm it.
+
+### Two invariants, both tested
+
+`tools/verify_depth_stats.py`, 13 checks, CPU-only.
+
+- **T7 — one implementation.** `train.py` now delegates its normalisation to the
+  same function the sweep calls. A drifted second copy would measure a depth
+  range that `β` is not actually fitted against: the CD-22/CD-23 failure mode,
+  where every forward value is right and only the destination is wrong. The
+  extraction immediately caught one such divergence — the degenerate
+  `min == max` branch divides by the maximum rather than leaving the frame
+  alone, and T6 now pins that value rather than merely asserting finiteness.
+- **T8 — no randomness consumed.** The sweep iterates the camera list in order
+  rather than drawing from the shuffled viewpoint stack, so an instrumented run
+  stays comparable with the runs already completed. A sweep that advanced the
+  RNG stream would invalidate a campaign silently.
+
+### Status
+
+**Runs completed before this instrument cannot be retrofitted** — the
+distribution was never stored and the models alone cannot recover it at the
+checkpoints that matter. The prediction is therefore *untested*, which is
+reported as untested and not as unsupported. It applies from the next run
+onward; S5 and S6 will carry it, and S4 will if it can be paused cheaply.
+

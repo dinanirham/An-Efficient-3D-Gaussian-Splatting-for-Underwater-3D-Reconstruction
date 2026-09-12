@@ -301,8 +301,16 @@ accompanied by the one-clause summary a reader needs, or removed.
 
 ## 8. Actions, in order
 
-1. **Add the cross-frame depth-range instrument** (§4). Cheapest item here, and it converts
-   R-6 from the defence's worst moment into a measured prediction. Before S5.
+1. ~~**Add the cross-frame depth-range instrument** (§4).~~ ✅ **DONE — CD-27**
+   `[repo: utils/depth_stats.py, tools/verify_depth_stats.py, 13 checks]`. Sweeps every
+   training view at each simplification boundary and at `zsweep_interval`; `zr_cv` is the
+   predicted driver, and `medium_collapse.py` reports the pre/post dispersion ratio beside
+   the collapse verdict. Two invariants are tested: one implementation shared with the
+   optimiser, and no randomness consumed. **Completed runs cannot be retrofitted** — the
+   distribution was never stored — so the prediction is *untested* rather than unsupported,
+   and applies from S5 onward. Extracting the shared path immediately caught a real
+   divergence: the degenerate `min == max` branch divides by the maximum rather than leaving
+   the frame alone, which a second implementation would have got wrong.
 2. **Restate the central claim** per §5 in `04-repositioning.md` and the abstract. No new runs
    required; this is the highest-value change in the list and costs only writing.
 3. **Close OQ-10 as *misconceived*** with the §3 derivation, rather than leaving it open
