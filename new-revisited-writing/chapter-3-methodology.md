@@ -536,13 +536,25 @@ is larger than the design assumed:
 
 **Dispersion is heterogeneous across scenes by a factor of five**, and Panama's slowest and
 fastest seeds differ by 1.85× at identical configuration. A pooled variance estimate would
-hide this, so dispersion is reported **per scene**. At the mean coefficient of variation with
-three seeds, a difference on primitive count must exceed roughly **17%** to clear the noise
-floor; main effects are far larger, and interaction terms — differences of differences,
-carrying approximately twice the variance — may not be.
+hide this, so dispersion is reported **per scene**.
 
-Where an effect is of the same order as its dispersion, it is reported as **undetermined**.
-A null interaction and an unresolvable one are different findings and are not conflated.
+**Same-seed reproducibility is worse than the within-cell figures suggest.** Twelve pairs of
+runs that are identical until after the population freezes — the baseline against the
+quantization cell, whose mechanism activates seven thousand iterations later — differ by a
+median of **21.1%** and a maximum of **58.8%** in converged primitive count `[measured n=12]`.
+A difference must therefore exceed roughly 20% to clear the noise floor, and one near that
+threshold is unresolved rather than small.
+
+**The interaction terms are the exposed quantity.** An interaction is a difference of
+differences and carries approximately twice a main effect's variance, so at a single-run spread
+reaching 59% **an unresolvable interaction is a more likely outcome than a null one**. Where an
+effect is of the same order as its dispersion it is reported as **undetermined**, never as
+zero: a null interaction and an unresolvable one are different findings and are not conflated.
+
+**This is a property of the baseline configuration, not of the study.** Under dense
+initialization the same quantity has a coefficient of variation of **0.18–1.16%**, because
+densification never runs and the amplification described above has nothing to act on. Claims
+about dispersion are therefore scoped to the configuration they were measured on.
 
 **The collapse covariate.** Because the medium-model collapse of §3.5.6(a) is seed-conditioned,
 a cell whose three seeds are {collapsed, collapsed, intact} contains two physically different

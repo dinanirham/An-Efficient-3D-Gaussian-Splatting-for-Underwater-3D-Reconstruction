@@ -62,6 +62,8 @@ submission.
 | E.6 | CD-6's medium re-identification burst restores β after a population change | **Contradicted** `[measured n=12]` | The `rewarm_end` row *is* the post-burst state, and β is already collapsed in it. 200 steps did not restore it in any of the six collapsed runs. A negative result about this work's own remedy `[§13.10, §13.13]` |
 | E.7 | Fidelity metrics cannot certify that the medium model is intact | **Supported** `[measured n=1, decisive]` | `A1/Curasao/s0` produced the campaign's **best test PSNR (30.97, above A0's 30.48)** with **two of three attenuation channels permanently dead**. PSNR, SSIM and LPIPS score the composed image, which a saturated backscatter term still fits `[§13.12, §13.13]` |
 | E.8 | M1 does not cost fidelity at ~12× fewer primitives | **Supported** `[measured n=3 on 3 scenes, n=1 on Panama]` | PSNR **+0.605 dB** mean, higher on every complete scene, resolvable on JapaneseGardens at **3.30 sd**. LPIPS ≈ baseline (better on one scene, unchanged on another). **Panama reverses the sign at n=1** and is not yet settled `[results-03]` |
+| E.22 | Same-seed reproducibility on primitive count has a median of 21% and a tail reaching 59% | **Supported** `[measured n=12]` | A0 and A3 at matched seeds are identical processes until after the population freezes at iteration 15 000; M3 activates at 22 000. Twelve such pairs across four scenes. The replication's 22.5% maximum came from three comparisons on one scene `[13-campaign-addendum §13.14]` |
+| E.23 | M3 does not affect primitive count | **Supported** `[code + measured n=12]` | `m3_quantize` appears at three sites, none before iteration 22 000, and the density-control block is gated by `iteration < 15 000`, so `count(30000) = count(15000)`. The apparent dispersion difference was same-seed noise `[§13.14]` |
 | E.19 | M1 nearly removes run-to-run variance in primitive count | **Supported** `[measured n=3]` | A1 CV **0.18–1.16%** against A0's 6.0–14.7% — a 6–52× reduction. Densification never runs under M1, so the amplification that drives the baseline's dispersion has nothing to act on `[results-03 §3]` |
 | E.20 | It is the population *discontinuity*, not the population *size*, that breaks the medium model | **Supported** `[measured n=10 vs n=12]` | A1 (~230k primitives) loses **0 of 10** attenuation channels; A2 (~145k) loses **6 of 12**, every drop on a simplification boundary. Comparable final counts, opposite outcomes. A sharper statement of H4 than the hypothesis made `[results-03 §4]` |
 | E.21 | M2 and M1 are distinguishable only under a perceptual metric | **Supported** `[measured n=12 vs n=10]` | On PSNR they differ by 0.4 dB, within noise. On LPIPS M2 is worse on **all four** scenes at 4.1–19.4 sd while M1 is at baseline on two of three. Reporting PSNR alone would make them look equivalent `[results-01, results-03 §1]` |
@@ -86,7 +88,7 @@ submission.
 
 | Verdict | Count |
 |---|---:|
-| Supported | 20 |
+| Supported | 22 |
 | Partially supported | 4 |
 | **Contradicted** | **6** |
 | Not yet tested | 4 |
