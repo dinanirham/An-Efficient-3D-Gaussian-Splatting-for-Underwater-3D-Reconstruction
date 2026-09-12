@@ -669,3 +669,67 @@ quietly stopped being physical.
 That is the direct answer to the reviewers who asked why the mechanisms behave
 differently under underwater conditions, and it is not an answer the fidelity
 metrics could ever have produced.
+
+
+---
+
+## 13.14 Same-seed reproducibility, measured properly
+
+*Revises §13.6, which estimated this from three comparisons on one scene. The
+figure's centre holds; its tail does not. `[measured n=12 across four scenes]`*
+
+### How the measurement became available
+
+A3's converged primitive count showed 1.5-3.4x more dispersion than A0's, which
+should be impossible: M3 quantizes attributes and does not touch the population.
+
+It is impossible, and the code says so. `m3_quantize` appears at exactly three
+sites -- after `kmeans_st_iter = 22 000`, inside the M2 simplification block
+(inert when M2 is disabled), and in the post-training storage step. The whole
+density-control block is gated by `iteration < densify_until_iter = 15 000`, and
+an A3 run has neither M1's `prune_only` nor M2's simplification. Therefore
+**`count(30 000) = count(15 000)`**, fixed seven thousand iterations before M3
+does anything at all.
+
+**M3 is exonerated**, and the twelve A0/A3 pairs turn out to be something more
+useful: twelve runs of a process that is *identical* until after the population
+freezes, differing only by the non-determinism of atomic accumulation in the
+rasteriser's backward pass.
+
+### The measurement
+
+| | replication (13.6) | **A0/A3 pairs** |
+|---|---|---|
+| comparisons | 3 | **12** |
+| scenes | 1 (Curasao) | **4** |
+| median deviation | -- | **21.1%** |
+| mean | -- | 23.7% |
+| **maximum** | **22.5%** | **58.8%** |
+| ratio range | -- | 0.74x - 1.59x |
+
+**The centre is confirmed and the tail is three times wider than recorded.** Two
+runs of the same configuration at the same seed can differ by 59% in converged
+primitive count.
+
+### What it changes
+
+**13.6's headline is unaffected.** "A single-run ratio on primitive count
+carries no information" was already the conclusion; a wider tail strengthens it.
+
+**The resolution floor is worse than stated.** The methodology derives a ~17%
+threshold for a primitive-count difference to clear the noise, from the smaller
+estimate. Against a distribution whose tail reaches 59%, that floor is
+optimistic, and any main effect near it should be treated as unresolved rather
+than small.
+
+**The interaction terms are the real casualty.** An interaction is a difference
+of differences and carries roughly twice a main effect's variance. At a
+single-run spread reaching 59%, **`UNDETERMINED` becomes a more probable outcome
+for S4 and S5 than a null**, and the distinction between the two must be stated
+in the results chapter *before* those numbers arrive rather than after them.
+
+**One scope correction carries over.** 13.6's claim is about the *baseline*.
+Under M1 the same quantity has a coefficient of variation of 0.18-1.16%, because
+densification never runs and there is nothing for the amplification to act on
+`[new-revisited-writing/results-03 3]`. The dispersion finding is a property of
+a configuration, not of the study.
