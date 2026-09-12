@@ -7,7 +7,10 @@
 %%   [[  ]]  predefined      — a named sub-procedure from a source method
 %%   {   }   decision        — a branch
 %%   [(  )]  stored data     — a persisted, hashed artifact
-%%   (( ))   connector       — loop return
+%%   (( ))   connector       — ON-PAGE CONNECTOR. Two circles with the same
+%%                             letter are the same point in the flow; the reader
+%%                             matches them by label. Used instead of a long
+%%                             backward edge, which would cross the phase blocks.
 %%
 %% Colour encodes ORIGIN, not function. Badges M1/M2/M3/D/CD carry identity.
 %%
@@ -42,13 +45,13 @@ subgraph INI["② INITIALIZATION"]
   PLY --> GAU
 end
 
-GAU --> IT((" i = 1 "))
+GAU --> ENT(("A"))
 
 %% ─────────────────────────── ③ TRAINING ──────────────────────────────
 subgraph TRN["③ TRAINING — 30 000 iterations"]
   direction TB
 
-  IT --> RAS["Rasterise → radiance J, depth Z, alpha"]
+  ENT --> RAS["Rasterise → radiance J, depth Z, alpha"]
 
   RAS --> QM{"i &gt; 10 000?<br/><b>image formation model</b>"}
 
@@ -83,7 +86,7 @@ subgraph TRN["③ TRAINING — 30 000 iterations"]
 
   RWM --> NXT{"i = 30 000?"}
   QNT --> NXT
-  NXT -->|"no"| RAS
+  NXT -->|"no · i ← i+1"| RET(("A"))
 end
 
 %% ─────────────────────────── ④ EVALUATION ────────────────────────────
@@ -108,14 +111,16 @@ classDef ours      fill:#FBEFEC,stroke:#C8462E,stroke-width:1.5px,color:#10201F
 classDef medium    fill:#EFEAF6,stroke:#7A5CA8,stroke-width:1.5px,color:#10201F
 classDef gate      fill:#FFFFFF,stroke:#94A9A8,stroke-width:1px,color:#10201F
 classDef term      fill:#10201F,stroke:#10201F,color:#FFFFFF
+classDef conn      fill:#FFFFFF,stroke:#48605F,stroke-width:2px,color:#10201F
 
 class S,END term
-class IN,DAT,SFM,SPL,GAU,RAS,L1,L2,BP,BP2,SIG,ADC,FID,EFF,OUT,IT,PLY,REC inherited
+class IN,DAT,SFM,SPL,GAU,RAS,L1,L2,BP,BP2,SIG,ADC,FID,EFF,OUT,PLY,REC inherited
 class ROMA,TRI,PRN,SMP,QNT mech
 class SIGD supp
 class UND,REJ,RWM,DIA ours
 class NRM,CMP medium
 class Q1,Q2,QM,ACC,QD,DC,EV,NXT gate
+class ENT,RET conn
 
 style PRE fill:#F4F7F7,stroke:#CFDBDA,color:#48605F
 style INI fill:#F4F7F7,stroke:#CFDBDA,color:#48605F
