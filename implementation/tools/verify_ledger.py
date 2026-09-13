@@ -36,10 +36,18 @@ def check(name: str, fn) -> None:
     print(f"[{'PASS' if ok else 'FAIL'}] {name}: {detail}")
 
 
-def fresh(tmp: str) -> Ledger:
+def fresh(tmp: str, cells: list[str] | None = None) -> Ledger:
     led = Ledger(tmp)
-    led.init(SCENES, SEEDS)
+    led.init(SCENES, SEEDS, cells=cells)
     return led
+
+
+# The factorial and its supplement, without the S0 reference controls. The
+# ordering tests below use S1 -> S2 as their concrete instance of "stage N
+# gates stage N+1", and S0 sitting ahead of S1 would make every one of them
+# claim a control run instead. They keep testing what they were written to
+# test; S0's own gating is pinned by T15.
+FACTORIAL = ["A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A0D"]
 
 
 def finish_stage(led: Ledger, cells: set[str]) -> int:
@@ -54,6 +62,51 @@ def finish_stage(led: Ledger, cells: set[str]) -> int:
 
 
 # ---------------------------------------------------------------------------
+
+
+def t15_s0_gates_the_whole_campaign():
+    """The reference controls hold the queue until they are done.
+
+    Every number this study reports is a difference against A0, so A0's
+    equivalence to the method it reimplements is load-bearing for all 108
+    factorial runs. Ordering the controls first is what makes that a
+    precondition rather than an afterthought -- and the reason it matters is
+    that the equivalence currently rests on a converged-primitive-count
+    comparison at 16 000 iterations on one scene, with no fidelity metric
+    involved.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        led = fresh(tmp)                       # the full campaign, controls included
+        claimed = []
+        for _ in range(30):
+            r = led.claim()
+            if r is None:
+                break
+            claimed.append(r["stage"])
+        ok = set(claimed) == {"S0"}
+        return ok, f"stages claimable from a fresh campaign: {sorted(set(claimed))}"
+
+
+def t16_extend_preserves_completed_runs():
+    """A campaign must be able to grow without discarding its history.
+
+    `init` refuses to touch a live ledger, correctly -- it rebuilds the run
+    table and would drop every finished row. Without `extend`, closing a gap
+    found halfway through means re-running everything already done.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        led = fresh(tmp, FACTORIAL)
+        for r in led.runs[:5]:
+            r["status"] = "done"
+        led.save()
+
+        added = led.extend(["SS", "GS"])
+        done = sum(1 for r in led.runs if r["status"] == "done")
+        again = led.extend(["SS"])
+
+        ok = added == len(SCENES) * len(SEEDS) * 2 and done == 5 and again == 0
+        return ok, (f"added {added}, completed preserved={done}, "
+                    f"re-extend added {again} (idempotent)")
 
 
 def t1_init_shape():
@@ -71,7 +124,7 @@ def t1_init_shape():
 def t2_stage_order_enforced():
     """S2 must not start while S1 has outstanding work."""
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         led.set_budget(800_000)
         first = led.claim()
         stage_first = first["stage"]
@@ -91,7 +144,7 @@ def t2_stage_order_enforced():
 
 def t3_stage_advances_when_complete():
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         led.set_budget(800_000)
         finish_stage(led, {"A0"})
         nxt = led.claim()
@@ -107,7 +160,7 @@ def t4_m2_blocked_without_budget():
     not the reorder itself.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         # `init` now takes the budget from configs/cells.json, so the
         # no-budget state has to be constructed rather than assumed. The
         # mechanism it guards is unchanged and still worth testing: an m2 cell
@@ -134,7 +187,7 @@ def t4_m2_blocked_without_budget():
 def t4b_runnable_stage_holds_the_queue():
     """A stage that CAN run must not be skipped -- this is the real guarantee."""
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         led.set_budget(800_000)
         # S1 is runnable and untouched; nothing later may be claimed.
         claimed = []
@@ -146,7 +199,7 @@ def t4b_runnable_stage_holds_the_queue():
 
 def t5_set_budget_releases_blocked():
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         led.data["n_bud"] = None          # see T4
         finish_stage(led, {"A0"})
         led.claim()                       # blocks the A2 rows
@@ -159,7 +212,7 @@ def t5_set_budget_releases_blocked():
 
 def t6_m1_blocked_without_dense_cloud():
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         led.set_budget(800_000)
         finish_stage(led, {"A0", "A2"})
         led.claim()                       # S3 = A1 (needs a cloud) and A3
@@ -174,7 +227,7 @@ def t6_m1_blocked_without_dense_cloud():
 
 def t7_dense_cloud_unblocks_m1():
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         led.set_budget(800_000)
         finish_stage(led, {"A0", "A2"})
         for scene in SCENES:
@@ -194,7 +247,7 @@ def t7_dense_cloud_unblocks_m1():
 def t8_stale_reclaimed():
     """A session killed mid-run must not hold its row forever."""
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         led.set_budget(800_000)
         run = led.claim()
         stale_ts = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
@@ -210,7 +263,7 @@ def t8_stale_reclaimed():
 def t9_attempt_cap():
     """A configuration that always fails must not loop forever."""
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         led.set_budget(800_000)
         run = led.claim()
         rid = run["id"]
@@ -226,7 +279,7 @@ def t9_attempt_cap():
 
 def t10_save_is_atomic_and_reloadable():
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         led.set_budget(999)
         led.claim()
         reopened = Ledger(tmp)
@@ -295,7 +348,7 @@ def t12_exhausted_runs_are_visible_and_resettable():
     be a way back into the queue that does not discard completed runs.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
 
         # Burn A0/Curasao/s0's attempts the way a broken harness would.
         row = led.by_id("A0/Curasao/s0")
@@ -357,7 +410,7 @@ def t13_init_takes_the_budget_from_config():
         return False, "configs/cells.json has no defaults.n_bud to read"
 
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         got = led.data.get("n_bud")
         src = led.data.get("n_bud_source")
         if got != expected:
@@ -388,7 +441,7 @@ def t14_ledger_survives_losing_its_file():
     completed work round again.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)
+        led = fresh(tmp, FACTORIAL)
         for rid in ("A0/Curasao/s0", "A0/Curasao/s1"):
             led.by_id(rid)["status"] = "done"
         led.save()
@@ -432,6 +485,10 @@ def main() -> int:
           t13_init_takes_the_budget_from_config)
     check("T14 ledger survives losing its file  <-- decisive",
           t14_ledger_survives_losing_its_file)
+    check("T15 S0 gates the whole campaign  <-- decisive",
+          t15_s0_gates_the_whole_campaign)
+    check("T16 extend preserves completed runs  <-- decisive",
+          t16_extend_preserves_completed_runs)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

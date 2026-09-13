@@ -117,6 +117,36 @@
     ]
   },
   "cells": {
+    "SS": {
+      "description": "Reference control. Vanilla SeaSplat, run from the upstream checkout, NOT from this codebase -- A0 is already the faithful reimplementation, so an 'SS' cell here would be A0 under another name. Read only as A0 - SS; never differenced with the factorial cells.",
+      "external": {
+        "repo": "dxyang/seasplat @ ddc6259",
+        "why": [
+          "Every result in this study is a difference against A0, so A0's",
+          "equivalence to the method it reimplements is load-bearing for all",
+          "108 runs. That equivalence currently rests on",
+          "tools/replicate_baseline.py: converged primitive count only, at",
+          "16,000 iterations, on Curasao alone, 3 runs per side. It does not",
+          "measure PSNR, SSIM or LPIPS, and it does not reach 30,000",
+          "iterations.",
+          "",
+          "This cell replaces that with the campaign protocol: 4 scenes, 3",
+          "seeds, 30,000 iterations, the full metric set, the same evaluation",
+          "and timing harness. The claim it supports is then the claim the",
+          "thesis actually makes."
+        ]
+      },
+      "set": {}
+    },
+    "GS": {
+      "description": "Reference floor. Vanilla 3DGS -- the medium model switched off, so the render is compared directly against the capture with no image formation model. Shows what the physics buys, on these scenes, under this harness and this metric convention.",
+      "set": {
+        "m1_dense_init": false,
+        "m2_simplify": false,
+        "m3_quantize": false,
+        "do_seathru": false
+      }
+    },
     "A0": {
       "description": "Baseline. SeaSplat unmodified. Reference for every contrast, and the run that supplies the primitive budget the other cells need.",
       "set": {

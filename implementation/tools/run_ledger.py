@@ -45,6 +45,14 @@ LEDGER_NAME = "run_ledger.json"
 # Staging from EXECUTION-PROMPT §7. Each stage yields a usable result on its
 # own, so a campaign that runs out of compute still produces something.
 STAGES: dict[str, list[str]] = {
+    # S0 is the reference floor, and it is ordered first because every number
+    # this campaign reports is a difference against A0. A0's own validity rests
+    # on being indistinguishable from the method it reimplements, and until S0
+    # runs that rests on a converged-primitive-count comparison, at 16 000
+    # iterations, on one scene, with no fidelity metric involved
+    # (`tools/replicate_baseline.py`). That is far narrower than "A0 reproduces
+    # SeaSplat", and it is the foundation the other 108 runs stand on.
+    "S0": ["SS", "GS"],          # vanilla SeaSplat, and 3DGS with no medium
     "S1": ["A0"],                # unblocks the budget and environment validity
     "S2": ["A2"],                # the central hypothesis (H4)
     "S3": ["A1", "A3"],          # remaining main effects
@@ -221,6 +229,60 @@ class Ledger:
             "runs": runs,
         }
         self.save()
+
+    def extend(
+        self,
+        cells: list[str],
+        scenes: Optional[list[str]] = None,
+        seeds: Optional[list[int]] = None,
+    ) -> int:
+        """Add runs for `cells` to a live campaign, leaving existing rows alone.
+
+        `init` refuses to touch a ledger in progress, and correctly: it rebuilds
+        the run table from scratch and would discard every completed row. But a
+        campaign that cannot grow is a campaign that cannot answer a question
+        raised halfway through, and the alternative -- re-initialising and
+        re-running 65 finished runs -- is worse than the gap being closed.
+
+        Rows already present are never rewritten, so this is safe to repeat and
+        safe to run while workers hold claims.
+        """
+        scenes = scenes or self.data.get("scenes") or []
+        seeds = seeds or self.data.get("seeds") or []
+        if not scenes or not seeds:
+            raise SystemExit("ledger has no scenes/seeds recorded; pass them explicitly")
+
+        have = {r["id"] for r in self.runs}
+        added = 0
+        for cell in cells:
+            if cell not in CELL_STAGE:
+                raise SystemExit(
+                    f"unknown cell {cell!r}; known: {sorted(CELL_STAGE)}")
+            for scene in scenes:
+                for seed in seeds:
+                    rid = f"{cell}/{scene}/s{seed}"
+                    if rid in have:
+                        continue
+                    self.data["runs"].append({
+                        "id": rid,
+                        "cell": cell,
+                        "scene": scene,
+                        "seed": seed,
+                        "stage": CELL_STAGE[cell],
+                        "status": "pending",
+                        "attempts": 0,
+                        "started_at": None,
+                        "heartbeat": None,
+                        "finished_at": None,
+                        "wall_seconds": None,
+                        "gpu": None,
+                        "output_dir": None,
+                        "error": None,
+                    })
+                    added += 1
+        if added:
+            self.save()
+        return added
 
     # -- queries -----------------------------------------------------------
 
@@ -545,7 +607,7 @@ class Ledger:
 def main() -> int:
     ap = argparse.ArgumentParser(description="campaign run ledger")
     ap.add_argument("command",
-                    choices=["init", "status", "set-budget", "reap", "reset",
+                    choices=["init", "extend", "status", "set-budget", "reap", "reset",
                              "invalidate"])
     ap.add_argument("value", nargs="?", help="budget count for set-budget")
     ap.add_argument("--output_root", required=True)
@@ -575,6 +637,14 @@ def main() -> int:
         else:
             print("budget  : NOT SET. configs/cells.json holds no defaults.n_bud, "
                   "so every m2 cell is blocked until `set-budget` is run.")
+        print(ledger.summary())
+    elif args.command == "extend":
+        if not args.cells:
+            raise SystemExit(
+                "extend needs --cells (e.g. --cells SS GS). Refusing to guess "
+                "which cells to add to a campaign in progress.")
+        n = ledger.extend(args.cells)
+        print(f"added {n} run(s) for {sorted(args.cells)}; existing rows untouched")
         print(ledger.summary())
     elif args.command == "status":
         print(ledger.summary())
