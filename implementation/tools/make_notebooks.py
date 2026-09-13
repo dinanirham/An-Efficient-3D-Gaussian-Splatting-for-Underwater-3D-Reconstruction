@@ -460,8 +460,72 @@ To add the controls to a campaign already in progress, use `extend` rather than
     !python -m tools.run_ledger extend --cells SS GS --output_root "$DRIVE_ROOT"
 """),
     code('''\
-!python -m tools.run_ledger init   --output_root "$DRIVE_ROOT"
+# Safe on a fresh Drive and on one already holding a campaign. `init` refuses
+# to overwrite work in progress -- correctly, since it rebuilds the run table
+# and would discard every completed row -- so an existing ledger is extended
+# with whatever cells it is missing instead.
+import os, subprocess
+
+LEDGER = f'{DRIVE_ROOT}/run_ledger.json'
+if os.path.exists(LEDGER):
+    print('ledger present -- extending with any missing cells, keeping history')
+    !python -m tools.run_ledger extend --cells SS GS --output_root "$DRIVE_ROOT"
+else:
+    print('no ledger -- initialising the full campaign')
+    !python -m tools.run_ledger init --output_root "$DRIVE_ROOT"
+
 !python -m tools.run_ledger status --output_root "$DRIVE_ROOT"
+'''),
+    md("""## 12. The SS control — produced here, not by the worker
+
+`SS` is vanilla SeaSplat, and the worker cannot run it: its config block is
+empty because there is nothing in *this* codebase to configure, so
+`train.py --cell SS` would train **our** implementation under A0's defaults and
+file the result as the reference control. `check_margin` would then compare A0
+against A0 and certify the study's foundational claim from the code agreeing
+with itself. The ledger marks those rows **blocked** and the worker skips past
+them, so nothing stalls.
+
+They are produced here instead, from the unpatched checkout staged in §10.
+This is roughly eleven hours of training and can run in its own session — the
+factorial does not wait on it.
+"""),
+    code('''\
+# Train vanilla, then measure it with the campaign's own harness: their model,
+# their render code, our metrics, one convention on both sides.
+#
+# s0/s1/s2 are REPEAT indices here, not matched seeds -- vanilla seeds only the
+# CPU generator, so its GPU draws vary regardless. SS and A0 are compared as
+# scene means over repeats, never run against run.
+import subprocess, time
+
+REPEATS = 3
+for scene in SCENES:
+    for rep in range(REPEATS):
+        out_run = f'{DRIVE_ROOT}/runs/SS/{scene}/s{rep}'
+        if os.path.exists(f'{out_run}/eval_metrics.json'):
+            print(f'{scene}/s{rep}: already measured, skipping'); continue
+
+        ref_out = f'/content/ss_out/{scene}_s{rep}'
+        print(f'--- vanilla {scene} repeat {rep} ---', flush=True)
+        t0 = time.time()
+        r = subprocess.run(
+            ['python', 'train.py',
+             '-s', f'{LOCAL_DATA}/{scene}',
+             '--model_path', ref_out,
+             '--iterations', '30000',
+             '--seathru_from_iter', '10000',
+             '--eval', '--seed', str(rep)],
+            cwd='/content/seasplat_vanilla', capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f'!!! vanilla {scene}/s{rep} FAILED (exit {r.returncode})')
+            print(r.stderr[-1500:]); continue
+        print(f'    trained in {(time.time()-t0)/60:.0f} min', flush=True)
+
+        !python -m tools.measure_reference \\
+            --ref_root "{ref_out}" \\
+            --source_path "{LOCAL_DATA}/{scene}" \\
+            --out "{out_run}"
 '''),
     md("""---
 **Next:** open `01_worker.ipynb` and run it. Repeat every session until the
@@ -527,6 +591,17 @@ sessions run longer.
 
 Until the budget is set, every M2 cell is blocked and the queue says so — that
 is expected during S1.
+
+**Two messages that look like failures and are not.**
+
+`S0 skipped: SS is an external control...` — `SS` is vanilla SeaSplat and
+cannot be trained by this codebase. Those rows stay blocked and the queue moves
+past them to work it can do; the control is produced in `00_setup` §12. A
+skipped stage is always reported rather than reordered silently.
+
+`... is blocked: dense cloud missing` — run `00_setup` §9. `blocked` is
+recomputed on every claim, so producing the cloud releases those runs with no
+further bookkeeping.
 """),
     code('''\
 !python -m tools.run_queue \\
@@ -760,6 +835,10 @@ assert os.path.isfile(f'{scene}/sparse/0/cameras.bin'), 'staging incomplete'
 print('scene ok:', scene)
 """
 
+# Notebook 04 only. This clone is PATCHED by instrument_reference to print a
+# densification breakdown, which makes it a diagnostic tree and disqualifies it
+# from producing SS numbers. The SS control uses the separate, untouched clone
+# that 00_setup stages at /content/seasplat_vanilla.
 REF_SETUP = R"""!rm -rf /content/seasplat_ref
 !git clone -q --recursive https://github.com/dxyang/seasplat.git /content/seasplat_ref
 !pip install -q /content/seasplat_ref/submodules/diff-gaussian-rasterization
