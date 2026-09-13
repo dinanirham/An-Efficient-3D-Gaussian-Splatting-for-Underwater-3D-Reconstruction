@@ -38,6 +38,16 @@ BASELINE_FLOATS_PER_PRIMITIVE = 14
 LITERATURE_FLOATS_PER_PRIMITIVE = 59  # 3DGS at sh_degree = 3, for contrast only
 
 
+# Quantizer group names, and the raw model attribute each one carries.
+# Overrides are installed on the RAW parameters, so the model's own activation
+# (exp for scale, normalise for rotation) applies afterwards.
+_GROUP_TO_ATTR: dict[str, str] = {
+    "dc": "features_dc",
+    "scale": "scaling",
+    "rotation": "rotation",
+}
+
+
 def index_bits(num_clusters: int) -> int:
     return max(1, math.ceil(math.log2(max(2, num_clusters))))
 
@@ -139,6 +149,117 @@ def write_compressed_model(
         json.dump(meta, fh, indent=2)
 
     return out_dir
+
+
+def load_compressed_model(artifact_dir: str | Path) -> dict[str, np.ndarray]:
+    """Reconstruct every primitive attribute from a `compressed_*/` store.
+
+    Returns raw (pre-activation) arrays under the model's own attribute names,
+    so the caller can install them directly: `xyz`, `opacity`, `features_dc`,
+    `scaling`, `rotation`, plus whatever medium tensors were saved.
+
+    **Why this exists.** The store was write-only from the day it was written.
+    `measure_model_size` sums file sizes and the collectors read the JSON, but
+    nothing ever decoded the bytes back into a model -- which means the
+    reported size was a correct accounting of a representation nobody had
+    demonstrated was sufficient.  That is a weaker claim than it looks: "model
+    size on disk" invites the question of whether the model can be recovered
+    from those bytes, and until now the answer was untested.
+
+    It also settles what the full-precision PLY beside it is for.  If this
+    function reproduces the model, the PLY is a viewer convenience and not part
+    of the claimed artifact; if it does not, the size figure is wrong.
+    """
+    d = Path(artifact_dir)
+    meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    n = int(meta["num_primitives"])
+
+    out: dict[str, np.ndarray] = {
+        "xyz": np.load(d / "xyz.npy"),
+        "opacity": np.load(d / "opacity.npy"),
+    }
+
+    if meta.get("quantized"):
+        cb = np.load(d / "codebooks.npz")
+        blob = (d / "indices.bin").read_bytes()
+        offset = 0
+        # Written in sorted group order; read back the same way or the streams
+        # silently swap and every attribute takes another attribute's values.
+        for name in sorted(meta["groups"]):
+            g = meta["groups"][name]
+            nbytes = int(g["packed_bytes"])
+            idx = unpack_indices(blob[offset:offset + nbytes], n,
+                                 int(g["bits_per_index"]))[:n]
+            offset += nbytes
+            centers = cb[name]
+            out[_GROUP_TO_ATTR[name]] = centers[idx.astype(np.int64)].reshape(
+                n, int(g["vec_dim"]))
+        if offset != len(blob):
+            raise ValueError(
+                f"indices.bin has {len(blob)} bytes, groups account for {offset}")
+    else:
+        for attr, fname in (("features_dc", "features_dc.npy"),
+                            ("scaling", "scaling.npy"),
+                            ("rotation", "rotation.npy")):
+            out[attr] = np.load(d / fname)
+
+    med = d / "medium.npz"
+    if med.exists():
+        z = np.load(med)
+        for k in z.files:
+            out[f"medium_{k}"] = z[k]
+
+    return out
+
+
+def write_decoded_ply(artifact_dir: str | Path, out_path: str | Path) -> dict[str, Any]:
+    """Write a viewable PLY from the decoded store, with no normals field.
+
+    **This is not the compressed size and cannot be.** A PLY stores one fixed
+    width float per property per primitive, so fourteen attributes at float32
+    is 56 bytes per primitive however the values were obtained -- the
+    compression lives in replacing ten of those floats with twelve-bit indices,
+    which no renderer reads.  The 79 MB store and a renderable PLY are
+    different objects, and asking the PLY to be 79 MB is asking it to stop
+    being a PLY.
+
+    What this does fix is a real inconsistency: `save_ply` writes the
+    *continuous* parameters, so the `point_cloud.ply` sitting in a quantized
+    run is **not the model that run reported**.  Opening it in a viewer shows
+    the pre-quantization model.  This writer emits the decoded, actually
+    quantized values, so the artifact matches the measurement.
+
+    It also drops the three zero-valued normals that `save_ply` inherits from
+    vanilla 3DGS -- 3 of 17 floats, about 46 MB per run at 4M primitives, all
+    zeros.
+    """
+    from plyfile import PlyData, PlyElement
+
+    m = load_compressed_model(artifact_dir)
+    n = m["xyz"].shape[0]
+
+    cols = [("x", m["xyz"][:, 0]), ("y", m["xyz"][:, 1]), ("z", m["xyz"][:, 2])]
+    dc = m["features_dc"].reshape(n, -1)
+    for i in range(dc.shape[1]):
+        cols.append((f"f_dc_{i}", dc[:, i]))
+    cols.append(("opacity", m["opacity"].reshape(-1)))
+    sc = m["scaling"].reshape(n, -1)
+    for i in range(sc.shape[1]):
+        cols.append((f"scale_{i}", sc[:, i]))
+    rot = m["rotation"].reshape(n, -1)
+    for i in range(rot.shape[1]):
+        cols.append((f"rot_{i}", rot[:, i]))
+
+    arr = np.empty(n, dtype=[(name, "f4") for name, _ in cols])
+    for name, v in cols:
+        arr[name] = v.astype(np.float32)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    PlyData([PlyElement.describe(arr, "vertex")]).write(str(out_path))
+
+    return {"path": str(out_path), "num_primitives": n,
+            "floats_per_primitive": len(cols),
+            "bytes": out_path.stat().st_size}
 
 
 def measure_model_size(artifact_dir: str | Path) -> dict[str, Any]:

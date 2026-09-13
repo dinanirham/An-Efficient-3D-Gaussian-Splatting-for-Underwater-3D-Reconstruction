@@ -231,6 +231,9 @@ def measure_run(run: StoredRun, source_path: str, resolution: int = -1) -> Optio
 
 
 def main() -> int:
+    if len(sys.argv) > 3 and sys.argv[1] == "--write_ply":
+        return _cli_write_ply(sys.argv[2:4])
+
     ap = argparse.ArgumentParser(
         description="restored-image (J-hat) self-consistency, quantized vs continuous")
     ap.add_argument("--output_root", required=True)
@@ -291,3 +294,29 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _cli_write_ply(argv: list[str]) -> int:
+    """`python -m tools.j_consistency --write_ply <compressed_dir> <out.ply>`.
+
+    Emits a viewable PLY from the decoded store, so the artifact a viewer opens
+    for a quantized run is the model that run reported. `save_ply` writes the
+    CONTINUOUS parameters, so the `point_cloud.ply` currently sitting in an A3
+    run is the pre-quantization model -- not A3.
+    """
+    from source.storage import write_decoded_ply
+
+    src, dst = argv[0], argv[1]
+    info = write_decoded_ply(src, dst)
+    mb = info["bytes"] / 1024 / 1024
+    print(f"wrote {info['path']}")
+    print(f"  {info['num_primitives']:,} primitives, "
+          f"{info['floats_per_primitive']} floats each -> {mb:.2f} MB")
+    print()
+    print("This is the quantized model, viewable. It is NOT the compressed size")
+    print("and cannot be: a PLY stores one fixed-width float per property, so")
+    print("14 attributes at float32 is 56 bytes/primitive however the values")
+    print("were obtained. The compression lives in replacing 10 of those floats")
+    print("with 12-bit indices, which no renderer reads. The compressed store")
+    print("and a renderable PLY are different objects.")
+    return 0

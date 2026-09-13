@@ -28,6 +28,7 @@ from source.quantize import AttributeQuantizer  # noqa: E402
 from source.storage import (  # noqa: E402
     BASELINE_FLOATS_PER_PRIMITIVE,
     index_bits,
+    load_compressed_model,
     measure_model_size,
     pack_indices,
     unpack_indices,
@@ -67,6 +68,9 @@ class FakeGaussians:
 
     def clear_quant_override(self) -> None:
         self._quant_override = {}
+
+    def get_quant_override(self, name: str, default=None):
+        return self._quant_override.get(name, default)
 
 
 def fitted_quantizer(g: FakeGaussians, k: int = 4096) -> AttributeQuantizer:
@@ -212,6 +216,103 @@ def t8_medium_parameters_counted():
         )
 
 
+# ---------------------------------------------------------------------------
+# CD-29 -- the store was write-only until these existed
+# ---------------------------------------------------------------------------
+
+
+def t9_quantized_store_round_trips():
+    """DECISIVE. The reported size describes a recoverable model, or it does not.
+
+    Until this test the store had no reader at all: `measure_model_size` sums
+    file sizes and the collectors read the JSON, so "model size on disk" was a
+    correct byte count of a representation nobody had shown was sufficient.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        g = FakeGaussians(512)
+        q = fitted_quantizer(g, k=16)
+        out = Path(tmp) / "compressed_30000"
+        write_compressed_model(out, g, quantizer=q)
+
+        m = load_compressed_model(out)
+
+        # Position and opacity are stored verbatim: exact, not approximate.
+        ok_xyz = np.array_equal(m["xyz"], g._xyz.numpy())
+        ok_op = np.array_equal(m["opacity"].reshape(-1), g._opacity.numpy().reshape(-1))
+
+        # The quantized attributes must equal the centroids the quantizer
+        # produces -- not the continuous values they were derived from.
+        q.apply(g, assign=False)
+        want = g.get_quant_override("features_dc").detach().numpy().reshape(512, -1)
+        got = m["features_dc"].reshape(512, -1)
+        ok_dc = np.allclose(got, want, atol=1e-6)
+        g.clear_quant_override()
+
+        ok = ok_xyz and ok_op and ok_dc
+        return ok, (f"xyz exact={ok_xyz}, opacity exact={ok_op}, "
+                    f"features_dc == quantizer output={ok_dc}")
+
+
+def t10_decoded_attributes_are_not_the_continuous_ones():
+    """A silent equality here would report quantization as lossless.
+
+    If the decoder returned the continuous parameters -- groups read in the
+    wrong order, a reshape that collapses, indices decoding to zeros -- every
+    downstream consistency measure would read as perfect and look like a
+    result rather than a bug.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        g = FakeGaussians(512)
+        q = fitted_quantizer(g, k=8)
+        out = Path(tmp) / "compressed_30000"
+        write_compressed_model(out, g, quantizer=q)
+        m = load_compressed_model(out)
+
+        cont = g._features_dc.numpy().reshape(512, -1)
+        got = m["features_dc"].reshape(512, -1)
+        identical = np.array_equal(got, cont)
+        rel = float(np.abs(got - cont).mean() / (np.abs(cont).mean() + 1e-12))
+        ok = (not identical) and rel > 1e-4
+        return ok, f"differs from continuous, mean relative change {rel:.4f}"
+
+
+def t11_unquantized_store_round_trips_too():
+    """Otherwise the A0 side of every size ratio is the untested one."""
+    with tempfile.TemporaryDirectory() as tmp:
+        g = FakeGaussians(256)
+        out = Path(tmp) / "compressed_30000"
+        write_compressed_model(out, g, quantizer=None)
+        m = load_compressed_model(out)
+        ok = (
+            np.array_equal(m["xyz"], g._xyz.numpy())
+            and np.array_equal(m["scaling"].reshape(-1),
+                               g._scaling.numpy().reshape(-1))
+        )
+        return ok, "unquantized store recovers its attributes exactly"
+
+
+def t12_truncated_index_stream_is_refused():
+    """A short read must raise, not silently decode a prefix.
+
+    Drive truncates files when a session is killed, and a partially written
+    indices.bin that decoded quietly would produce a model that renders and is
+    wrong -- the worst available outcome.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        g = FakeGaussians(512)
+        q = fitted_quantizer(g, k=16)
+        out = Path(tmp) / "compressed_30000"
+        write_compressed_model(out, g, quantizer=q)
+
+        p = out / "indices.bin"
+        p.write_bytes(p.read_bytes()[:-64])   # lose the tail
+        try:
+            load_compressed_model(out)
+        except Exception as exc:  # noqa: BLE001
+            return True, f"refused: {type(exc).__name__}"
+        return False, "truncated stream decoded silently -- unacceptable"
+
+
 def main() -> int:
     check("T1 index packing round-trips exactly", t1_pack_roundtrip)
     check("T2 packed indices approach the analytical size  <-- decisive", t2_packing_beats_naive_storage)
@@ -221,6 +322,12 @@ def main() -> int:
     check("T6 unquantized cells produce a comparable artifact", t6_unquantized_cell_also_measured)
     check("T7 measured size reconciles with the analytical count", t7_measured_reconciles_with_analytical)
     check("T8 medium parameters are counted", t8_medium_parameters_counted)
+    check("T9 quantized store round-trips  <-- decisive",
+          t9_quantized_store_round_trips)
+    check("T10 decoded attributes are not the continuous ones  <-- decisive",
+          t10_decoded_attributes_are_not_the_continuous_ones)
+    check("T11 unquantized store round-trips too", t11_unquantized_store_round_trips)
+    check("T12 a truncated index stream is refused", t12_truncated_index_stream_is_refused)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
