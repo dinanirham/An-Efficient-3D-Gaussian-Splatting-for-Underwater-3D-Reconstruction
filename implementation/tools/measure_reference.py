@@ -1,0 +1,343 @@
+"""Measure a vanilla SeaSplat run with the campaign's own harness (CD-31).
+
+    python -m tools.measure_reference \
+        --ref_root   /content/seasplat_ref/output/Curasao \
+        --source_path /content/drive/.../dataset/undistorted/Curasao \
+        --out        "$DRIVE_ROOT/runs/SS/Curasao/s0"
+
+    python -m tools.measure_reference --check_margin --output_root "$DRIVE_ROOT"
+
+**Why.** Every number this study reports is a difference against A0, so A0's
+standing rests entirely on being the method it claims to reimplement. That
+currently rests on `tools/replicate_baseline.py`, which compares **converged
+primitive count only**, at **16 000 iterations**, on **one scene** -- and at
+n=3 per side the 95% interval on the ratio is +/-23.5% there, so the data are
+consistent with A0 differing from vanilla SeaSplat by a quarter. Absence of a
+detected difference is not evidence of equivalence, least of all on an outcome
+with 6.0-29.3% dispersion.
+
+**The constraint.** Vanilla SeaSplat is not modified, and does not need to be.
+`render_uw.py`'s `render_set` is the upstream render path, inherited unchanged
+in this fork, and `train.py`'s own evaluation calls exactly that function and
+then reads the images back from disk. Pointing the same sequence at a vanilla
+output directory gives: their trained model, their render code, our metric
+harness, one convention on both sides.
+
+Note that `tools/instrument_reference.py` *patches* a checkout and says in its
+own docstring that a patched checkout must not produce SS numbers. That tool
+is for diagnosis. This one touches nothing.
+
+**Matching the harness matters more than it looks.** Metrics are computed from
+8-bit files written to disk and read back, not from in-memory tensors -- an
+inherited quirk of the evaluation path (`chapter/06` section 3.7.5). Rendering
+to disk and reading back reproduces it on both sides. Computing SS metrics
+from in-memory tensors would be *more* accurate and *less* comparable, which
+is the wrong trade for a control.
+
+**The margin.** `--check_margin` compares SS against A0 using the equivalence
+margin fixed in `configs/cells.json` before S0 ran. A margin chosen after
+seeing the data is not a pre-specified margin, and only a pre-specified one
+licenses the word *equivalent*.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any, Optional
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
+CELLS = Path(__file__).resolve().parent.parent / "configs" / "cells.json"
+
+# The shape `collect_results.py` and `analyse.py` read by key. Emitting a
+# different shape would make SS invisible to the analysis while appearing to
+# have run -- a silent absence, which is the failure mode this project has
+# paid for more than once.
+EVAL_SCHEMA_KEYS: dict[str, tuple[str, ...]] = {
+    "quality": ("psnr_pooled", "psnr_per_channel", "ssim", "lpips", "n_images"),
+    "cost": ("n_primitives_final", "train_wall_seconds", "render_fps",
+             "render_ms_per_frame", "render_peak_mem_mb"),
+}
+
+MARGIN_TO_METRIC = {
+    "psnr_pooled_db": ("psnr_pooled", "absolute"),
+    "lpips": ("lpips", "absolute"),
+    "n_primitives_fraction": ("n_primitives_final", "relative"),
+}
+
+
+def find_iteration(ref_root: Path) -> Optional[int]:
+    """The largest iteration with a point cloud *and* both medium nets.
+
+    Completeness matters: a PLY without its medium nets cannot be composed, and
+    silently falling back to an older medium model would evaluate new geometry
+    against a stale medium -- a different experiment that looks like this one.
+    """
+    best: Optional[int] = None
+    for d in (ref_root / "point_cloud").glob("iteration_*"):
+        if not (d / "point_cloud.ply").exists():
+            continue
+        try:
+            it = int(d.name.split("_")[1])
+        except (IndexError, ValueError):
+            continue
+        if not (ref_root / f"attenuate_{it}.pth").exists():
+            continue
+        if not (ref_root / f"backscatter_{it}.pth").exists():
+            continue
+        if best is None or it > best:
+            best = it
+    return best
+
+
+def load_margins(path: Path = CELLS) -> Optional[dict]:
+    """The equivalence margin, read from the pre-registration and never defaulted.
+
+    Returning None rather than a built-in default is deliberate. A margin
+    invented at analysis time is not pre-specified, and a tool that supplies
+    one quietly would let an equivalence claim rest on a number chosen after
+    seeing the data.
+    """
+    try:
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    m = cfg.get("cells", {}).get("SS", {}).get("equivalence_margin")
+    if not m:
+        return None
+    return {k: v for k, v in m.items() if not k.startswith("_")}
+
+
+def margin_verdict(ss: dict, a0: dict, margins: dict) -> dict[str, Any]:
+    """Per-metric comparison against the pre-specified margin.
+
+    An absent metric yields `within=None`, never `True`. Treating missing data
+    as within-margin would manufacture this study's foundational claim out of
+    nothing, and it would read as a clean result rather than as an error.
+    """
+    out: dict[str, Any] = {}
+    any_missing = False
+    any_outside = False
+
+    for mkey, (metric, kind) in MARGIN_TO_METRIC.items():
+        limit = margins.get(mkey)
+        a, b = a0.get(metric), ss.get(metric)
+        if limit is None or a is None or b is None:
+            out[metric] = {"within": None, "ss": b, "a0": a, "limit": limit,
+                           "why": "metric or margin absent"}
+            any_missing = True
+            continue
+        diff = float(b) - float(a)
+        allowed = float(limit) * abs(float(a)) if kind == "relative" else float(limit)
+        within = abs(diff) <= allowed
+        out[metric] = {"within": bool(within), "ss": b, "a0": a,
+                       "diff": round(diff, 6), "allowed": round(allowed, 6),
+                       "kind": kind}
+        if not within:
+            any_outside = True
+
+    if any_outside:
+        out["verdict"] = "OUTSIDE MARGIN"
+    elif any_missing:
+        out["verdict"] = "INCOMPLETE"
+    else:
+        out["verdict"] = "WITHIN MARGIN"
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Measurement. Torch is imported lazily so the pure parts stay CPU-testable.
+# ---------------------------------------------------------------------------
+
+
+def measure(ref_root: Path, source_path: Path, out_dir: Path,
+            iteration: Optional[int] = None) -> dict:
+    """Render a vanilla run through the campaign harness and emit our schema."""
+    import torch
+    from argparse import Namespace
+
+    from gaussian_renderer import render
+    from metrics import readImages
+    from render_uw import render_set
+    from scene import GaussianModel, Scene
+    from utils.metrics_conventions import aggregate_images, evaluate_pair
+    from utils.render_profile import profile_rendering
+    from deepseecolor.models import AttenuateNetV3, BackscatterNetV2
+    from lpipsPyTorch import lpips
+    from utils.loss_utils import ssim
+
+    it = iteration or find_iteration(ref_root)
+    if it is None:
+        raise SystemExit(
+            f"no iteration in {ref_root} has a point cloud AND both medium nets. "
+            f"A vanilla run writes attenuate_<it>.pth and backscatter_<it>.pth "
+            f"beside point_cloud/iteration_<it>/; without them the image "
+            f"formation model cannot be applied and only geometry is measurable."
+        )
+    print(f"[SS] {ref_root.name}: iteration {it}")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    gaussians = GaussianModel(0)
+    args = Namespace(source_path=str(source_path), model_path=str(ref_root),
+                     images="images", resolution=-1, white_background=False,
+                     data_device="cuda", eval=True, sh_degree=0)
+    scene = Scene(args, gaussians, load_iteration=it, shuffle=False)
+
+    # Their medium model, loaded into the classes it was trained with. Both
+    # are inherited from the upstream fork, so this is their model in their
+    # code -- only the harness around it is ours.
+    at_model = AttenuateNetV3(scale=5.0).cuda()
+    bs_model = BackscatterNetV2(use_residual=False, scale=5.0).cuda()
+    at_model.load_state_dict(torch.load(ref_root / f"attenuate_{it}.pth"))
+    bs_model.load_state_dict(torch.load(ref_root / f"backscatter_{it}.pth"))
+    at_model.eval()
+    bs_model.eval()
+
+    pipe = Namespace(convert_SHs_python=False, compute_cov3D_python=False, debug=False)
+    bg = torch.zeros(3, device="cuda")
+
+    gt_dir = source_path / "images"
+    use_jpeg = not list(gt_dir.glob("*.png"))
+
+    with torch.no_grad():
+        render_set(out_dir, "test", it, scene.getTestCameras(), gaussians, pipe, bg,
+                   True, False, False, None, bs_model, at_model, save_as_jpeg=use_jpeg)
+
+    image_dir = out_dir / "test" / "with_water"
+    records = []
+    fnames = [f.name for f in sorted(image_dir.iterdir()) if f.is_file()]
+    renders, gts, names = readImages(str(image_dir), str(gt_dir), fnames)
+    for i in range(len(renders)):
+        rec = evaluate_pair(renders[i], gts[i], ssim, lpips, lpips_net="vgg")
+        rec["image"] = names[i]
+        records.append(rec)
+    agg = aggregate_images(records)
+
+    with torch.no_grad():
+        prof = profile_rendering(render, scene.getTestCameras(), gaussians, pipe, bg)
+
+    n = int(gaussians.get_xyz.shape[0])
+    ply = ref_root / "point_cloud" / f"iteration_{it}" / "point_cloud.ply"
+    artifact_bytes = ply.stat().st_size
+    for extra in (f"attenuate_{it}.pth", f"backscatter_{it}.pth", f"bg_{it}.pth"):
+        p = ref_root / extra
+        if p.exists():
+            artifact_bytes += p.stat().st_size
+
+    results = {
+        "cell": "SS",
+        "source": str(ref_root),
+        "iteration": it,
+        "_note": (
+            "Vanilla SeaSplat, unmodified. Rendered with the upstream render_set "
+            "and scored with this campaign's metric harness, so the convention "
+            "matches A0 on both sides. Metrics come from 8-bit files written and "
+            "read back, reproducing the inherited evaluation quirk rather than "
+            "correcting it on one side only."
+        ),
+        "quality": {
+            "psnr_pooled": agg["psnr_pooled"],
+            "psnr_per_channel": agg["psnr_per_channel"],
+            "ssim": agg["ssim"],
+            "lpips": agg["lpips"],
+            "n_images": agg["n_images"],
+        },
+        "cost": {
+            "n_primitives_final": n,
+            "train_wall_seconds": None,   # not ours to measure; their log has it
+            **prof,
+        },
+    }
+    (out_dir / "eval_metrics.json").write_text(json.dumps(results, indent=2),
+                                               encoding="utf-8")
+
+    size = {
+        "artifact_dir": str(ref_root),
+        "num_primitives": n,
+        "total_bytes": artifact_bytes,
+        "total_mb": round(artifact_bytes / 1024 / 1024, 4),
+        "bytes_per_primitive": round(artifact_bytes / max(n, 1), 4),
+        "_note": ("Vanilla stores a full-precision PLY plus the medium nets; it "
+                  "writes no compact artifact, so this is not comparable with "
+                  "A0's compressed_* figure without saying so."),
+    }
+    (out_dir / "model_size.json").write_text(json.dumps(size, indent=2), encoding="utf-8")
+
+    print(f"[SS] PSNR {agg['psnr_pooled']:.4f} pooled / "
+          f"{agg['psnr_per_channel']:.4f} per-channel, LPIPS {agg['lpips']:.4f}, "
+          f"{n:,} primitives")
+    print(f"[SS] wrote {out_dir/'eval_metrics.json'}")
+    return results
+
+
+def check_margin(output_root: Path) -> int:
+    """Compare SS against A0 per scene, against the pre-specified margin."""
+    margins = load_margins()
+    if not margins:
+        print("no equivalence_margin in configs/cells.json under cells.SS.")
+        print("Set it BEFORE S0 runs -- a margin chosen afterwards is not a")
+        print("pre-specified margin and cannot license the word 'equivalent'.")
+        return 1
+
+    print(f"equivalence margin (pre-registered): {margins}\n")
+    any_run = False
+    for ss_eval in sorted(output_root.glob("SS/*/s*/eval_metrics.json")):
+        scene = ss_eval.parent.parent.name
+        seed = ss_eval.parent.name
+        a0_eval = output_root / "A0" / scene / seed / "eval_metrics.json"
+        if not a0_eval.exists():
+            print(f"{scene}/{seed}: no matching A0 run")
+            continue
+        any_run = True
+        ss = json.loads(ss_eval.read_text(encoding="utf-8"))
+        a0 = json.loads(a0_eval.read_text(encoding="utf-8"))
+        flat_ss = {**ss.get("quality", {}), **ss.get("cost", {})}
+        flat_a0 = {**a0.get("quality", {}), **a0.get("cost", {})}
+        v = margin_verdict(flat_ss, flat_a0, margins)
+        print(f"{scene}/{seed}: {v['verdict']}")
+        for metric in ("psnr_pooled", "lpips", "n_primitives_final"):
+            e = v.get(metric, {})
+            mark = {True: "within", False: "OUTSIDE", None: "n/a"}[e.get("within")]
+            print(f"    {metric:<20} {mark:>8}  diff={e.get('diff')}  "
+                  f"allowed=±{e.get('allowed')}")
+        print()
+
+    if not any_run:
+        print("no SS runs found. S0 has not produced results yet.")
+        return 0
+    print("A verdict of WITHIN MARGIN supports 'A0 is equivalent to SeaSplat to")
+    print("within the stated margin'. It does not support 'A0 reproduces")
+    print("SeaSplat', which is a stronger claim than any finite sample licenses.")
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description="measure vanilla SeaSplat with the campaign harness")
+    ap.add_argument("--ref_root", help="a vanilla SeaSplat output directory")
+    ap.add_argument("--source_path", help="the scene's data directory")
+    ap.add_argument("--out", help="campaign run dir, e.g. .../runs/SS/Curasao/s0")
+    ap.add_argument("--iteration", type=int, default=None)
+    ap.add_argument("--check_margin", action="store_true")
+    ap.add_argument("--output_root", help="campaign root, for --check_margin")
+    args = ap.parse_args()
+
+    if args.check_margin:
+        if not args.output_root:
+            raise SystemExit("--check_margin needs --output_root")
+        return check_margin(Path(args.output_root))
+
+    missing = [f for f in ("ref_root", "source_path", "out") if not getattr(args, f)]
+    if missing:
+        raise SystemExit(f"missing required argument(s): {', '.join(missing)}")
+
+    measure(Path(args.ref_root), Path(args.source_path), Path(args.out), args.iteration)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

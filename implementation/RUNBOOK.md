@@ -307,6 +307,7 @@ python -m tools.collect_results  --output_root "$DRIVE_ROOT"   # everything, one
 python -m tools.medium_collapse  --output_root "$DRIVE_ROOT"   # is the physics intact?
 python -m tools.spatial_extent   --output_root "$DRIVE_ROOT"   # is the geometry intact?
 python -m tools.j_consistency    --output_root "$DRIVE_ROOT"   # what did quantization cost J-hat?
+python -m tools.measure_reference --check_margin --output_root "$DRIVE_ROOT"  # is A0 SeaSplat?
 ```
 
 ### `collect_results` — the single view
