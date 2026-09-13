@@ -306,6 +306,7 @@ notebook is enough, and none of them interferes with a worker session.
 python -m tools.collect_results  --output_root "$DRIVE_ROOT"   # everything, one view
 python -m tools.medium_collapse  --output_root "$DRIVE_ROOT"   # is the physics intact?
 python -m tools.spatial_extent   --output_root "$DRIVE_ROOT"   # is the geometry intact?
+python -m tools.j_consistency    --output_root "$DRIVE_ROOT"   # what did quantization cost J-hat?
 ```
 
 ### `collect_results` — the single view

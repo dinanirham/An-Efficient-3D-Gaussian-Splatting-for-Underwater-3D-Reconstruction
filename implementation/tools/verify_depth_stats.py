@@ -41,6 +41,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from utils.depth_stats import (  # noqa: E402
     DepthRangeStats,
+    SweepCache,
     normalise_depth,
     sweep_depth_ranges,
 )
@@ -256,6 +257,61 @@ def t13_gating_off_reports_nothing_rather_than_raw_depth():
     return ok, "no renormalisation in force -> nothing reported"
 
 
+# --------------------------------------------------------------------------
+# the cache
+# --------------------------------------------------------------------------
+
+
+def t14_cache_suppresses_repeated_passes():
+    """D-8 makes the loop revisit one iteration ~51 times; one sweep is right."""
+    c = SweepCache()
+    calls = {"n": 0}
+
+    def sweep_once():
+        calls["n"] += 1
+        return DepthRangeStats(n_views=7, range_mean=1.0)
+
+    for _ in range(51):
+        hit = c.get(15000, 200000)
+        if hit is None:
+            c.put(15000, 200000, sweep_once())
+
+    ok = calls["n"] == 1
+    return ok, f"51 passes at one (iteration, count) -> {calls['n']} sweep"
+
+
+def t15_cache_separates_pre_and_post_simplification():
+    """DECISIVE. Both rows log at the same iteration and must differ.
+
+    Keyed on iteration alone, post_simp would receive the pre-prune answer and
+    the instrument would report that simplification changes nothing -- turning
+    the measurement into a guaranteed null.
+    """
+    c = SweepCache()
+    before = DepthRangeStats(n_views=18, range_mean=32.5, range_cv=0.1357)
+    after = DepthRangeStats(n_views=18, range_mean=34.8, range_cv=0.1548)
+
+    c.put(15000, 3_954_116, before)          # pre_simp
+    stale = c.get(15000, 200_000)            # post_simp, same iteration
+    c.put(15000, 200_000, after)
+
+    ok = (
+        stale is None
+        and c.get(15000, 200_000) is after
+        and c.get(15000, 200_000).range_cv != before.range_cv
+    )
+    return ok, "same iteration, changed population -> cache misses, not stale"
+
+
+def t16_cache_holds_one_entry():
+    """Bounded memory, and a wrong key degrades to a redundant sweep."""
+    c = SweepCache()
+    c.put(15000, 200000, DepthRangeStats(n_views=1))
+    c.put(20000, 149133, DepthRangeStats(n_views=2))
+    ok = c.get(15000, 200000) is None and c.get(20000, 149133).n_views == 2
+    return ok, "previous entry evicted; only the latest is retained"
+
+
 def main() -> int:
     print("=" * 68)
     print("CD-27  cross-frame depth-range instrument")
@@ -282,6 +338,11 @@ def main() -> int:
     check("T12 row keys stable, unmeasured blank", t12_row_keys_are_stable_and_blank_when_unmeasured)
     check("T13 no renormalisation -> nothing reported",
           t13_gating_off_reports_nothing_rather_than_raw_depth)
+    check("T14 cache suppresses repeated passes at one iteration",
+          t14_cache_suppresses_repeated_passes)
+    check("T15 cache separates pre/post simplification  <-- decisive",
+          t15_cache_separates_pre_and_post_simplification)
+    check("T16 cache holds one entry", t16_cache_holds_one_entry)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
