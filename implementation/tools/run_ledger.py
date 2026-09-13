@@ -337,6 +337,26 @@ class Ledger:
                 f"dense cloud missing: {self.dense_pcd_path(run['scene'])} "
                 f"(produce it with source/roma_init.py)"
             )
+        if run["cell"] in external_cells():
+            # Blocked rather than refused at dispatch. An external cell is not
+            # trainable here at all, so the worker must never claim it -- but
+            # it must not stall the queue either. Marking it blocked routes it
+            # through the existing policy: a stage whose remaining work is
+            # entirely blocked is skipped, loudly and into `last_skipped`, so
+            # the A100 moves on to work it can do while the control is
+            # produced out of band.
+            #
+            # Ordering is not lost by this, it moves: S0 no longer gates
+            # compute, and `measure_reference --check_margin` reports the
+            # control missing until it exists. Blocking 33 runs of GPU time on
+            # a manual step is a worse failure than letting the analysis carry
+            # the precondition.
+            reasons.append(
+                f"{run['cell']} is an external control and cannot be trained by "
+                f"this codebase. Produce it from the unpatched upstream "
+                f"checkout, then `tools.measure_reference --ref_root ... --out "
+                f"{self.root}/runs/{run['cell']}/{run['scene']}/s{run['seed']}`"
+            )
         return reasons
 
     def reap_stale(self, stale_minutes: int = 45) -> int:

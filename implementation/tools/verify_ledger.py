@@ -109,6 +109,38 @@ def t16_extend_preserves_completed_runs():
                     f"re-extend added {again} (idempotent)")
 
 
+def t17_external_cell_does_not_deadlock_the_queue():
+    """DECISIVE. S0 must not stall the campaign on a manual step.
+
+    SS cannot be trained by this codebase, so the worker must never claim it.
+    But refusing at dispatch would kill the driver, and leaving S0 pending
+    forever would idle an A100 behind work no worker can do. Marking it blocked
+    routes it through the existing policy: a stage whose remaining work is
+    entirely blocked is skipped, loudly, and compute moves on while the control
+    is produced out of band.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        led = fresh(tmp)                       # full campaign, S0 included
+        stages = []
+        for _ in range(200):
+            r = led.claim()
+            if r is None:
+                break
+            stages.append(r["stage"])
+            r["status"] = "done"
+        led.save()
+
+        ss_claimed = any(r["cell"] == "SS" for r in led.runs if r["status"] == "done")
+        gs_claimed = sum(1 for r in led.runs if r["cell"] == "GS" and r["status"] == "done")
+        reached_later = "S4" in stages
+        ss_blocked = [r for r in led.runs if r["cell"] == "SS" and r["status"] == "blocked"]
+
+        ok = (not ss_claimed) and gs_claimed == 12 and reached_later and ss_blocked
+        return ok, (f"SS never claimed={not ss_claimed}, GS ran {gs_claimed}/12, "
+                    f"queue reached {sorted(set(stages))[-1]}, "
+                    f"SS rows blocked={len(ss_blocked)}")
+
+
 def t1_init_shape():
     with tempfile.TemporaryDirectory() as tmp:
         led = fresh(tmp)
@@ -489,6 +521,8 @@ def main() -> int:
           t15_s0_gates_the_whole_campaign)
     check("T16 extend preserves completed runs  <-- decisive",
           t16_extend_preserves_completed_runs)
+    check("T17 an external cell does not deadlock the queue  <-- decisive",
+          t17_external_cell_does_not_deadlock_the_queue)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
