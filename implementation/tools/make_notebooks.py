@@ -272,13 +272,29 @@ A100 before anything is trained on top of it.
     code("!python -m tools.verify_rasterizer\n"),
     md("""## 6. The remaining self-checks
 
-Seventy-six checks across ten suites. Cheap, and several encode findings that
-are easy to reintroduce.
+Cheap, and several encode findings that are easy to reintroduce. Four of these
+suites postdate the first campaign and each exists because of a defect that
+would have been invisible in the results:
+
+* `verify_depth_stats` — the sweep and the training loop must compute the depth
+  normalisation through **one** implementation, and the sweep must consume no
+  randomness. A drifted second copy would measure a depth range β is not fitted
+  against; a sweep that advanced the RNG would make instrumented runs
+  non-comparable with completed ones.
+* `verify_storage` — now also covers decoding the compressed store. Until those
+  checks existed the store had no reader at all, so "model size on disk" was a
+  byte count of a representation nobody had shown was sufficient.
+* `verify_j_consistency` — guards the silent success. If the quantized
+  reconstruction ever equals the continuous parameters, both renders coincide
+  and the tool reports that quantization is free, which reads as a result
+  rather than a bug.
+* `verify_measure_reference` — an absent metric must never certify equivalence.
 """),
     code('''\
 for t in ['verify_config_layer','verify_ledger','verify_metrics','verify_storage',
           'verify_analysis','verify_undistort','verify_dense_init','verify_simplify',
-          'verify_quantize']:
+          'verify_quantize','verify_depth_stats','verify_j_consistency',
+          'verify_measure_reference']:
     !python -m tools.{t} 2>&1 | tail -2
 '''),
     md("""## 7. Locate the dataset
@@ -406,10 +422,42 @@ if failures:
         f'so S1 can still proceed.')
 print('\\nall dense clouds present')
 '''),
-    md("""## 10. Initialise the ledger
+    md("""## 10. Stage an unpatched reference checkout — for SS, stage S0
 
-96 rows: 8 cells × 4 scenes × 3 seeds. Refuses to overwrite a campaign in
-progress unless `--force`.
+**This checkout must not be patched.** `tools/instrument_reference.py` adds a
+densification printout to a reference tree and says in its own docstring that a
+patched checkout must not produce SS numbers. That tool belongs to the
+diagnostic notebook; this clone is the one S0 measures, and nothing is applied
+to it.
+
+Nothing needs to be: `render_uw.py`'s `render_set` is the upstream render path,
+inherited unchanged in this fork, so `tools/measure_reference` can point the
+campaign's own metric harness at a vanilla output directory. Their model, their
+render code, our metrics, one convention on both sides.
+"""),
+    code('''\
+!rm -rf /content/seasplat_vanilla
+!git clone -q --recursive https://github.com/dxyang/seasplat.git /content/seasplat_vanilla
+!cd /content/seasplat_vanilla && git log -1 --format="SS reference at %H  %ad" --date=short
+print("NOT patched -- this is the tree S0 measures.")
+'''),
+    md("""## 11. Initialise the ledger
+
+132 rows: 11 cells × 4 scenes × 3 seeds — the 2³ factorial, mechanism D, and
+the two S0 reference controls. Refuses to overwrite a campaign in progress
+unless `--force`.
+
+**S0 holds the queue until it finishes**, and that ordering is the point rather
+than a detail. Every number this study reports is a difference against A0, so
+A0's standing rests on being the method it claims to reimplement — and before
+S0 that rested on a converged-primitive-count comparison, at 16 000 iterations,
+on one scene, with no fidelity metric involved. At three seeds per side the 95%
+interval on that ratio is ±23.5%.
+
+To add the controls to a campaign already in progress, use `extend` rather than
+`init`: `init` rebuilds the run table and would discard every completed row.
+
+    !python -m tools.run_ledger extend --cells SS GS --output_root "$DRIVE_ROOT"
 """),
     code('''\
 !python -m tools.run_ledger init   --output_root "$DRIVE_ROOT"
@@ -608,6 +656,48 @@ for p in paths:
     plt.tight_layout(); plt.savefig(f'{ANALYSIS_DIR}/h4_{scene}.png', dpi=140)
     plt.show()
 '''),
+    md("""## 4b. The rest of the instrument panel
+
+These four ran by hand throughout the first campaign, which is why they were
+easy to forget. Each answers a question the contrasts cannot.
+"""),
+    code('''\
+# Everything in one table: fidelity, cost, dispersion, per scene and per cell.
+!python -m tools.collect_results --output_root "$DRIVE_ROOT" \\
+    --out_dir "$ANALYSIS_DIR"
+'''),
+    code('''\
+# Is the physics intact? Reports collapsed channels and saturated backscatter,
+# and -- for runs carrying the CD-27 sweep -- the cross-frame depth-range
+# dispersion across each simplification boundary. The prediction is that the
+# ratio separates the collapsed runs from the intact ones. If it does not, the
+# identifiability account is wrong and should be withdrawn rather than
+# qualified.
+!python -m tools.medium_collapse --output_root "$DRIVE_ROOT" \\
+    --json "$ANALYSIS_DIR/medium_collapse.json"
+'''),
+    code('''\
+# Is the geometry intact? Bounding box, opacity-gated extent, voxel occupancy,
+# radial concentration. Detects two failure modes no photometric metric
+# registers. Never a proxy for medium health -- that correlation was tested and
+# came out the wrong sign (E.17).
+!python -m tools.spatial_extent --output_root "$DRIVE_ROOT" \\
+    --out "$ANALYSIS_DIR/spatial_extent.csv"
+'''),
+    code('''\
+# What did quantization cost the restored image? The only quantitative proxy
+# for damage to J-hat, which has no ground truth. A value at the 100 dB cap is
+# a BUG signal, not a result: it means the override did not take.
+!python -m tools.j_consistency --output_root "$DRIVE_ROOT" \\
+    --json "$ANALYSIS_DIR/j_consistency.json"
+'''),
+    code('''\
+# Is A0 the method it claims to reimplement? Compares SS against A0 using the
+# equivalence margin fixed in configs/cells.json BEFORE S0 ran. A verdict of
+# WITHIN MARGIN supports "equivalent to within the stated margin" -- never
+# "A0 reproduces SeaSplat", which no finite sample licenses.
+!python -m tools.measure_reference --check_margin --output_root "$DRIVE_ROOT"
+'''),
     md("""## 5. Storage — per primitive as well as total
 
 The codebook is a fixed cost, so the compression ratio grows with primitive
@@ -618,6 +708,30 @@ otherwise read as quantization performing worse.
 !python -m tools.analyse --output_root "$DRIVE_ROOT" \\
     --metric bytes_per_primitive --metric total_bytes --metric n_primitives_final
 '''),
+    md("""## 6. What these contrasts can and cannot resolve
+
+Declared here because it is a property of the design, settled before the runs,
+and not something to discover while reading a table.
+
+An interaction is a difference of four cell means, so its standard error is
+about twice that of a single mean. Against A0's measured per-scene dispersion
+at three seeds, the smallest resolvable interaction is:
+
+| metric | resolvable at 2 SE | M2's **main** effect, for scale |
+|---|---:|---:|
+| PSNR (pooled) | 0.51 – 1.61 dB | 0.21 dB |
+| LPIPS | 0.0064 – 0.0235 | 0.0482 |
+
+**On PSNR this design is inert, not merely underpowered** — the smallest
+detectable interaction is two to eight times the main effect of the mechanism
+whose interaction is sought. So **RQ2 is adjudicated on LPIPS and on primitive
+count, and PSNR interactions are reported as `UNDETERMINED` by construction.**
+
+A PSNR interaction reported as "no interaction detected" would be false
+precision: the design cannot separate a null from a 1 dB effect on Curasao or
+Panama. Resolution improves as √n, so halving the detectable effect costs four
+times the seeds — stated as the price, and declined.
+"""),
     md("""---
 Outputs land in `analysis/` on Drive.
 """),
