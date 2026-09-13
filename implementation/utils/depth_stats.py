@@ -193,6 +193,44 @@ def _stats_from(mins: list[float], maxs: list[float]) -> DepthRangeStats:
     )
 
 
+class SweepCache:
+    """One-entry cache keyed on `(iteration, primitive count)`.
+
+    Exists because of D-8: `continue` bypasses `iteration += 1`, so the
+    training loop revisits a single iteration number roughly fifty times
+    during medium-only steps, and an uncached sweep fires on every pass.
+    Measured on the first instrumented run: 418 sweeps where 14 were intended.
+
+    **The count is in the key for a reason, and dropping it would be worse
+    than the waste it prevents.** The `pre_simp` and `post_simp` diagnostic
+    rows both log at the same iteration and must return *different*
+    distributions -- the population change between them is the entire
+    measurement. Keyed on iteration alone, `post_simp` would receive the
+    pre-prune answer and the instrument would report that simplification
+    changes nothing.
+
+    Holding one entry rather than a dict keeps memory bounded and makes the
+    failure mode benign: a key that is wrong causes a redundant sweep, never
+    a stale answer.
+    """
+
+    def __init__(self) -> None:
+        self._key: Optional[tuple[int, int]] = None
+        self._value: Optional[DepthRangeStats] = None
+
+    def get(self, iteration: int, n_primitives: int) -> Optional[DepthRangeStats]:
+        if self._key == (iteration, n_primitives):
+            return self._value
+        return None
+
+    def put(
+        self, iteration: int, n_primitives: int, value: DepthRangeStats
+    ) -> DepthRangeStats:
+        self._key = (iteration, n_primitives)
+        self._value = value
+        return value
+
+
 def sweep_depth_ranges(
     cameras: Sequence[Any],
     gaussians: Any,

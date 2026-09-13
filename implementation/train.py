@@ -38,7 +38,7 @@ from arguments import (
 )
 from utils.preflight import preflight_args, preflight_scene, write_manifest
 from utils.diagnostics import DiagnosticLogger
-from utils.depth_stats import normalise_depth, sweep_depth_ranges
+from utils.depth_stats import SweepCache, normalise_depth, sweep_depth_ranges
 from source.simplify import accumulate_importance, cdf_keep_mask, sample_to_budget
 from source.quantize import AttributeQuantizer
 from source.storage import measure_model_size, write_compressed_model
@@ -95,6 +95,7 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
 
     # M2: the split can only be checked once the dataset is loaded.
     split_sizes = preflight_scene(scene)
+    _zcache = SweepCache()   # CD-27: one entry, keyed on (iteration, count)
     diag = DiagnosticLogger(model_params.model_path, opt_params.diag_interval)
     diag.log(
         iteration=0,
@@ -541,8 +542,24 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
             Iterates the training cameras in order rather than drawing from the
             shuffled viewpoint stack, so the RNG stream is untouched and an
             instrumented run stays comparable with the runs already completed.
+
+            Cached on `(iteration, primitive count)`, for two reasons that pull
+            in opposite directions.  D-8 means `continue` bypasses
+            `iteration += 1`, so the loop revisits one iteration number ~51
+            times during medium-only steps and every pass would otherwise
+            re-sweep -- measured at 418 sweeps against 14 intended.  But
+            caching on `iteration` alone would be worse than the waste: the
+            `pre_simp` and `post_simp` rows both log at iteration 15000 and
+            MUST return different distributions, because the population change
+            between them is the entire measurement.  Including the count
+            separates them, and the cache degrades to a redundant sweep rather
+            than a stale answer if it is ever wrong.
             """
-            return sweep_depth_ranges(
+            n = gaussians.get_xyz.shape[0]
+            hit = _zcache.get(iteration, n)
+            if hit is not None:
+                return hit
+            return _zcache.put(iteration, n, sweep_depth_ranges(
                 scene.getTrainCameras(),
                 gaussians,
                 render_depth,
@@ -551,7 +568,7 @@ def training(model_params, opt_params, pipe_params, testing_iterations, saving_i
                 opt_params.normalize_depth,
                 opt_params.filter_depth,
                 opt_params.norm_depth_max,
-            )
+            ))
 
         # CD-12: one unconditional diagnostic row every diag_interval steps.
         # Unconditional matters: upstream printed a primitive count only when

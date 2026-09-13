@@ -436,6 +436,44 @@ would sink the account rather than confirm it.
   stays comparable with the runs already completed. A sweep that advanced the
   RNG stream would invalidate a campaign silently.
 
+### What the first instrumented run showed, including a defect in the instrument
+
+`A6/Curasao/s0`, 18 training views, both boundaries swept `[measured n=1]`:
+
+| event | population | `zr_cv` before → after | ratio | β_att change over the burst |
+|---|---|---|---|---|
+| 15 000 | 3 954 116 → 200 000 (**19.8×**) | 0.1357 → 0.1548 | **1.141** | **−58% / −77% / −87%** |
+| 20 000 | 200 000 → 149 133 (1.34×) | 0.1073 → 0.1074 | 1.001 | −6% / −11% / −15% |
+
+The event that broadened the distribution perturbed β about **ten times** as much
+as the one that did not. Direction and ordering both match the prediction at
+n=1. Two incidental confirmations: `rewarm_end` carries **identical** `zr_*` to
+`post_simp`, because the burst freezes geometry and therefore cannot move what β
+is defined against; and the burst did not fail to act — it drove β from
+1.42/1.30/1.17 to 0.59/0.29/0.16, re-converging on the new compromise rather
+than returning to the old value. This run did not collapse: β_att ends at
+2.44/1.77/1.12, ordered R > G > B, recovered during ordinary training after the
+second event rather than inside either burst.
+
+**The single-frame column is inadequate by a measured margin.** Across 416 swept
+rows, `z_range` differs from `zr_mean` by a median of **6.8%** and a maximum of
+**38.2%** — the uncontrolled term that motivated the instrument, now quantified.
+
+**And the instrument over-fired 30×.** It ran 418 times where 14 were intended,
+because D-8 (`continue` bypasses `iteration += 1`) makes the loop revisit one
+iteration number ~51 times during medium-only steps, and `diag.due()` fires on
+every pass. The data was correct and 30× redundant: 420 KB per run instead of
+14 KB, and ~75 s of wasted renders.
+
+Fixed with a one-entry cache keyed on `(iteration, primitive count)`
+`[repo: utils.depth_stats.SweepCache]`. **The count is in the key for a reason
+that matters more than the waste it prevents**: `pre_simp` and `post_simp` both
+log at iteration 15 000 and must return *different* distributions, since the
+population change between them is the entire measurement. Keyed on iteration
+alone, `post_simp` would receive the pre-prune answer and the instrument would
+report that simplification changes nothing — a guaranteed null. `verify` **T15**
+covers exactly that, and the suite is now 16 checks.
+
 ### Status
 
 **Runs completed before this instrument cannot be retrofitted** — the
