@@ -136,7 +136,26 @@
           "thesis actually makes."
         ]
       },
-      "set": {}
+      "set": {},
+      "equivalence_margin": {
+        "_about": [
+          "Fixed BEFORE S0 runs. An equivalence claim needs a margin stated in",
+          "advance; absence of a detected difference afterwards cannot license",
+          "the word 'equivalent', least of all on a high-variance outcome.",
+          "",
+          "Set to what this design can certify, not to what would be impressive.",
+          "At n=3 per side the PSNR difference resolves to +/-0.36-1.14 dB, so",
+          "+/-1.0 dB is certifiable on three of four scenes.",
+          "",
+          "The count margin is deliberately loose, and that looseness IS the",
+          "finding: with a per-scene CV of 6.0-29.3%, n=3 bounds the ratio only",
+          "to +/-9.6% (JapaneseGardens) through +/-46.9% (Panama). A tighter",
+          "count equivalence is not available at this sample size."
+        ],
+        "psnr_pooled_db": 1.0,
+        "lpips": 0.02,
+        "n_primitives_fraction": 0.3
+      }
     },
     "GS": {
       "description": "Reference floor. Vanilla 3DGS -- the medium model switched off, so the render is compared directly against the capture with no image formation model. Shows what the physics buys, on these scenes, under this harness and this metric convention.",

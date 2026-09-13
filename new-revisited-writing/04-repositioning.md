@@ -165,7 +165,7 @@ the Mini-Splatting name.
 | | Question | Answered by | Status |
 |---|---|---|---|
 | **RQ1** | Do the three mechanisms individually transfer to a physics-aware underwater baseline, and at what efficiency–fidelity cost? | A1−A0, A2−A0, A3−A0 | S3, S2 |
-| **RQ2** | Do they compose additively, or do they interact? | two-way and three-way factorial contrasts, both directions | S4, S5 |
+| **RQ2** | Do they compose additively, or do they interact? | two-way and three-way factorial contrasts, both directions — **on LPIPS and primitive count; PSNR interactions are `UNDETERMINED` at n=3 by construction, resolvable only above 0.51–1.61 dB against a 0.21 dB main effect** | S4, S5 |
 | **RQ3** | Does primitive-population reduction perturb medium identifiability, and does a re-identification burst restore it? | Ẑ/β diagnostics across the simplification boundary; CD-6 ablation | S2 |
 | **RQ4** | What integration properties, invisible to each component's own validation, govern whether the composition behaves as intended? | the CD ledger; the gradient-destination and Ẑ-rescale findings | ✅ partly answered |
 | **RQ5** *(Framing B)* | Does mechanism ranking persist across operating points? | budget sweep | **not designed** |

@@ -330,10 +330,18 @@ fourth factor: M1 disables densification, so D is provably inert in all eight M1
 **Claim (b) remains unavailable**, and §12.3's concession still stands in full. The matrix is
 running; no interaction has been measured.
 
-There is now a sharper reason for caution than "no measurements exist". The measured
-dispersion means an interaction term — a difference of differences, carrying roughly twice
-the variance of a main effect — may not clear the noise floor even after all 108 runs. If it
-does not, the honest report is `UNDETERMINED`, which the analysis tooling emits rather than
+There is now a sharper reason for caution than "no measurements exist", and it has since
+been quantified rather than left as a worry. An interaction term carries roughly twice the
+standard error of a main effect, and against A0's measured per-scene dispersion at three seeds
+the smallest resolvable PSNR interaction is **0.51–1.61 dB** — two to eight times M2's *main*
+effect of 0.21 dB `[08-computational-profile §8.4]`.
+
+**So claim (b) is unavailable on PSNR for a structural reason, not a contingent one**: no
+plausible interaction is detectable there at this sample size, and no number of completed runs
+changes that without more seeds. On LPIPS the floor is 0.0064–0.0235 against a main effect of
+0.0482, so (b) remains live on the perceptual metric and on primitive count.
+
+The honest report for PSNR is `UNDETERMINED`, which the analysis tooling emits rather than
 rounding to zero. **A null interaction and an unresolvable one are different findings**, and
 the distinction has to survive into the write-up.
 

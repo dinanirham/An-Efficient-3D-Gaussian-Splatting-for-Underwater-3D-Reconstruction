@@ -15,7 +15,7 @@ submission.
 |---|---|---|---|
 | A.1 | Physics-aware underwater 3DGS is feasible and achieves real-time rendering | **Supported** | Independently reproduced. Current A0: 69.2 fps at 4.29M primitives, Curasao `[measured n=1]` |
 | A.2 | The baseline is "representation-heavy" — ~2.86M primitives, ~194 MB | **Supported**, with D-4 caveat | Current median 2 482 200 across 12 runs; the two agree within dispersion (D-6). "194 MB" is a **PLY** figure and must be labelled as such |
-| A.3 | A0 reproduces SeaSplat as published | **Supported** — and now *demonstrated*, which the manuscript never did | 3 runs each vs unmodified SeaSplat, overlapping ranges, mean ratio 1.036 `[measured n=3]` |
+| A.3 | A0 reproduces SeaSplat as published | **Partially supported — and materially narrower than stated** | What was measured is **converged primitive count only**, at **16 000 iterations**, on **Curasao alone**, 3 runs per side, mean ratio 1.036 `[repo: tools/replicate_baseline.py]`. No fidelity metric was compared. And the comparison is **underpowered**: at n=3 per side on a quantity whose CV is 14.7% on that scene, the 95% interval on the ratio is **±23.5%**, so the data are consistent with A0 differing from vanilla SeaSplat by a quarter. Absence of a detected difference is not evidence of equivalence `[09-supervisory-review-ii §3]`. Closed by S0's SS cell |
 | A.4 | Curasao renders slower (30.84 fps) because of higher image resolution and screen-space density | **Not yet tested** | Plausible but unverified; the current implementation measures Curasao *fastest-loaded* at 69.2 fps under a defined protocol. D-7: the two figures are not comparable |
 
 ---
@@ -60,12 +60,31 @@ submission.
 | E.1 | An integration boundary can preserve every forward value and still change which gradients drive densification | **Supported** | **D-3.** Bracketed at three configurations; the fix verified to indistinguishability at n=3 `[05-constraints.md §5.6]` |
 | E.2 | A scene-global medium model whose only spatial input is per-frame min–max-normalised depth is not invariant to primitive-count reduction | **Supported** `[measured n=12 + 12 control]` | **12 of 12** A2 runs have their largest attenuation drop on a simplification boundary (25–195%); **0 of 12** A0 runs lose a channel. The collapse is **bistable and seed-conditioned** — 6 of 12, across all four scenes `[§13.13]` |
 | E.6 | CD-6's medium re-identification burst restores β after a population change | **Contradicted** `[measured n=12]` | The `rewarm_end` row *is* the post-burst state, and β is already collapsed in it. 200 steps did not restore it in any of the six collapsed runs. A negative result about this work's own remedy `[§13.10, §13.13]` |
-| E.7 | Fidelity metrics cannot certify that the medium model is intact | **Supported** `[measured n=1, decisive]` | `A1/Curasao/s0` produced the campaign's **best test PSNR (30.97, above A0's 30.48)** with **two of three attenuation channels permanently dead**. PSNR, SSIM and LPIPS score the composed image, which a saturated backscatter term still fits `[§13.12, §13.13]` |
+| E.7 | Fidelity metrics cannot certify that the medium model is intact | **Supported** `[measured n=12]` — upgraded from n=1 | Originally one run: `A1/Curasao/s0` produced the campaign's **best test PSNR (30.97, above A0's 30.48)** with **two of three attenuation channels permanently dead**. A2's twelve runs split 6 collapsed / 6 intact, which makes the same point as a **within-scene contrast on every scene at once**: |
+
+**E.7, the n=12 form.** A2 stratified by collapse, differences measured against A0's per-scene sd as the noise floor:
+
+| scene | PSNR collapsed − intact | in A0 sd | LPIPS collapsed − intact | in A0 sd |
+|---|---:|---:|---:|---:|
+| Curasao | −0.184 dB | 0.26 | +0.0026 | 0.26 |
+| IUI3-RedSea | **+0.190 dB** | 0.39 | **−0.0007** | 0.25 |
+| JapaneseGardens | −0.377 dB | 1.71 | −0.0028 | 0.38 |
+| Panama | −0.159 dB | 0.26 | +0.0036 | 1.27 |
+
+**Seven of eight comparisons fall below 0.4 sd, and the sign is not consistent** — on IUI3 the
+collapsed runs score *better* on both metrics. The largest single value, 1.71 sd on one scene
+under one metric, is what eight comparisons produce by chance. A model with two dead attenuation
+channels is therefore statistically indistinguishable from an intact one under **both** PSNR and
+LPIPS, including LPIPS, which is the metric that separates every other contrast in this study
+`[09-supervisory-review-ii §5]`.
+
+| # | Claim | Verdict | Basis |
+|---|---|---|---|
 | E.8 | M1 does not cost fidelity at ~12× fewer primitives | **Supported** `[measured n=3 on 3 scenes, n=1 on Panama]` | PSNR **+0.605 dB** mean, higher on every complete scene, resolvable on JapaneseGardens at **3.30 sd**. LPIPS ≈ baseline (better on one scene, unchanged on another). **Panama reverses the sign at n=1** and is not yet settled `[results-03]` |
 | E.22 | Same-seed reproducibility on primitive count has a median of 21% and a tail reaching 59% | **Supported** `[measured n=12]` | A0 and A3 at matched seeds are identical processes until after the population freezes at iteration 15 000; M3 activates at 22 000. Twelve such pairs across four scenes. The replication's 22.5% maximum came from three comparisons on one scene `[13-campaign-addendum §13.14]` |
 | E.23 | M3 does not affect primitive count | **Supported** `[code + measured n=12]` | `m3_quantize` appears at three sites, none before iteration 22 000, and the density-control block is gated by `iteration < 15 000`, so `count(30000) = count(15000)`. The apparent dispersion difference was same-seed noise `[§13.14]` |
 | E.19 | M1 nearly removes run-to-run variance in primitive count | **Supported** `[measured n=3]` | A1 CV **0.18–1.16%** against A0's 6.0–14.7% — a 6–52× reduction. Densification never runs under M1, so the amplification that drives the baseline's dispersion has nothing to act on `[results-03 §3]` |
-| E.20 | It is the population *discontinuity*, not the population *size*, that breaks the medium model | **Supported** `[measured n=10 vs n=12]` | A1 (~230k primitives) loses **0 of 10** attenuation channels; A2 (~145k) loses **6 of 12**, every drop on a simplification boundary. Comparable final counts, opposite outcomes. A sharper statement of H4 than the hypothesis made `[results-03 §4]` |
+| E.20 | It is the population *discontinuity*, not the population *size*, that breaks the medium model | **Supported** `[measured n=10 vs n=12, plus a deconfounding contrast at n=3]` | A1 (~230k primitives) loses **0 of 10** attenuation channels; A2 (~145k) loses **6 of 12**, every drop on a simplification boundary `[results-03 §4]`. That pairing confounds count with mechanism, since A1 differs in both. **A4 separates them**: on Curasao it converges to **129 473** primitives — *below* A2's 147 032 on the same scene — with the same two simplification events, and loses **0 of 3**. Lower count, identical events, opposite outcome. The size explanation predicts the reverse `[09-supervisory-review-ii §7]` |
 | E.21 | M2 and M1 are distinguishable only under a perceptual metric | **Supported** `[measured n=12 vs n=10]` | On PSNR they differ by 0.4 dB, within noise. On LPIPS M2 is worse on **all four** scenes at 4.1–19.4 sd while M1 is at baseline on two of three. Reporting PSNR alone would make them look equivalent `[results-01, results-03 §1]` |
 
 | E.17 | The geometric diagnostic agrees with the medium-model diagnostic | **Contradicted** `[measured n=4]` | Detached fraction vs β perturbation gives ρ = **−0.40** — the wrong sign. The general form (occupancy vs β perturbation) is ρ = −0.80 at **p = 0.333**, which is not evidence. The geometric measure has **no demonstrated external validity**; its justification is the failure modes it detects directly `[results-02 §5b]` |
@@ -80,7 +99,7 @@ submission.
 | E.9 | Frame-rate gain is sub-linear in primitive reduction, and not a single exponent | **Supported** `[measured n=1/cell]` | A1: 14.3× fewer → **1.48×** fps. A2: 29.7× fewer → **4.27×**. Per-primitive rasterization cost differs by cell, so a count ratio does not predict a frame-rate ratio `[§13.12]` |
 | E.3 | Converged primitive count carries 6–29% run-to-run dispersion, seeding notwithstanding | **Supported** | 12 A0 runs + 3+3 replication `[measured n=3/scene]` |
 | E.4 | Detaching alpha gradients from densification yields ~6× fewer primitives at ~−0.1 dB | **Not yet tested** | `[measured n=1]` against a *defective* baseline, different seeds. Not claimable until S6 `[12-novelty-defensibility.md §12.6.2]` |
-| E.5 | A0 is indistinguishable from unmodified SeaSplat | **Supported**, Curasao only | 3+3 runs, ratio 1.036. Should not be stated for all scenes |
+| E.5 | A0 is indistinguishable from unmodified SeaSplat | **Supported as stated, and the wording is load-bearing** | 3+3 runs on Curasao, count only, ratio 1.036. *Indistinguishable* is what was shown; *equivalent* is not, and the 95% interval on the ratio is ±23.5%. Per-scene bounds: JapaneseGardens ±9.6%, IUI3 ±15.3%, Curasao ±23.5%, Panama ±46.9%. Must not be stated for all scenes, and must not be upgraded to equivalence without a pre-specified margin `[09-supervisory-review-ii §3]` |
 
 ---
 
@@ -88,11 +107,28 @@ submission.
 
 | Verdict | Count |
 |---|---:|
-| Supported | 22 |
-| Partially supported | 4 |
+| Supported | 21 |
+| Partially supported | 5 |
 | **Contradicted** | **6** |
 | Not yet tested | 4 |
 | Methodologically untestable with the current design | 2 |
+
+### Moved by supervisory review II
+
+**A.3 is downgraded to *partially supported*.** Not by new evidence but by reading what
+`tools/replicate_baseline.py` measures: converged primitive count only, at 16 000 iterations,
+on Curasao alone. No fidelity metric was ever compared between A0 and vanilla SeaSplat, and at
+n=3 per side the 95% interval on the count ratio is ±23.5% on that scene. The claim the thesis
+rests every other number on was the least well established in the ledger. S0's SS cell closes
+it, against a margin now fixed in advance.
+
+**E.7 is upgraded from n=1 to n=12**, using data already on disk. A2 splits 6 collapsed / 6
+intact, and within scene the collapsed and intact strata differ by less than 0.4 of A0's sd in
+seven of eight comparisons, with inconsistent sign. The study's most quotable claim was sitting
+in a column of standard deviations.
+
+**E.20 gains a deconfounding contrast.** A1-vs-A2 confounds count with mechanism; A4 on Curasao
+converges *below* A2 with the same two simplification events and loses no channel.
 
 ### Two claims have moved since this ledger was first written
 

@@ -272,6 +272,15 @@ radius, and the ratio of the last to the first. This single ratio is the most le
 a value in the low tens is an ordinary scene, and four figures indicate a triangulation
 placing primitives at distances unrelated to the geometry.
 
+**How this measure came to be justified, stated because the sequence matters.** It was
+introduced after floaters were noticed in an interactive viewer, and it was first hypothesised
+to serve as a cheap proxy for medium identifiability — a geometrically pathological model being
+expected to carry a perturbed medium model. That hypothesis was tested and **failed**, with the
+correlation emerging at the wrong sign (§3.7.5). The justification that survives is the
+narrower one given below: the protocol detects failure modes directly. A reader who is told
+this history can weigh the surviving claim properly; one who finds the negative result later
+and reconstructs the sequence unaided will not.
+
 **What the protocol found is why it is reported.** Across the untreated baseline the bounding
 box is between ninety-six and ninety-nine point nine six per cent empty, and the emptiness has
 **two mechanisms that no single number separates** — detached rendered clusters beyond ten

@@ -297,11 +297,17 @@ difference must clear.
 (0.890); A2 0.904 / 0.854 / 0.871 / 0.893 (0.881); A3 0.903 / 0.864 / 0.870 / 0.907 (0.886).
 SSIM separates nothing here and is reported for completeness.
 
-> **The A2 column carries a covariate.** Six of its twelve runs have a collapsed attenuation
-> channel — Curasao 2/3, IUI3 1/3, JapaneseGardens 1/3, Panama 2/3 — so every A2 cell above
-> averages over two physically different models. The figure is correct as an average and
-> misleading as a description of a model. `analyse.py` surfaces the collapse count before any
-> contrast `[13-campaign-addendum §13.13]`.
+> **The A2 column averages two physically different models, and must be reported by
+> stratum.** Six of its twelve runs have a collapsed attenuation channel — Curasao 2/3, IUI3
+> 1/3, JapaneseGardens 1/3, Panama 2/3. A mean over a mixture is not made correct by a footnote
+> naming the mixture, so wherever an A2 cell is used in a contrast the two strata are reported
+> beside it.
+>
+> **The strata themselves are the finding.** Within scene, collapsed minus intact is −0.184,
+> +0.190, −0.377 and −0.159 dB on PSNR, and +0.0026, −0.0007, −0.0028 and +0.0036 on LPIPS.
+> Seven of eight sit below 0.4 of A0's per-scene sd and the sign is inconsistent — on IUI3 the
+> collapsed runs score better on both. **Neither metric can see a dead attenuation channel**,
+> which upgrades E.7 from one decisive run to n=12 `[09-supervisory-review-ii §5]`.
 
 ### Table 8.3b — Efficiency, scene means `[measured n=12 per cell]`
 
@@ -378,6 +384,42 @@ define the effect `Δ_S = m(A_S) − m(A_0)`. The additive prediction for a comp
 Δ̂_{S∪T} = Δ_S + Δ_T          (for quality metrics, in dB / SSIM / LPIPS units)
 r̂_{S∪T} = r_S × r_T          (for multiplicative efficiency ratios: size, count, FPS)
 ```
+
+### What this design can actually resolve — settle it before the runs, not after
+
+An interaction is a difference of four cell means, so its variance is about four times that of
+one mean and its standard error about twice as large. Against A0's **measured** per-scene
+dispersion at three seeds `[measured n=12]`:
+
+| metric | smallest interaction resolvable at 2 SE | M2's **main** effect, for scale |
+|---|---:|---:|
+| PSNR (pooled) | **0.51 dB** (JapaneseGardens) – **1.61 dB** (Curasao) | 0.21 dB |
+| LPIPS | **0.0064** (Panama) – **0.0235** (Curasao) | 0.0482 |
+
+**On PSNR this design is not underpowered, it is inert.** The smallest interaction it could
+detect is two to eight times larger than the *main* effect of the mechanism whose interaction is
+being sought, and interactions are generally smaller than the effects they modify. No plausible
+two-way interaction on PSNR is detectable at three seeds, on any scene in this corpus.
+
+**On LPIPS it works**: the resolvable interaction is 13–49% of M2's main effect, so a
+sub-additive effect of moderate size clears the floor. This is the asymmetry E.11 and E.21 found
+for the main effects — the mechanisms separate only under a perceptual metric — carried into the
+interaction terms, where the noise penalty is twice as large.
+
+**Consequences, adopted in advance.**
+
+1. **RQ2 is adjudicated on LPIPS and on primitive count. PSNR interactions are reported as
+   `UNDETERMINED` by construction** — a statement about this design's resolution, not about the
+   mechanisms.
+2. A PSNR interaction reported as "no interaction detected" would be false precision: the design
+   cannot separate a null from a 1 dB effect on Curasao or Panama.
+3. Resolution improves as √n, so halving the detectable PSNR effect costs four times the seeds —
+   a 4× campaign for one contrast. Stated as the price, and declined.
+
+This quantity was computable from S1 alone, before S2 ran. It is recorded here rather than
+discovered in Chapter 4 `[09-supervisory-review-ii §4]`.
+
+---
 
 **Non-additivity is `Δ_{S∪T} − Δ̂_{S∪T}` exceeding the seed dispersion of the cells
 involved.** With `k` seeds per cell, the comparison must be against a pooled standard error,
