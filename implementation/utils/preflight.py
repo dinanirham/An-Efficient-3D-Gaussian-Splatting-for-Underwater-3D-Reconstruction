@@ -310,6 +310,33 @@ def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
                 "simplification boundary when interpreting the result."
             )
 
+    # -- Mechanism D ---------------------------------------------------------
+    # D works by withholding the screenspace tensor from the alpha probe, so
+    # alpha's gradient never reaches the buffer add_densification_stats reads.
+    # That entire path lives inside the `separate_alpha_probe` branch: with the
+    # combined probe there is one means2D for every term, and the flag is read
+    # but has nothing to act on. A0D would then be a byte-identical rerun of A0
+    # reporting that D does nothing -- a false null on the one cell that can
+    # still give this study a positive result of its own.
+    if getattr(opt, "detach_alpha_gradient", False):
+        if not getattr(opt, "separate_alpha_probe", True):
+            fail.append(
+                "detach_alpha_gradient=True with separate_alpha_probe=False: "
+                "D is INERT. The detach is implemented by withholding the "
+                "screenspace tensor from the alpha probe, and the combined "
+                "probe has no separate alpha pass to withhold it from. This "
+                "cell would duplicate A0 exactly and report D as having no "
+                "effect."
+            )
+        if any(flags):
+            fail.append(
+                "detach_alpha_gradient=True alongside M1/M2/M3. D is a "
+                "supplementary contrast read only against A0, never differenced "
+                "with the factorial cells; and under M1 it is provably inert, "
+                "since densification is replaced by prune-only and there is no "
+                "density-control signal for the detach to change."
+            )
+
     # -- M3 schedule and codebook -------------------------------------------
     if flags[2]:
         if opt.kmeans_st_iter >= opt.iterations:
