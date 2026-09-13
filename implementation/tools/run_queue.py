@@ -37,7 +37,7 @@ from typing import Optional
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from tools.run_ledger import M1_CELLS, M2_CELLS, Ledger  # noqa: E402
+from tools.run_ledger import M1_CELLS, M2_CELLS, Ledger, external_cells  # noqa: E402
 
 HEARTBEAT_SECONDS = 60
 
@@ -86,6 +86,30 @@ def build_command(
     scene_dir = data_root / run["scene"]
     if not scene_dir.exists():
         raise FileNotFoundError(f"scene not found: {scene_dir}")
+
+    if run["cell"] in external_cells():
+        raise SystemExit(
+            f"\n{'=' * 70}\n"
+            f"REFUSING to train {run['id']}.\n\n"
+            f"{run['cell']} is an EXTERNAL cell: it describes a run of another\n"
+            f"implementation, and its config block is empty because there is\n"
+            f"nothing in this codebase to configure. Training it here would run\n"
+            f"THIS code under A0's defaults and write the result under\n"
+            f"{run['cell']}'s name -- a run that completes, reports plausible\n"
+            f"numbers, and is A0 wearing another label.\n\n"
+            f"For SS that would make the reference control the very\n"
+            f"implementation it exists to check: check_margin would compare A0\n"
+            f"against A0 and certify the study's foundational claim from the\n"
+            f"code agreeing with itself.\n\n"
+            f"Produce it instead with the unpatched upstream checkout, then:\n"
+            f"  python -m tools.measure_reference \\\n"
+            f"      --ref_root <vanilla output dir> \\\n"
+            f"      --source_path <scene> \\\n"
+            f"      --out {ledger.root}/runs/{run['cell']}/{run['scene']}/s{run['seed']}\n"
+            f"  python -m tools.run_ledger complete --cells {run['cell']} "
+            f"--output_root {ledger.root}\n"
+            f"{'=' * 70}\n"
+        )
 
     out_dir = ledger.root / "runs" / run["cell"] / run["scene"] / f"s{run['seed']}"
     cmd = [

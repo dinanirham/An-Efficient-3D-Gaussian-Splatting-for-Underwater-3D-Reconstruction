@@ -64,6 +64,31 @@ CELL_STAGE = {c: s for s, cells in STAGES.items() for c in cells}
 STAGE_ORDER = list(STAGES)
 
 M1_CELLS = {"A1", "A4", "A5", "A7"}
+
+
+def external_cells() -> set[str]:
+    """Cells that are NOT trained by this codebase, read from cells.json.
+
+    A cell carrying an `external` block describes a run of some other
+    implementation. Its `set` block is empty because there is nothing here to
+    configure -- which means `train.py --cell <that>` would train THIS code
+    under A0's defaults, complete successfully, and write the result under the
+    external cell's name.
+
+    For SS that is the worst available outcome: the reference control would be
+    the implementation it exists to check, `check_margin` would compare A0
+    against A0, and the study's foundational claim would be certified by a
+    comparison of the code with itself.
+    """
+    try:
+        path = Path(__file__).resolve().parent.parent / "configs" / "cells.json"
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    return {
+        name for name, spec in cfg.get("cells", {}).items()
+        if isinstance(spec, dict) and spec.get("external")
+    }
 M2_CELLS = {"A2", "A4", "A6", "A7"}
 
 # Attempts before a run stops being claimed, so a broken configuration cannot
