@@ -111,6 +111,40 @@ def load_margins(path: Path = CELLS) -> Optional[dict]:
     return {k: v for k, v in m.items() if not k.startswith("_")}
 
 
+def aggregate_by_scene(evals: list[dict]) -> dict[str, dict[str, float]]:
+    """Mean of each metric per scene, over however many repeats exist.
+
+    **Not per seed**, and the distinction is load-bearing. Vanilla SeaSplat
+    accepts `--seed` but seeds only the CPU generator, so its GPU draws vary
+    regardless `[tools/replicate_baseline.py]` -- 17% spread across two
+    reference runs at a fixed seed. This implementation seeds both and still
+    measures 49%, because the rasterizer backward accumulates atomically and
+    densification amplifies the difference.
+
+    So `s0`, `s1`, `s2` are **repeat indices on both sides, not matched
+    seeds**. Pairing `SS/scene/s0` against `A0/scene/s0` would look like a
+    paired comparison and be an unpaired one with the pairing noise left in:
+    it would inflate the apparent difference and could push a genuinely
+    equivalent pair outside the margin. The comparison that the data supports
+    is distribution against distribution, which at three repeats means scene
+    mean against scene mean.
+    """
+    out: dict[str, dict[str, list[float]]] = {}
+    for e in evals:
+        scene = e.get("_scene")
+        if scene is None:
+            continue
+        flat = {**e.get("quality", {}), **e.get("cost", {})}
+        bucket = out.setdefault(scene, {})
+        for k, v in flat.items():
+            if isinstance(v, (int, float)):
+                bucket.setdefault(k, []).append(float(v))
+    return {
+        scene: {k: sum(vs) / len(vs) for k, vs in metrics.items() if vs}
+        for scene, metrics in out.items()
+    }
+
+
 def margin_verdict(ss: dict, a0: dict, margins: dict) -> dict[str, Any]:
     """Per-metric comparison against the pre-specified margin.
 
@@ -283,32 +317,44 @@ def check_margin(output_root: Path) -> int:
         print("pre-specified margin and cannot license the word 'equivalent'.")
         return 1
 
-    print(f"equivalence margin (pre-registered): {margins}\n")
-    any_run = False
-    for ss_eval in sorted(output_root.glob("SS/*/s*/eval_metrics.json")):
-        scene = ss_eval.parent.parent.name
-        seed = ss_eval.parent.name
-        a0_eval = output_root / "A0" / scene / seed / "eval_metrics.json"
-        if not a0_eval.exists():
-            print(f"{scene}/{seed}: no matching A0 run")
+    print(f"equivalence margin (pre-registered): {margins}")
+    print("Compared as scene means over repeats, NOT seed by seed: vanilla's")
+    print("seed does not reach its GPU draws, so s0/s1/s2 are repeat indices")
+    print("on both sides and a paired comparison would be false precision.\n")
+
+    def collect(cell: str) -> list[dict]:
+        out = []
+        for p in sorted(output_root.glob(f"{cell}/*/s*/eval_metrics.json")):
+            try:
+                e = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            e["_scene"] = p.parent.parent.name
+            out.append(e)
+        return out
+
+    ss_by_scene = aggregate_by_scene(collect("SS"))
+    a0_by_scene = aggregate_by_scene(collect("A0"))
+    ss_n = {s: 0 for s in ss_by_scene}
+    for p in output_root.glob("SS/*/s*/eval_metrics.json"):
+        ss_n[p.parent.parent.name] = ss_n.get(p.parent.parent.name, 0) + 1
+
+    if not ss_by_scene:
+        print("no SS runs found. S0 has not produced results yet.")
+        return 0
+
+    for scene in sorted(ss_by_scene):
+        if scene not in a0_by_scene:
+            print(f"{scene}: no A0 runs to compare against\n")
             continue
-        any_run = True
-        ss = json.loads(ss_eval.read_text(encoding="utf-8"))
-        a0 = json.loads(a0_eval.read_text(encoding="utf-8"))
-        flat_ss = {**ss.get("quality", {}), **ss.get("cost", {})}
-        flat_a0 = {**a0.get("quality", {}), **a0.get("cost", {})}
-        v = margin_verdict(flat_ss, flat_a0, margins)
-        print(f"{scene}/{seed}: {v['verdict']}")
+        v = margin_verdict(ss_by_scene[scene], a0_by_scene[scene], margins)
+        print(f"{scene}  (SS n={ss_n.get(scene, 0)}): {v['verdict']}")
         for metric in ("psnr_pooled", "lpips", "n_primitives_final"):
             e = v.get(metric, {})
             mark = {True: "within", False: "OUTSIDE", None: "n/a"}[e.get("within")]
             print(f"    {metric:<20} {mark:>8}  diff={e.get('diff')}  "
                   f"allowed=±{e.get('allowed')}")
         print()
-
-    if not any_run:
-        print("no SS runs found. S0 has not produced results yet.")
-        return 0
     print("A verdict of WITHIN MARGIN supports 'A0 is equivalent to SeaSplat to")
     print("within the stated margin'. It does not support 'A0 reproduces")
     print("SeaSplat', which is a stronger claim than any finite sample licenses.")

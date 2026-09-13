@@ -133,7 +133,15 @@
           "This cell replaces that with the campaign protocol: 4 scenes, 3",
           "seeds, 30,000 iterations, the full metric set, the same evaluation",
           "and timing harness. The claim it supports is then the claim the",
-          "thesis actually makes."
+          "thesis actually makes.",
+          "",
+          "s0/s1/s2 are REPEAT INDICES here, not matched seeds. Vanilla accepts",
+          "--seed but seeds only the CPU generator, so its GPU draws vary anyway;",
+          "this implementation seeds both and still measures 49% spread, because",
+          "the rasterizer backward accumulates atomically. Neither side is",
+          "reproducible at a fixed seed, so SS and A0 are compared as scene means",
+          "over repeats -- never run against run, which would look paired and",
+          "carry the pairing noise as though it were signal."
         ]
       },
       "set": {},

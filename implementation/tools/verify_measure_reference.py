@@ -36,6 +36,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from tools.measure_reference import (  # noqa: E402
     EVAL_SCHEMA_KEYS,
+    aggregate_by_scene,
     find_iteration,
     load_margins,
     margin_verdict,
@@ -182,6 +183,37 @@ def t9_verdict_is_reported_per_metric_not_only_overall():
     return ok, "PSNR within, LPIPS outside, overall OUTSIDE -- both visible"
 
 
+def t10_runs_are_aggregated_per_scene_not_per_seed():
+    """DECISIVE. SS and A0 are not seed-matched, so they must not be paired.
+
+    Vanilla accepts --seed but seeds only the CPU generator, so its GPU draws
+    vary regardless; this implementation seeds both and still measures 49%
+    spread. Pairing s0 against s0 would look like a paired comparison and be an
+    unpaired one with the pairing noise retained -- inflating the apparent
+    difference, and able to push a genuinely equivalent pair outside the
+    margin.
+    """
+    evals = [
+        {"_scene": "Curasao", "quality": {"psnr_pooled": 30.0}, "cost": {}},
+        {"_scene": "Curasao", "quality": {"psnr_pooled": 31.0}, "cost": {}},
+        {"_scene": "Curasao", "quality": {"psnr_pooled": 32.0}, "cost": {}},
+        {"_scene": "Panama", "quality": {"psnr_pooled": 28.0}, "cost": {}},
+    ]
+    agg = aggregate_by_scene(evals)
+    ok = (
+        set(agg) == {"Curasao", "Panama"}
+        and abs(agg["Curasao"]["psnr_pooled"] - 31.0) < 1e-9
+        and abs(agg["Panama"]["psnr_pooled"] - 28.0) < 1e-9
+    )
+    return ok, f"Curasao mean of 3 = {agg['Curasao']['psnr_pooled']:.2f}, Panama n=1 = {agg['Panama']['psnr_pooled']:.2f}"
+
+
+def t11_unlabelled_runs_are_dropped_not_misfiled():
+    """A run without a scene cannot be aggregated and must not land anywhere."""
+    agg = aggregate_by_scene([{"quality": {"psnr_pooled": 99.0}, "cost": {}}])
+    return agg == {}, "run with no _scene is dropped, not bucketed arbitrarily"
+
+
 def main() -> int:
     print("=" * 68)
     print("CD-31  vanilla SeaSplat collector")
@@ -200,6 +232,10 @@ def main() -> int:
           t8_emitted_schema_matches_what_the_collectors_read)
     check("T9  verdict is per metric, not only overall",
           t9_verdict_is_reported_per_metric_not_only_overall)
+    check("T10 runs aggregate per scene, not per seed  <-- decisive",
+          t10_runs_are_aggregated_per_scene_not_per_seed)
+    check("T11 unlabelled runs are dropped, not misfiled",
+          t11_unlabelled_runs_are_dropped_not_misfiled)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
