@@ -24,6 +24,7 @@ Chapter 4 §§4.1–4.3 (baseline, replication, dispersion — S1 and S2 are com
 | 6 | [`06-experiment-and-literature-plan.md`](06-experiment-and-literature-plan.md) | Minimum additional work, costed |
 | 7 | [`07-supervisor-persona.md`](07-supervisor-persona.md) | A reading persona — the three questions and six standing objections to apply to any draft before a committee does |
 | 8 | [`08-supervisory-review.md`](08-supervisory-review.md) | **Deep analysis of the implementation and results.** Restates the central claim, derives why CD-6 could not have worked, and names one quantity the campaign has never measured |
+| 9 | [`09-supervisory-review-ii.md`](09-supervisory-review-ii.md) | **Whether the design can answer what it was built to answer.** Two arithmetic findings: PSNR interactions are unresolvable at n=3, and the A0 ≡ SeaSplat claim bounds the difference only to ±24% |
 
 **Results, as they land:**
 
