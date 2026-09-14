@@ -422,58 +422,7 @@ if failures:
         f'so S1 can still proceed.')
 print('\\nall dense clouds present')
 '''),
-    md("""## 10. Stage an unpatched reference checkout — for SS, stage S0
-
-**This checkout must not be patched.** `tools/instrument_reference.py` adds a
-densification printout to a reference tree and says in its own docstring that a
-patched checkout must not produce SS numbers. That tool belongs to the
-diagnostic notebook; this clone is the one S0 measures, and nothing is applied
-to it.
-
-Its CUDA extension is built here, which is not optional: upstream imports
-`diff_gaussian_rasterization` while this repository uses Mini-Splatting's fork
-as `diff_gaussian_rasterization_ms` (CD-13). The names differ, so both live in
-the session without shadowing each other and the reference runs its own
-kernels — but the clone alone does not build anything, and an unbuilt tree
-looks correct until the worker claims its first SS row.
-
-Re-running this cell is cheap: an existing clone is kept and only the extension
-is reinstalled.
-
-Nothing needs to be: `render_uw.py`'s `render_set` is the upstream render path,
-inherited unchanged in this fork, so `tools/measure_reference` can point the
-campaign's own metric harness at a vanilla output directory. Their model, their
-render code, our metrics, one convention on both sides.
-"""),
-    code('''\
-import os, subprocess, importlib
-
-VANILLA = '/content/seasplat_vanilla'
-if not os.path.isdir(f'{VANILLA}/.git'):
-    !rm -rf {VANILLA}
-    !git clone -q --recursive https://github.com/dxyang/seasplat.git {VANILLA}
-!cd {VANILLA} && git log -1 --format="SS reference at %H  %ad" --date=short
-
-# Its own rasterizer, built here. Upstream imports
-# `diff_gaussian_rasterization`; this repository uses Mini-Splatting's fork
-# under the name `diff_gaussian_rasterization_ms` (CD-13). Different module
-# names, so both install side by side and neither shadows the other -- which
-# is what lets the reference run its own kernels while sharing the session.
-#
-# Without this the clone exists, looks right, and fails on first import the
-# moment the worker claims an SS row.
-!pip install -q {VANILLA}/submodules/diff-gaussian-rasterization
-
-importlib.invalidate_caches()
-try:
-    import diff_gaussian_rasterization  # noqa: F401
-    print('upstream rasterizer: importable')
-except Exception as exc:
-    raise SystemExit(f'upstream rasterizer did not build: {exc}')
-
-print('NOT patched -- this is the tree S0 measures.')
-'''),
-    md("""## 11. Initialise the ledger
+    md("""## 10. Initialise the ledger
 
 132 rows: 11 cells × 4 scenes × 3 seeds — the 2³ factorial, mechanism D, and
 the two S0 reference controls. Refuses to overwrite a campaign in progress
@@ -508,7 +457,7 @@ else:
 
 !python -m tools.run_ledger status --output_root "$DRIVE_ROOT"
 '''),
-    md("""## 12. The SS control — the worker produces it
+    md("""## 11. The SS control — the worker produces it
 
 `SS` is an unmodified clone of the upstream repository, staged in §10. The
 worker drives it like any other cell: it claims the row, runs the **upstream**
@@ -518,8 +467,10 @@ implementation under A0's defaults and file it as the reference control, after
 which `check_margin` would compare A0 against A0 and certify the study's
 foundational claim from the code agreeing with itself.
 
-Nothing to run here. If §10 was skipped the rows block, naming the missing
-checkout, and release on the next claim once it exists.
+Nothing to run here, and nothing to stage here either: the checkout lives in
+`/content`, which Colab wipes between sessions, so `01_worker` clones and builds
+it every session alongside its own CUDA extensions. Staging it once in setup
+would leave every later session without it.
 """),
     md("""---
 **Next:** open `01_worker.ipynb` and run it. Repeat every session until the
@@ -555,6 +506,54 @@ produce a run that looks complete and is a different experiment.
     code(CLONE),
     code(BUILD),
     code(BUILD_CHECK),
+    md("""### 3b. The upstream checkout, for S0
+
+`SS` is vanilla SeaSplat, and the worker runs **upstream's** trainer inside
+**upstream's** tree. Both live in `/content`, which Colab wipes between
+sessions, so this belongs here beside the CUDA build rather than in setup —
+same lifetime, same reason.
+
+Upstream imports `diff_gaussian_rasterization`; this repository uses
+Mini-Splatting's fork as `diff_gaussian_rasterization_ms` (CD-13). The names
+differ, so both install side by side and neither shadows the other, which is
+what lets the reference run its own kernels in a shared session.
+
+**Nothing is applied to this tree.** `tools/instrument_reference.py` patches a
+checkout to print a densification breakdown and says in its own docstring that
+a patched tree must not produce SS numbers; that one belongs to notebook 04 and
+lives at a different path. A clone that is merely cloned looks correct right up
+until the worker claims its first SS row, so the extension is imported here and
+the cell raises if it is missing.
+"""),
+    code('''\
+import os, subprocess, importlib
+
+VANILLA = '/content/seasplat_vanilla'
+if not os.path.isdir(f'{VANILLA}/.git'):
+    !rm -rf {VANILLA}
+    !git clone -q --recursive https://github.com/dxyang/seasplat.git {VANILLA}
+!cd {VANILLA} && git log -1 --format="SS reference at %H  %ad" --date=short
+
+# Its own rasterizer, built here. Upstream imports
+# `diff_gaussian_rasterization`; this repository uses Mini-Splatting's fork
+# under the name `diff_gaussian_rasterization_ms` (CD-13). Different module
+# names, so both install side by side and neither shadows the other -- which
+# is what lets the reference run its own kernels while sharing the session.
+#
+# Without this the clone exists, looks right, and fails on first import the
+# moment the worker claims an SS row.
+!pip install -q {VANILLA}/submodules/diff-gaussian-rasterization
+
+importlib.invalidate_caches()
+try:
+    import diff_gaussian_rasterization  # noqa: F401
+    print('upstream rasterizer: importable')
+except Exception as exc:
+    raise SystemExit(f'upstream rasterizer did not build: {exc}')
+
+print('NOT patched -- this is the tree S0 measures.')
+'''),
+
     md("## 4. Verify the rasterizer"),
     code("!python -m tools.verify_rasterizer\n"),
     md("""## 5. Stage the dataset locally

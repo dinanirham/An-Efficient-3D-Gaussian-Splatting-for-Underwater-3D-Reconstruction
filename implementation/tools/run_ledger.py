@@ -363,8 +363,9 @@ class Ledger:
             # the precondition.
             reasons.append(
                 f"{run['cell']} is produced from the upstream checkout, and none "
-                f"is staged at {self.ref_repo}. Run 00_setup section 10, which "
-                f"clones it unpatched."
+                f"is staged at {self.ref_repo}. Run 01_worker section 3b, which "
+                f"clones and builds it unpatched -- it lives in /content and so "
+                f"has to be staged once per session, like the CUDA extensions."
             )
         return reasons
 
