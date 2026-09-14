@@ -52,7 +52,7 @@ STAGES: dict[str, list[str]] = {
     # iterations, on one scene, with no fidelity metric involved
     # (`tools/replicate_baseline.py`). That is far narrower than "A0 reproduces
     # SeaSplat", and it is the foundation the other 108 runs stand on.
-    "S0": ["SS", "GS"],          # vanilla SeaSplat, and 3DGS with no medium
+    "S0": ["SS"],                # vanilla SeaSplat, the reference this study needs
     "S1": ["A0"],                # unblocks the budget and environment validity
     "S2": ["A2"],                # the central hypothesis (H4)
     "S3": ["A1", "A3"],          # remaining main effects
@@ -686,7 +686,7 @@ def main() -> int:
     elif args.command == "extend":
         if not args.cells:
             raise SystemExit(
-                "extend needs --cells (e.g. --cells SS GS). Refusing to guess "
+                "extend needs --cells (e.g. --cells SS). Refusing to guess "
                 "which cells to add to a campaign in progress.")
         n = ledger.extend(args.cells)
         print(f"added {n} run(s) for {sorted(args.cells)}; existing rows untouched")

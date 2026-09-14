@@ -165,15 +165,6 @@
         "n_primitives_fraction": 0.3
       }
     },
-    "GS": {
-      "description": "Reference floor. Vanilla 3DGS -- the medium model switched off, so the render is compared directly against the capture with no image formation model. Shows what the physics buys, on these scenes, under this harness and this metric convention.",
-      "set": {
-        "m1_dense_init": false,
-        "m2_simplify": false,
-        "m3_quantize": false,
-        "do_seathru": false
-      }
-    },
     "A0": {
       "description": "Baseline. SeaSplat unmodified. Reference for every contrast, and the run that supplies the primitive budget the other cells need.",
       "set": {

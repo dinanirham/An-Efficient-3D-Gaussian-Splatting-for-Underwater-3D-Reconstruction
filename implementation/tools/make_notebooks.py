@@ -457,7 +457,7 @@ interval on that ratio is ±23.5%.
 To add the controls to a campaign already in progress, use `extend` rather than
 `init`: `init` rebuilds the run table and would discard every completed row.
 
-    !python -m tools.run_ledger extend --cells SS GS --output_root "$DRIVE_ROOT"
+    !python -m tools.run_ledger extend --cells SS --output_root "$DRIVE_ROOT"
 """),
     code('''\
 # Safe on a fresh Drive and on one already holding a campaign. `init` refuses
@@ -469,7 +469,7 @@ import os, subprocess
 LEDGER = f'{DRIVE_ROOT}/run_ledger.json'
 if os.path.exists(LEDGER):
     print('ledger present -- extending with any missing cells, keeping history')
-    !python -m tools.run_ledger extend --cells SS GS --output_root "$DRIVE_ROOT"
+    !python -m tools.run_ledger extend --cells SS --output_root "$DRIVE_ROOT"
 else:
     print('no ledger -- initialising the full campaign')
     !python -m tools.run_ledger init --output_root "$DRIVE_ROOT"
@@ -478,13 +478,18 @@ else:
 '''),
     md("""## 12. The SS control — produced here, not by the worker
 
-`SS` is vanilla SeaSplat, and the worker cannot run it: its config block is
-empty because there is nothing in *this* codebase to configure, so
-`train.py --cell SS` would train **our** implementation under A0's defaults and
-file the result as the reference control. `check_margin` would then compare A0
-against A0 and certify the study's foundational claim from the code agreeing
-with itself. The ledger marks those rows **blocked** and the worker skips past
-them, so nothing stalls.
+`SS` is vanilla SeaSplat — an unmodified clone of the upstream repository —
+and the worker cannot run it: its config block is empty because there is
+nothing in *this* codebase to configure, so `train.py --cell SS` would train
+**our** implementation under A0's defaults and file the result as the reference
+control. `check_margin` would then compare A0 against A0 and certify the
+study's foundational claim from the code agreeing with itself.
+
+S0 holds nothing else, so the whole stage is unrunnable by the worker. The
+ledger marks all twelve rows **blocked** and the queue skips S0 outright and
+starts at A0 — loudly, and recorded, because a silent reorder is exactly the
+kind of surprise that makes a results table mean something other than it
+appears to.
 
 They are produced here instead, from the unpatched checkout staged in §10.
 This is roughly eleven hours of training and can run in its own session — the

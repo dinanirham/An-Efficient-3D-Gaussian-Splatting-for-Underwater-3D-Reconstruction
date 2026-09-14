@@ -64,27 +64,34 @@ def finish_stage(led: Ledger, cells: set[str]) -> int:
 # ---------------------------------------------------------------------------
 
 
-def t15_s0_gates_the_whole_campaign():
-    """The reference controls hold the queue until they are done.
+def t15_the_outstanding_control_stays_visible():
+    """S0 no longer gates compute, so it must not become invisible instead.
 
-    Every number this study reports is a difference against A0, so A0's
-    equivalence to the method it reimplements is load-bearing for all 108
-    factorial runs. Ordering the controls first is what makes that a
-    precondition rather than an afterthought -- and the reason it matters is
-    that the equivalence currently rests on a converged-primitive-count
-    comparison at 16 000 iterations on one scene, with no fidelity metric
-    involved.
+    Ordering the control first was meant to make it a precondition. Enforcing
+    that by blocking the GPU turned out to be the wrong lever -- it would idle
+    an A100 behind a manual step for days -- so the precondition moved to the
+    analysis, where `measure_reference --check_margin` reports the control
+    missing until it exists.
+
+    That trade is only sound if the outstanding rows stay *visible*. A blocked
+    stage that vanished from the summary would let the campaign finish looking
+    complete while the claim every other number rests on had never been
+    checked.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)                       # the full campaign, controls included
-        claimed = []
-        for _ in range(30):
-            r = led.claim()
-            if r is None:
-                break
-            claimed.append(r["stage"])
-        ok = set(claimed) == {"S0"}
-        return ok, f"stages claimable from a fresh campaign: {sorted(set(claimed))}"
+        led = fresh(tmp)
+        led.claim()                       # force one pass, so blockers resolve
+        text = led.summary()
+        ss = [r for r in led.runs if r["cell"] == "SS"]
+        blocked = [r for r in ss if r["status"] == "blocked"]
+        ok = (
+            len(ss) == 12
+            and len(blocked) == 12
+            and "S0" in text
+            and all("external control" in (r["error"] or "") for r in blocked)
+        )
+        return ok, (f"{len(ss)} SS rows, {len(blocked)} blocked with a reason, "
+                    f"S0 present in the summary")
 
 
 def t16_extend_preserves_completed_runs():
@@ -100,11 +107,11 @@ def t16_extend_preserves_completed_runs():
             r["status"] = "done"
         led.save()
 
-        added = led.extend(["SS", "GS"])
+        added = led.extend(["SS"])
         done = sum(1 for r in led.runs if r["status"] == "done")
         again = led.extend(["SS"])
 
-        ok = added == len(SCENES) * len(SEEDS) * 2 and done == 5 and again == 0
+        ok = added == len(SCENES) * len(SEEDS) and done == 5 and again == 0
         return ok, (f"added {added}, completed preserved={done}, "
                     f"re-extend added {again} (idempotent)")
 
@@ -112,12 +119,13 @@ def t16_extend_preserves_completed_runs():
 def t17_external_cell_does_not_deadlock_the_queue():
     """DECISIVE. S0 must not stall the campaign on a manual step.
 
-    SS cannot be trained by this codebase, so the worker must never claim it.
-    But refusing at dispatch would kill the driver, and leaving S0 pending
-    forever would idle an A100 behind work no worker can do. Marking it blocked
-    routes it through the existing policy: a stage whose remaining work is
-    entirely blocked is skipped, loudly, and compute moves on while the control
-    is produced out of band.
+    S0 holds only SS, which this codebase cannot train, so the *entire* first
+    stage is unrunnable by the worker. Refusing at dispatch would kill the
+    driver on its first claim; leaving the rows pending would idle an A100
+    behind work no worker can ever do. Marking them blocked routes S0 through
+    policy that already exists: a stage whose remaining work is entirely
+    blocked is skipped, loudly, and compute moves on while the control is
+    produced out of band.
     """
     with tempfile.TemporaryDirectory() as tmp:
         led = fresh(tmp)                       # full campaign, S0 included
@@ -131,14 +139,16 @@ def t17_external_cell_does_not_deadlock_the_queue():
         led.save()
 
         ss_claimed = any(r["cell"] == "SS" for r in led.runs if r["status"] == "done")
-        gs_claimed = sum(1 for r in led.runs if r["cell"] == "GS" and r["status"] == "done")
         reached_later = "S4" in stages
         ss_blocked = [r for r in led.runs if r["cell"] == "SS" and r["status"] == "blocked"]
 
-        ok = (not ss_claimed) and gs_claimed == 12 and reached_later and ss_blocked
-        return ok, (f"SS never claimed={not ss_claimed}, GS ran {gs_claimed}/12, "
-                    f"queue reached {sorted(set(stages))[-1]}, "
-                    f"SS rows blocked={len(ss_blocked)}")
+        # S0 now holds nothing the worker can run, so this is the strongest
+        # form of the check: an entirely external stage must be skipped
+        # outright rather than stalling the campaign behind it.
+        ok = (not ss_claimed) and reached_later and len(ss_blocked) == 12
+        return ok, (f"S0 is entirely external; SS never claimed={not ss_claimed}, "
+                    f"all {len(ss_blocked)} rows blocked, "
+                    f"queue reached {sorted(set(stages))[-1]}")
 
 
 def t1_init_shape():
@@ -517,8 +527,8 @@ def main() -> int:
           t13_init_takes_the_budget_from_config)
     check("T14 ledger survives losing its file  <-- decisive",
           t14_ledger_survives_losing_its_file)
-    check("T15 S0 gates the whole campaign  <-- decisive",
-          t15_s0_gates_the_whole_campaign)
+    check("T15 the outstanding control stays visible  <-- decisive",
+          t15_the_outstanding_control_stays_visible)
     check("T16 extend preserves completed runs  <-- decisive",
           t16_extend_preserves_completed_runs)
     check("T17 an external cell does not deadlock the queue  <-- decisive",
