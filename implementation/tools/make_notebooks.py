@@ -430,16 +430,48 @@ patched checkout must not produce SS numbers. That tool belongs to the
 diagnostic notebook; this clone is the one S0 measures, and nothing is applied
 to it.
 
+Its CUDA extension is built here, which is not optional: upstream imports
+`diff_gaussian_rasterization` while this repository uses Mini-Splatting's fork
+as `diff_gaussian_rasterization_ms` (CD-13). The names differ, so both live in
+the session without shadowing each other and the reference runs its own
+kernels — but the clone alone does not build anything, and an unbuilt tree
+looks correct until the worker claims its first SS row.
+
+Re-running this cell is cheap: an existing clone is kept and only the extension
+is reinstalled.
+
 Nothing needs to be: `render_uw.py`'s `render_set` is the upstream render path,
 inherited unchanged in this fork, so `tools/measure_reference` can point the
 campaign's own metric harness at a vanilla output directory. Their model, their
 render code, our metrics, one convention on both sides.
 """),
     code('''\
-!rm -rf /content/seasplat_vanilla
-!git clone -q --recursive https://github.com/dxyang/seasplat.git /content/seasplat_vanilla
-!cd /content/seasplat_vanilla && git log -1 --format="SS reference at %H  %ad" --date=short
-print("NOT patched -- this is the tree S0 measures.")
+import os, subprocess, importlib
+
+VANILLA = '/content/seasplat_vanilla'
+if not os.path.isdir(f'{VANILLA}/.git'):
+    !rm -rf {VANILLA}
+    !git clone -q --recursive https://github.com/dxyang/seasplat.git {VANILLA}
+!cd {VANILLA} && git log -1 --format="SS reference at %H  %ad" --date=short
+
+# Its own rasterizer, built here. Upstream imports
+# `diff_gaussian_rasterization`; this repository uses Mini-Splatting's fork
+# under the name `diff_gaussian_rasterization_ms` (CD-13). Different module
+# names, so both install side by side and neither shadows the other -- which
+# is what lets the reference run its own kernels while sharing the session.
+#
+# Without this the clone exists, looks right, and fails on first import the
+# moment the worker claims an SS row.
+!pip install -q {VANILLA}/submodules/diff-gaussian-rasterization
+
+importlib.invalidate_caches()
+try:
+    import diff_gaussian_rasterization  # noqa: F401
+    print('upstream rasterizer: importable')
+except Exception as exc:
+    raise SystemExit(f'upstream rasterizer did not build: {exc}')
+
+print('NOT patched -- this is the tree S0 measures.')
 '''),
     md("""## 11. Initialise the ledger
 
