@@ -361,6 +361,39 @@ def check_margin(output_root: Path) -> int:
     return 0
 
 
+def find_written_model(search_roots: list[Path], after: float) -> Optional[Path]:
+    """Locate the model a vanilla run actually wrote.
+
+    Upstream **ignores `--model_path`** and derives its own from the source
+    path and the date -- observed as `<source>/experiments/<MMDDYYYY>/test`.
+    The flag is accepted and then overwritten, so there is nothing to pass that
+    would place the output where we asked.
+
+    That also means the destination is scoped by *day*, not by run: two seeds
+    of the same scene on the same date write to the same directory, and the
+    second silently overwrites the first. So a candidate is only accepted if
+    its point cloud was written after this run started -- otherwise a failed
+    run would happily measure its predecessor's model and report it as its own.
+    """
+    best: Optional[tuple[float, Path]] = None
+    for root in search_roots:
+        if not root.exists():
+            continue
+        for ply in root.rglob("point_cloud/iteration_*/point_cloud.ply"):
+            model_dir = ply.parent.parent.parent
+            it = ply.parent.name.split("_")[-1]
+            if not (model_dir / f"attenuate_{it}.pth").exists():
+                continue
+            if not (model_dir / f"backscatter_{it}.pth").exists():
+                continue
+            mtime = ply.stat().st_mtime
+            if mtime < after:
+                continue
+            if best is None or mtime > best[0]:
+                best = (mtime, model_dir)
+    return best[1] if best else None
+
+
 def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
                   iterations: int = 30000, seathru_from_iter: int = 10000) -> int:
     """Run the upstream trainer, in the upstream checkout, unmodified.
@@ -370,9 +403,17 @@ def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
     their module inside this process, against whatever this repository has
     already put on `sys.path`, and the first name collision would silently
     substitute our implementation for theirs.
-    """
-    import subprocess
 
+    `--model_path` is passed and ignored -- see `find_written_model`. The output
+    is located afterwards and moved to `out`, so the model lands on Drive with
+    the run that produced it instead of in ephemeral storage under a
+    date-scoped name that the next seed would overwrite.
+    """
+    import shutil
+    import subprocess
+    import time
+
+    started = time.time()
     cmd = [
         "python", "train.py",
         "-s", str(scene_dir),
@@ -382,7 +423,29 @@ def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
         "--eval", "--seed", str(seed),
     ]
     print(f"[SS] training vanilla in {ref_repo}\n     {' '.join(cmd)}", flush=True)
-    return subprocess.run(cmd, cwd=str(ref_repo)).returncode
+    rc = subprocess.run(cmd, cwd=str(ref_repo)).returncode
+    if rc != 0:
+        return rc
+
+    written = find_written_model([out, scene_dir, ref_repo], started)
+    if written is None:
+        print(f"[SS] training reported success but no complete model was written "
+              f"after {started:.0f}. Searched {out}, {scene_dir}, {ref_repo}.")
+        return 1
+
+    if written.resolve() == out.resolve():
+        return 0
+
+    print(f"[SS] upstream wrote to {written} (it overrides --model_path);"
+          f"\n     relocating to {out}", flush=True)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    for item in written.iterdir():
+        dest = out / item.name
+        if dest.exists():
+            shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
+        shutil.move(str(item), str(dest))
+    shutil.rmtree(written, ignore_errors=True)
+    return 0
 
 
 def main() -> int:

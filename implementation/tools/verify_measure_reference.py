@@ -38,6 +38,7 @@ from tools.measure_reference import (  # noqa: E402
     EVAL_SCHEMA_KEYS,
     aggregate_by_scene,
     find_iteration,
+    find_written_model,
     load_margins,
     margin_verdict,
 )
@@ -214,6 +215,46 @@ def t11_unlabelled_runs_are_dropped_not_misfiled():
     return agg == {}, "run with no _scene is dropped, not bucketed arbitrarily"
 
 
+def t12_written_model_is_found_where_upstream_put_it():
+    """Upstream ignores --model_path, so the output must be located afterwards.
+
+    Observed: the flag is accepted and then overwritten with
+    `<source>/experiments/<MMDDYYYY>/test`. Nothing can be passed that would
+    place the model where we asked, so it is found and moved instead.
+    """
+    import time
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "data" / "Curasao"
+        actual = src / "experiments" / "09142026" / "test"
+        t0 = time.time() - 5
+        make_ref(actual, [30000])
+        got = find_written_model([Path(tmp) / "asked_for", src], t0)
+    ok = got is not None and got.resolve() == actual.resolve()
+    return ok, f"found {got.name if got else None} under experiments/<date>/"
+
+
+def t13_a_previous_seeds_model_is_not_adopted():
+    """DECISIVE. The upstream path is date-scoped, so seeds collide.
+
+    Two seeds of one scene on one day write to the same directory. If a run
+    fails and the search accepts whatever is lying there, it measures the
+    previous seed's model and files it as its own -- three identical rows that
+    look like three repeats and are one run counted thrice, which would make
+    the dispersion of the reference control appear to be zero.
+    """
+    import time
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "data" / "Curasao"
+        stale = src / "experiments" / "09142026" / "test"
+        make_ref(stale, [30000])
+        for f in stale.rglob("*"):
+            if f.is_file():
+                import os
+                os.utime(f, (1, 1))          # long before this run started
+        got = find_written_model([src], time.time() - 5)
+    return got is None, "a model predating the run is refused, not adopted"
+
+
 def main() -> int:
     print("=" * 68)
     print("CD-31  vanilla SeaSplat collector")
@@ -236,6 +277,10 @@ def main() -> int:
           t10_runs_are_aggregated_per_scene_not_per_seed)
     check("T11 unlabelled runs are dropped, not misfiled",
           t11_unlabelled_runs_are_dropped_not_misfiled)
+    check("T12 written model is found where upstream put it",
+          t12_written_model_is_found_where_upstream_put_it)
+    check("T13 a previous seed's model is not adopted  <-- decisive",
+          t13_a_previous_seeds_model_is_not_adopted)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
