@@ -518,12 +518,23 @@ Mini-Splatting's fork as `diff_gaussian_rasterization_ms` (CD-13). The names
 differ, so both install side by side and neither shadows the other, which is
 what lets the reference run its own kernels in a shared session.
 
-**Nothing is applied to this tree.** `tools/instrument_reference.py` patches a
-checkout to print a densification breakdown and says in its own docstring that
-a patched tree must not produce SS numbers; that one belongs to notebook 04 and
-lives at a different path. A clone that is merely cloned looks correct right up
-until the worker claims its first SS row, so the extension is imported here and
-the cell raises if it is missing.
+**One deviation, and it is a build fix rather than a change to the method.**
+Recent libstdc++ releases dropped transitive `<cstdint>` includes that
+upstream's CUDA sources relied on, so the tree does not compile on this
+toolchain as cloned — the same defect this repository fixed in its own copies
+(`docs/reproducibility_notes.md` §5c). `fix_upstream_includes` adds the missing
+headers and prints every file it touched. An include of a header the
+translation unit already depends on resolves no new declaration and changes no
+behaviour; it changes whether the file compiles.
+
+That is categorically different from `tools/instrument_reference.py`, which
+adds printing to the densification loop and says in its own docstring that a
+tree it has touched must not produce SS numbers. That one belongs to notebook
+04 and lives at a different path.
+
+A clone that is merely cloned looks correct right up until the worker claims
+its first SS row, so the extension is imported here and the cell raises if it
+is missing.
 """),
     code('''\
 import os, subprocess, importlib
@@ -534,15 +545,22 @@ if not os.path.isdir(f'{VANILLA}/.git'):
     !git clone -q --recursive https://github.com/dxyang/seasplat.git {VANILLA}
 !cd {VANILLA} && git log -1 --format="SS reference at %H  %ad" --date=short
 
+# Recent libstdc++ dropped transitive <cstdint>, which upstream's CUDA sources
+# relied on. This repository fixed its own copies in tree; the checkout is
+# cloned fresh each session and carries the defect. Additive includes only,
+# and every file touched is printed -- the record of the deviation.
+!python -m tools.fix_upstream_includes {VANILLA}
+
 # Its own rasterizer, built here. Upstream imports
 # `diff_gaussian_rasterization`; this repository uses Mini-Splatting's fork
 # under the name `diff_gaussian_rasterization_ms` (CD-13). Different module
 # names, so both install side by side and neither shadows the other -- which
 # is what lets the reference run its own kernels while sharing the session.
 #
-# Without this the clone exists, looks right, and fails on first import the
-# moment the worker claims an SS row.
-!pip install -q {VANILLA}/submodules/diff-gaussian-rasterization
+# NOT -q. `pip install` without it swallows nvcc's diagnostics and leaves only
+# "see the compiler output above", with no output above -- the exact reason
+# this project spent a session chasing a build failure once already.
+!pip install -v {VANILLA}/submodules/diff-gaussian-rasterization 2>&1 | tail -25
 
 importlib.invalidate_caches()
 try:
