@@ -39,6 +39,7 @@ from tools.measure_reference import (  # noqa: E402
     aggregate_by_scene,
     find_iteration,
     find_written_model,
+    vanilla_command,
     load_margins,
     margin_verdict,
 )
@@ -255,6 +256,31 @@ def t13_a_previous_seeds_model_is_not_adopted():
     return got is None, "a model predating the run is refused, not adopted"
 
 
+def t14_vanilla_command_enables_the_medium_model():
+    """DECISIVE. Upstream's defaults disable the thing that makes it SeaSplat.
+
+    `configs/cells.json` names three flags that are silent no-ops upstream, and
+    each produces a different experiment rather than an error:
+
+      --do_seathru        default False -- the medium model never activates and
+                          the reference is plain 3DGS on underwater images
+      --seathru_from_iter default 9_000_000, past the end of training
+      --eval              default False -- empty test set, inflated metrics
+
+    The first was omitted when this was first built. The reference trained to
+    completion, reported plausible numbers, and scored 19.34 dB against roughly
+    30 for SeaSplat on the same scene -- a control that was not the method it
+    was controlling for, and which would have made A0 look like a large
+    improvement over its own baseline.
+    """
+    cmd = vanilla_command(Path("/data/Curasao"), Path("/out"), seed=1)
+    joined = " ".join(cmd)
+    missing = [f for f in ("--do_seathru", "--seathru_from_iter", "--eval")
+               if f not in joined]
+    return not missing, (f"all three no-op defaults overridden "
+                         f"(missing: {missing or 'none'})")
+
+
 def main() -> int:
     print("=" * 68)
     print("CD-31  vanilla SeaSplat collector")
@@ -281,6 +307,8 @@ def main() -> int:
           t12_written_model_is_found_where_upstream_put_it)
     check("T13 a previous seed's model is not adopted  <-- decisive",
           t13_a_previous_seeds_model_is_not_adopted)
+    check("T14 vanilla command enables the medium model  <-- decisive",
+          t14_vanilla_command_enables_the_medium_model)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

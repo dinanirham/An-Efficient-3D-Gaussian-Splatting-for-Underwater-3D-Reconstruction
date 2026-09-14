@@ -394,6 +394,21 @@ def find_written_model(search_roots: list[Path], after: float) -> Optional[Path]
     return best[1] if best else None
 
 
+def vanilla_command(scene_dir: Path, out: Path, seed: int,
+                    iterations: int = 30000,
+                    seathru_from_iter: int = 10000) -> list[str]:
+    """The upstream command line, built in one place so it can be asserted on."""
+    return [
+        "python", "train.py",
+        "-s", str(scene_dir),
+        "--model_path", str(out),
+        "--iterations", str(iterations),
+        "--do_seathru",
+        "--seathru_from_iter", str(seathru_from_iter),
+        "--eval", "--seed", str(seed),
+    ]
+
+
 def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
                   iterations: int = 30000, seathru_from_iter: int = 10000) -> int:
     """Run the upstream trainer, in the upstream checkout, unmodified.
@@ -414,14 +429,22 @@ def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
     import time
 
     started = time.time()
-    cmd = [
-        "python", "train.py",
-        "-s", str(scene_dir),
-        "--model_path", str(out),
-        "--iterations", str(iterations),
-        "--seathru_from_iter", str(seathru_from_iter),
-        "--eval", "--seed", str(seed),
-    ]
+    # The three flags `configs/cells.json` names as silent no-ops upstream, and
+    # they are named there because each one quietly produces a different
+    # experiment rather than an error:
+    #
+    #   --do_seathru        default False. Without it the medium model never
+    #                       activates and the reference is plain 3DGS on
+    #                       underwater images -- which is not SeaSplat, and
+    #                       which cost about 11 dB when this was first run.
+    #   --seathru_from_iter default 9_000_000, i.e. past the end of training,
+    #                       so the model is nominally enabled and never runs.
+    #   --eval              default False. The test set is empty, training uses
+    #                       every frame, and the reported metrics are inflated.
+    #
+    # The configuration layer exists to stop exactly this, and hand-building a
+    # command here walked around it once already.
+    cmd = vanilla_command(scene_dir, out, seed, iterations, seathru_from_iter)
     print(f"[SS] training vanilla in {ref_repo}\n     {' '.join(cmd)}", flush=True)
     rc = subprocess.run(cmd, cwd=str(ref_repo)).returncode
     if rc != 0:
