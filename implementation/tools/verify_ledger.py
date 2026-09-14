@@ -64,34 +64,44 @@ def finish_stage(led: Ledger, cells: set[str]) -> int:
 # ---------------------------------------------------------------------------
 
 
-def t15_the_outstanding_control_stays_visible():
-    """S0 no longer gates compute, so it must not become invisible instead.
+def t15_control_blocks_visibly_without_its_checkout():
+    """S0 needs the upstream tree, and must say so rather than stalling mutely.
 
-    Ordering the control first was meant to make it a precondition. Enforcing
-    that by blocking the GPU turned out to be the wrong lever -- it would idle
-    an A100 behind a manual step for days -- so the precondition moved to the
-    analysis, where `measure_reference --check_margin` reports the control
-    missing until it exists.
+    SS is produced by running the upstream trainer in its own checkout. With no
+    checkout staged there is nothing to run, so the rows block -- the same shape
+    as an M1 cell blocking on a missing dense cloud, and released the same way,
+    since `blocked` is recomputed on every claim.
 
-    That trade is only sound if the outstanding rows stay *visible*. A blocked
-    stage that vanished from the summary would let the campaign finish looking
-    complete while the claim every other number rests on had never been
-    checked.
+    What must not happen is a blocked stage disappearing from view. The campaign
+    could then finish looking complete while the claim every other number rests
+    on had never been checked.
     """
     with tempfile.TemporaryDirectory() as tmp:
         led = fresh(tmp)
-        led.claim()                       # force one pass, so blockers resolve
+        led.ref_repo = Path(tmp) / "no_such_checkout"
+        led.claim()
         text = led.summary()
         ss = [r for r in led.runs if r["cell"] == "SS"]
         blocked = [r for r in ss if r["status"] == "blocked"]
         ok = (
-            len(ss) == 12
-            and len(blocked) == 12
-            and "S0" in text
-            and all("external control" in (r["error"] or "") for r in blocked)
+            len(ss) == 12 and len(blocked) == 12 and "S0" in text
+            and all("upstream checkout" in (r["error"] or "") for r in blocked)
         )
-        return ok, (f"{len(ss)} SS rows, {len(blocked)} blocked with a reason, "
-                    f"S0 present in the summary")
+        return ok, (f"{len(blocked)}/12 blocked naming the missing checkout, "
+                    f"S0 still in the summary")
+
+
+def t15b_control_becomes_claimable_once_staged():
+    """And releases with no bookkeeping once the checkout appears."""
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "seasplat_vanilla"
+        repo.mkdir()
+        (repo / "train.py").write_text("# upstream", encoding="utf-8")
+        led = fresh(tmp)
+        led.ref_repo = repo
+        r = led.claim()
+        ok = r is not None and r["cell"] == "SS" and r["stage"] == "S0"
+        return ok, f"with a checkout staged, first claim is {r['id'] if r else None}"
 
 
 def t16_extend_preserves_completed_runs():
@@ -116,39 +126,41 @@ def t16_extend_preserves_completed_runs():
                     f"re-extend added {again} (idempotent)")
 
 
-def t17_external_cell_does_not_deadlock_the_queue():
-    """DECISIVE. S0 must not stall the campaign on a manual step.
+def t17_external_cell_is_never_dispatched_to_our_trainer():
+    """DECISIVE. The worker runs S0, and never with this codebase's train.py.
 
-    S0 holds only SS, which this codebase cannot train, so the *entire* first
-    stage is unrunnable by the worker. Refusing at dispatch would kill the
-    driver on its first claim; leaving the rows pending would idle an A100
-    behind work no worker can ever do. Marking them blocked routes S0 through
-    policy that already exists: a stage whose remaining work is entirely
-    blocked is skipped, loudly, and compute moves on while the control is
-    produced out of band.
+    SS's config block is empty because there is nothing here to configure, so
+    `train.py --cell SS` would train OUR implementation under A0's defaults and
+    file the result as the reference control -- a run that completes, reports
+    plausible numbers, and is A0 wearing SS's name. check_margin would then
+    compare A0 against A0 and certify the study's foundational claim from the
+    code agreeing with itself.
+
+    Now that the worker drives S0, that protection cannot come from refusing to
+    dispatch. It has to come from dispatching somewhere else.
     """
+    from tools.run_queue import build_command
+
     with tempfile.TemporaryDirectory() as tmp:
-        led = fresh(tmp)                       # full campaign, S0 included
-        stages = []
-        for _ in range(200):
-            r = led.claim()
-            if r is None:
-                break
-            stages.append(r["stage"])
-            r["status"] = "done"
-        led.save()
+        root = Path(tmp)
+        (root / "Curasao" / "images").mkdir(parents=True)
+        repo = root / "seasplat_vanilla"
+        repo.mkdir()
+        (repo / "train.py").write_text("# upstream", encoding="utf-8")
 
-        ss_claimed = any(r["cell"] == "SS" for r in led.runs if r["status"] == "done")
-        reached_later = "S4" in stages
-        ss_blocked = [r for r in led.runs if r["cell"] == "SS" and r["status"] == "blocked"]
+        led = fresh(tmp)
+        run = next(r for r in led.runs
+                   if r["cell"] == "SS" and r["scene"] == "Curasao")
+        cmd, _ = build_command(run, led, root, Path("."), [], ref_repo=repo)
 
-        # S0 now holds nothing the worker can run, so this is the strongest
-        # form of the check: an entirely external stage must be skipped
-        # outright rather than stalling the campaign behind it.
-        ok = (not ss_claimed) and reached_later and len(ss_blocked) == 12
-        return ok, (f"S0 is entirely external; SS never claimed={not ss_claimed}, "
-                    f"all {len(ss_blocked)} rows blocked, "
-                    f"queue reached {sorted(set(stages))[-1]}")
+        joined = " ".join(cmd)
+        ok = (
+            "measure_reference" in joined
+            and "--ref_repo" in joined
+            and str(repo) in joined
+            and "--cell" not in joined
+        )
+        return ok, "dispatched to measure_reference --ref_repo, not train.py --cell"
 
 
 def t1_init_shape():
@@ -527,12 +539,14 @@ def main() -> int:
           t13_init_takes_the_budget_from_config)
     check("T14 ledger survives losing its file  <-- decisive",
           t14_ledger_survives_losing_its_file)
-    check("T15 the outstanding control stays visible  <-- decisive",
-          t15_the_outstanding_control_stays_visible)
+    check("T15 control blocks visibly without its checkout  <-- decisive",
+          t15_control_blocks_visibly_without_its_checkout)
+    check("T15b control becomes claimable once staged",
+          t15b_control_becomes_claimable_once_staged)
     check("T16 extend preserves completed runs  <-- decisive",
           t16_extend_preserves_completed_runs)
-    check("T17 an external cell does not deadlock the queue  <-- decisive",
-          t17_external_cell_does_not_deadlock_the_queue)
+    check("T17 external cell never reaches our trainer  <-- decisive",
+          t17_external_cell_is_never_dispatched_to_our_trainer)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

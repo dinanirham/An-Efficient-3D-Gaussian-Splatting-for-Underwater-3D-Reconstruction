@@ -324,6 +324,16 @@ class Ledger:
     def dense_pcd_path(self, scene: str) -> Path:
         return self.root / "dense" / f"{scene}.ply"
 
+    # Where the upstream checkout is staged. A module-level default rather
+    # than ledger state: it is a property of the machine, not of the campaign,
+    # and a path baked into run_ledger.json would follow the file to a
+    # different box and be wrong there.
+    ref_repo = Path("/content/seasplat_vanilla")
+
+    def ref_repo_ok(self) -> bool:
+        """Is an upstream checkout staged and plausibly complete?"""
+        return (self.ref_repo / "train.py").exists()
+
     def blockers(self, run: dict) -> list[str]:
         """Why this run must not start yet. Empty means it is ready."""
         reasons = []
@@ -337,7 +347,7 @@ class Ledger:
                 f"dense cloud missing: {self.dense_pcd_path(run['scene'])} "
                 f"(produce it with source/roma_init.py)"
             )
-        if run["cell"] in external_cells():
+        if run["cell"] in external_cells() and not self.ref_repo_ok():
             # Blocked rather than refused at dispatch. An external cell is not
             # trainable here at all, so the worker must never claim it -- but
             # it must not stall the queue either. Marking it blocked routes it
@@ -352,10 +362,9 @@ class Ledger:
             # a manual step is a worse failure than letting the analysis carry
             # the precondition.
             reasons.append(
-                f"{run['cell']} is an external control and cannot be trained by "
-                f"this codebase. Produce it from the unpatched upstream "
-                f"checkout, then `tools.measure_reference --ref_root ... --out "
-                f"{self.root}/runs/{run['cell']}/{run['scene']}/s{run['seed']}`"
+                f"{run['cell']} is produced from the upstream checkout, and none "
+                f"is staged at {self.ref_repo}. Run 00_setup section 10, which "
+                f"clones it unpatched."
             )
         return reasons
 

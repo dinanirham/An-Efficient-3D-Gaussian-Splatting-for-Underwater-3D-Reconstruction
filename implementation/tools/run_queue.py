@@ -81,35 +81,32 @@ def find_images_dir(scene_dir: Path) -> str:
 
 
 def build_command(
-    run: dict, ledger: Ledger, data_root: Path, impl_root: Path, extra: list[str]
+    run: dict, ledger: Ledger, data_root: Path, impl_root: Path, extra: list[str],
+    ref_repo: Path = Path("/content/seasplat_vanilla"),
 ) -> tuple[list[str], Path]:
     scene_dir = data_root / run["scene"]
     if not scene_dir.exists():
         raise FileNotFoundError(f"scene not found: {scene_dir}")
 
     if run["cell"] in external_cells():
-        raise SystemExit(
-            f"\n{'=' * 70}\n"
-            f"REFUSING to train {run['id']}.\n\n"
-            f"{run['cell']} is an EXTERNAL cell: it describes a run of another\n"
-            f"implementation, and its config block is empty because there is\n"
-            f"nothing in this codebase to configure. Training it here would run\n"
-            f"THIS code under A0's defaults and write the result under\n"
-            f"{run['cell']}'s name -- a run that completes, reports plausible\n"
-            f"numbers, and is A0 wearing another label.\n\n"
-            f"For SS that would make the reference control the very\n"
-            f"implementation it exists to check: check_margin would compare A0\n"
-            f"against A0 and certify the study's foundational claim from the\n"
-            f"code agreeing with itself.\n\n"
-            f"Produce it instead with the unpatched upstream checkout, then:\n"
-            f"  python -m tools.measure_reference \\\n"
-            f"      --ref_root <vanilla output dir> \\\n"
-            f"      --source_path <scene> \\\n"
-            f"      --out {ledger.root}/runs/{run['cell']}/{run['scene']}/s{run['seed']}\n"
-            f"  python -m tools.run_ledger complete --cells {run['cell']} "
-            f"--output_root {ledger.root}\n"
-            f"{'=' * 70}\n"
-        )
+        # NOT `train.py --cell SS`. That cell's config block is empty because
+        # there is nothing in this codebase to configure, so training it here
+        # would run OUR implementation under A0's defaults and file the result
+        # as the reference control -- after which check_margin would compare A0
+        # against A0 and certify the study's foundational claim from the code
+        # agreeing with itself. The whole point of an external cell is that it
+        # is produced somewhere else.
+        ref_out = Path("/content/ss_out") / f"{run['scene']}_s{run['seed']}"
+        out_dir = ledger.root / "runs" / run["cell"] / run["scene"] / f"s{run['seed']}"
+        cmd = [
+            sys.executable, "-m", "tools.measure_reference",
+            "--ref_repo", str(ref_repo),
+            "--ref_root", str(ref_out),
+            "--source_path", str(scene_dir),
+            "--out", str(out_dir),
+            "--seed", str(run["seed"]),
+        ]
+        return cmd, out_dir
 
     out_dir = ledger.root / "runs" / run["cell"] / run["scene"] / f"s{run['seed']}"
     cmd = [
@@ -196,6 +193,8 @@ def main() -> int:
     ap.add_argument("--stale_minutes", type=int, default=45)
     ap.add_argument("--max_attempts", type=int, default=3)
     ap.add_argument("--allow_any_gpu", action="store_true")
+    ap.add_argument("--ref_repo", default="/content/seasplat_vanilla",
+                    help="unpatched upstream checkout, for S0's external cell")
     ap.add_argument("--dry_run", action="store_true",
                     help="print the commands that would run, claim nothing")
     ap.add_argument("extra", nargs="*",

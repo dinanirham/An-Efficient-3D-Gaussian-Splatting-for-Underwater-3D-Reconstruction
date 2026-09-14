@@ -361,6 +361,30 @@ def check_margin(output_root: Path) -> int:
     return 0
 
 
+def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
+                  iterations: int = 30000, seathru_from_iter: int = 10000) -> int:
+    """Run the upstream trainer, in the upstream checkout, unmodified.
+
+    Invoked as a subprocess in `ref_repo` rather than imported, because that is
+    the only way to be sure the code executing is theirs: an import would run
+    their module inside this process, against whatever this repository has
+    already put on `sys.path`, and the first name collision would silently
+    substitute our implementation for theirs.
+    """
+    import subprocess
+
+    cmd = [
+        "python", "train.py",
+        "-s", str(scene_dir),
+        "--model_path", str(out),
+        "--iterations", str(iterations),
+        "--seathru_from_iter", str(seathru_from_iter),
+        "--eval", "--seed", str(seed),
+    ]
+    print(f"[SS] training vanilla in {ref_repo}\n     {' '.join(cmd)}", flush=True)
+    return subprocess.run(cmd, cwd=str(ref_repo)).returncode
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="measure vanilla SeaSplat with the campaign harness")
@@ -370,6 +394,11 @@ def main() -> int:
     ap.add_argument("--iteration", type=int, default=None)
     ap.add_argument("--check_margin", action="store_true")
     ap.add_argument("--output_root", help="campaign root, for --check_margin")
+    ap.add_argument("--ref_repo", default=None,
+                    help="unpatched upstream checkout; train there first, then "
+                         "measure. This is what the worker passes for S0.")
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--iterations", type=int, default=30000)
     args = ap.parse_args()
 
     if args.check_margin:
@@ -380,6 +409,21 @@ def main() -> int:
     missing = [f for f in ("ref_root", "source_path", "out") if not getattr(args, f)]
     if missing:
         raise SystemExit(f"missing required argument(s): {', '.join(missing)}")
+
+    if args.ref_repo:
+        repo = Path(args.ref_repo)
+        if not (repo / "train.py").exists():
+            raise SystemExit(
+                f"no train.py in {repo}. S0 needs the UNPATCHED upstream "
+                f"checkout that 00_setup stages at /content/seasplat_vanilla. "
+                f"Do not point this at /content/seasplat_ref: that tree is "
+                f"patched by tools.instrument_reference and is disqualified "
+                f"from producing SS numbers by its own docstring."
+            )
+        rc = train_vanilla(repo, Path(args.source_path), Path(args.ref_root),
+                           args.seed, args.iterations)
+        if rc != 0:
+            raise SystemExit(f"vanilla training failed (exit {rc})")
 
     measure(Path(args.ref_root), Path(args.source_path), Path(args.out), args.iteration)
     return 0

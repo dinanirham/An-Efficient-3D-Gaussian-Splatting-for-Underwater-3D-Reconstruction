@@ -476,62 +476,19 @@ else:
 
 !python -m tools.run_ledger status --output_root "$DRIVE_ROOT"
 '''),
-    md("""## 12. The SS control — produced here, not by the worker
+    md("""## 12. The SS control — the worker produces it
 
-`SS` is vanilla SeaSplat — an unmodified clone of the upstream repository —
-and the worker cannot run it: its config block is empty because there is
-nothing in *this* codebase to configure, so `train.py --cell SS` would train
-**our** implementation under A0's defaults and file the result as the reference
-control. `check_margin` would then compare A0 against A0 and certify the
-study's foundational claim from the code agreeing with itself.
+`SS` is an unmodified clone of the upstream repository, staged in §10. The
+worker drives it like any other cell: it claims the row, runs the **upstream**
+trainer in that checkout, and then measures the result with this campaign's own
+harness. What it never does is `train.py --cell SS` — that would train *our*
+implementation under A0's defaults and file it as the reference control, after
+which `check_margin` would compare A0 against A0 and certify the study's
+foundational claim from the code agreeing with itself.
 
-S0 holds nothing else, so the whole stage is unrunnable by the worker. The
-ledger marks all twelve rows **blocked** and the queue skips S0 outright and
-starts at A0 — loudly, and recorded, because a silent reorder is exactly the
-kind of surprise that makes a results table mean something other than it
-appears to.
-
-They are produced here instead, from the unpatched checkout staged in §10.
-This is roughly eleven hours of training and can run in its own session — the
-factorial does not wait on it.
+Nothing to run here. If §10 was skipped the rows block, naming the missing
+checkout, and release on the next claim once it exists.
 """),
-    code('''\
-# Train vanilla, then measure it with the campaign's own harness: their model,
-# their render code, our metrics, one convention on both sides.
-#
-# s0/s1/s2 are REPEAT indices here, not matched seeds -- vanilla seeds only the
-# CPU generator, so its GPU draws vary regardless. SS and A0 are compared as
-# scene means over repeats, never run against run.
-import subprocess, time
-
-REPEATS = 3
-for scene in SCENES:
-    for rep in range(REPEATS):
-        out_run = f'{DRIVE_ROOT}/runs/SS/{scene}/s{rep}'
-        if os.path.exists(f'{out_run}/eval_metrics.json'):
-            print(f'{scene}/s{rep}: already measured, skipping'); continue
-
-        ref_out = f'/content/ss_out/{scene}_s{rep}'
-        print(f'--- vanilla {scene} repeat {rep} ---', flush=True)
-        t0 = time.time()
-        r = subprocess.run(
-            ['python', 'train.py',
-             '-s', f'{LOCAL_DATA}/{scene}',
-             '--model_path', ref_out,
-             '--iterations', '30000',
-             '--seathru_from_iter', '10000',
-             '--eval', '--seed', str(rep)],
-            cwd='/content/seasplat_vanilla', capture_output=True, text=True)
-        if r.returncode != 0:
-            print(f'!!! vanilla {scene}/s{rep} FAILED (exit {r.returncode})')
-            print(r.stderr[-1500:]); continue
-        print(f'    trained in {(time.time()-t0)/60:.0f} min', flush=True)
-
-        !python -m tools.measure_reference \\
-            --ref_root "{ref_out}" \\
-            --source_path "{LOCAL_DATA}/{scene}" \\
-            --out "{out_run}"
-'''),
     md("""---
 **Next:** open `01_worker.ipynb` and run it. Repeat every session until the
 ledger reports everything done.
