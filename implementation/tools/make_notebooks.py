@@ -554,16 +554,29 @@ sessions run longer.
 Until the budget is set, every M2 cell is blocked and the queue says so — that
 is expected during S1.
 
+**S0 runs here too, and it does not use this codebase's trainer.** The first
+rows the queue hands out are `SS` — vanilla SeaSplat. The worker runs the
+**upstream** trainer inside the unpatched checkout `00_setup` §10 stages, then
+measures the result with this campaign's harness, so their model is scored on
+our metrics with one convention on both sides. It never runs
+`train.py --cell SS`: that would train *our* implementation under A0's defaults
+and file it as the reference control, after which `check_margin` would compare
+A0 against A0 and certify the study's foundational claim from the code agreeing
+with itself.
+
+Each SS row is one vanilla training run, so S0 is about eleven hours. Nothing
+else waits on it in the sense that matters — the ledger sequences it first
+because A0's standing rests on it, and every later contrast is a difference
+against A0.
+
 **Two messages that look like failures and are not.**
 
-`S0 skipped: SS is an external control...` — `SS` is vanilla SeaSplat and
-cannot be trained by this codebase. Those rows stay blocked and the queue moves
-past them to work it can do; the control is produced in `00_setup` §12. A
-skipped stage is always reported rather than reordered silently.
+`... blocked: SS is produced from the upstream checkout, and none is staged` —
+run `00_setup` §10. `blocked` is recomputed on every claim, so cloning the
+checkout releases those rows with no further bookkeeping; if it never appears,
+the stage is skipped loudly and the queue starts at A0 rather than stalling.
 
-`... is blocked: dense cloud missing` — run `00_setup` §9. `blocked` is
-recomputed on every claim, so producing the cloud releases those runs with no
-further bookkeeping.
+`... is blocked: dense cloud missing` — run `00_setup` §9. Same mechanism.
 """),
     code('''\
 !python -m tools.run_queue \\
@@ -663,35 +676,80 @@ frame rate) combine multiplicatively, in log space.
 '''),
     md("""## 4. The central hypothesis (H4)
 
-Not a between-cell comparison: the depth normalisation constants and the medium
-coefficients across the simplification boundary in A2. A jump in β at 15 000 is
-the signature of the identifiability failure; its absorption inside the
-re-identification burst is the signature of the fix.
+Not a between-cell comparison: the medium coefficients across the
+simplification boundary in A2. A jump in β at 15 000 is the signature of the
+identifiability failure.
+
+**The right x-axis companion is `zr_cv`, not `z_max`.** `z_min`/`z_max` come
+from the single view sampled at that iteration, so they are one draw from the
+distribution the argument is about — measured to differ from the cross-frame
+mean by a median 6.8% and a maximum 38.2%. A trend read from them carries an
+uncontrolled term. The `zr_*` columns (CD-27) sweep every training view and
+carry the distribution itself; `zr_cv` is its dispersion, dimensionless and
+therefore comparable across scenes.
+
+The prediction under test: **collapse tracks the change in `zr_cv` across the
+event, not the change in primitive count.** A distribution that merely
+translates leaves β's compromise attainable; one that broadens does not. If the
+ratio fails to separate the collapsed runs from the intact ones, the
+identifiability account is wrong and should be withdrawn rather than qualified.
 """),
     code('''\
 import glob, csv
 import matplotlib.pyplot as plt
 
-paths = sorted(glob.glob(f'{DRIVE_ROOT}/runs/A2/*/s0/diagnostics.csv'))
+paths = sorted(glob.glob(f'{DRIVE_ROOT}/runs/A2/*/s*/diagnostics.csv'))
 if not paths:
     print('No A2 runs yet — that is stage S2.')
+
+def _f(r, k):
+    v = r.get(k, '')
+    return float(v) if v not in ('', None) else None
+
 for p in paths:
-    rows  = [r for r in csv.DictReader(open(p)) if r['beta_att_r']]
-    if not rows:
+    rows = list(csv.DictReader(open(p)))
+    beta_rows = [r for r in rows if r.get('beta_att_r')]
+    if not beta_rows:
         continue
     scene = p.split('/runs/A2/')[1].split('/')[0]
-    it    = [int(r['iteration']) for r in rows]
-    beta  = [float(r['beta_att_r']) for r in rows]
-    zmax  = [float(r['z_max']) if r['z_max'] else float('nan') for r in rows]
+    seed  = p.split('/s')[-1].split('/')[0]
+
+    it   = [int(r['iteration']) for r in beta_rows]
+    beta = [float(r['beta_att_r']) for r in beta_rows]
+
+    # The cross-frame sweep fires only at the boundaries and on a coarse
+    # interval, so it is a handful of points rather than a dense trace.
+    sw = [(int(r['iteration']), _f(r, 'zr_cv'), r.get('event', ''))
+          for r in rows if _f(r, 'zr_cv') is not None]
 
     fig, ax = plt.subplots(1, 2, figsize=(11, 3.2))
-    ax[0].plot(it, beta);  ax[0].axvline(15000, ls='--', c='r')
-    ax[0].set_title(f'{scene}: beta_att (red channel)')
-    ax[1].plot(it, zmax);  ax[1].axvline(15000, ls='--', c='r')
-    ax[1].set_title('z_max — depth normalisation')
-    for a in ax: a.set_xlabel('iteration')
-    plt.tight_layout(); plt.savefig(f'{ANALYSIS_DIR}/h4_{scene}.png', dpi=140)
+    ax[0].plot(it, beta)
+    for x in (15000, 20000):
+        ax[0].axvline(x, ls='--', c='r', lw=0.8)
+    ax[0].set_title(f'{scene}/s{seed}: beta_att (red)')
+
+    if sw:
+        ax[1].plot([x for x, _, _ in sw], [c for _, c, _ in sw], 'o-')
+        for x, c, ev in sw:
+            if ev in ('pre_simp', 'post_simp'):
+                ax[1].annotate(ev.split('_')[0], (x, c), fontsize=7,
+                               xytext=(0, 6), textcoords='offset points')
+        ax[1].set_title('zr_cv — cross-frame depth-range dispersion')
+    else:
+        ax[1].text(0.5, 0.5, 'no cross-frame sweep\n(run predates CD-27)',
+                   ha='center', va='center', transform=ax[1].transAxes)
+        ax[1].set_title('zr_cv — not measured')
+    for x in (15000, 20000):
+        ax[1].axvline(x, ls='--', c='r', lw=0.8)
+
+    for a in ax:
+        a.set_xlabel('iteration')
+    plt.tight_layout()
+    plt.savefig(f'{ANALYSIS_DIR}/h4_{scene}_s{seed}.png', dpi=140)
     plt.show()
+
+# The ratio itself, beside the collapse verdict, for every run that carries it.
+!python -m tools.medium_collapse --output_root "$DRIVE_ROOT" 2>&1 | tail -30
 '''),
     md("""## 4b. The rest of the instrument panel
 
