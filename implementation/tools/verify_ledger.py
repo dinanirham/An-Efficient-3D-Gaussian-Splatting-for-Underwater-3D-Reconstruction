@@ -154,13 +154,22 @@ def t17_external_cell_is_never_dispatched_to_our_trainer():
         cmd, _ = build_command(run, led, root, Path("."), [], ref_repo=repo)
 
         joined = " ".join(cmd)
+        # The model must be written where every other cell writes its own: on
+        # Drive, under the run directory. Training it to ephemeral storage
+        # would leave a control whose point cloud, medium nets and cameras
+        # vanish with the session -- a number that cannot be re-derived,
+        # re-rendered, or shown to anyone.
+        expected = led.root / "runs" / "SS" / "Curasao" / "s0"
         ok = (
             "measure_reference" in joined
             and "--ref_repo" in joined
             and str(repo) in joined
             and "--cell" not in joined
+            and "/content/ss_out" not in joined
+            and str(expected) in joined
         )
-        return ok, "dispatched to measure_reference --ref_repo, not train.py --cell"
+        return ok, ("dispatched to measure_reference --ref_repo, not train.py "
+                    "--cell; model lands under runs/ on Drive")
 
 
 def t1_init_shape():

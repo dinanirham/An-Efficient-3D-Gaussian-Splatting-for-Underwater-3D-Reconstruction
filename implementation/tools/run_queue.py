@@ -96,12 +96,19 @@ def build_command(
         # against A0 and certify the study's foundational claim from the code
         # agreeing with itself. The whole point of an external cell is that it
         # is produced somewhere else.
-        ref_out = Path("/content/ss_out") / f"{run['scene']}_s{run['seed']}"
+        # Vanilla trains straight into the run directory on Drive, exactly as
+        # every other cell does. An earlier version sent it to /content, which
+        # is faster and destroys the model: the point cloud, the medium nets,
+        # the cameras and the config would all vanish with the session, leaving
+        # a cell whose eval_metrics.json could never be re-derived, whose
+        # geometry spatial_extent.py could never read, and whose model could
+        # not be shown to anyone. A control that cannot be re-examined is a
+        # number on trust.
         out_dir = ledger.root / "runs" / run["cell"] / run["scene"] / f"s{run['seed']}"
         cmd = [
             sys.executable, "-m", "tools.measure_reference",
             "--ref_repo", str(ref_repo),
-            "--ref_root", str(ref_out),
+            "--ref_root", str(out_dir),
             "--source_path", str(scene_dir),
             "--out", str(out_dir),
             "--seed", str(run["seed"]),
