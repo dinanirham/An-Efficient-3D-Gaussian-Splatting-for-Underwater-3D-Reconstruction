@@ -35,6 +35,9 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from tools.measure_reference import (  # noqa: E402
+    A0_COST_KEYS,
+    A0_SPLIT_KEYS,
+    A0_TOP_KEYS,
     EVAL_SCHEMA_KEYS,
     aggregate_by_scene,
     find_iteration,
@@ -346,6 +349,54 @@ def t16_vanilla_command_trims_the_save_schedule():
     return ok, "save and checkpoint schedules pinned to the final iteration"
 
 
+def t17_contract_matches_what_train_py_writes():
+    """DECISIVE. The A0 key constants must track train.py, or SS drifts alone.
+
+    Read train.py's results block from source and compare, so the next field
+    added to A0's file fails here rather than quietly leaving SS one key short
+    -- or one key over, which is worse, since extras are what future consumers
+    get written against.
+    """
+    import re
+    src = (Path(__file__).resolve().parent.parent / "train.py").read_text(
+        encoding="utf-8")
+    blk = src[src.index('    results = {\n        "container"'):
+              src.index("    results_file = Path")]
+    top = tuple(re.findall(r'^\s{8}"(\w+)":', blk, re.M)) + ("Train", "Test")
+    cost_blk = blk[blk.index('"cost": {'):]
+    cost_blk = cost_blk[:cost_blk.index("\n        },")]
+    cost_static = set(re.findall(r'^\s{12}"(\w+)":', cost_blk, re.M))
+
+    prof_src = (Path(__file__).resolve().parent.parent / "utils"
+                / "render_profile.py").read_text(encoding="utf-8")
+    # profile_rendering seeds its dict with a literal ("render_x": ...) and
+    # then assigns into it (out["render_x"] = ...); both spellings count.
+    cost_prof = (set(re.findall(r'out\["(render_\w+)"\]', prof_src))
+                 | set(re.findall(r'^\s+"(render_\w+)":', prof_src, re.M)))
+
+    ok_top = top == A0_TOP_KEYS
+    ok_cost = (cost_static | cost_prof) == set(A0_COST_KEYS)
+    ok = ok_top and ok_cost
+    drift = []
+    if not ok_top:
+        drift.append(f"top {top} != {A0_TOP_KEYS}")
+    if not ok_cost:
+        drift.append(f"cost diff {sorted((cost_static | cost_prof) ^ set(A0_COST_KEYS))}")
+    return ok, "constants match train.py + profile_rendering" if ok else "; ".join(drift)
+
+
+def t18_split_block_recipe_matches_train_py():
+    """The per-split block is built with train.py's recipe, aliases included."""
+    # aggregate_images returns these five; the module imports torch, so the
+    # shape is stated here rather than imported -- this suite stays CPU-only.
+    agg = {"n_images": 1, "psnr_pooled": 30.0, "psnr_per_channel": 30.2,
+           "ssim": 0.9, "lpips": 0.18}
+    block = {**agg, "SSIM": agg["ssim"], "PSNR": agg["psnr_pooled"],
+             "LPIPS": agg["lpips"], "per_image": []}
+    ok = set(block) == set(A0_SPLIT_KEYS) and block["PSNR"] == block["psnr_pooled"]
+    return ok, f"{sorted(block)} and PSNR aliases the pooled figure"
+
+
 def main() -> int:
     print("=" * 68)
     print("CD-31  vanilla SeaSplat collector")
@@ -378,6 +429,10 @@ def main() -> int:
           t15_prune_keeps_only_the_final_model)
     check("T16 vanilla command trims the save schedule",
           t16_vanilla_command_trims_the_save_schedule)
+    check("T17 A0 key constants track train.py  <-- decisive",
+          t17_contract_matches_what_train_py_writes)
+    check("T18 split block uses train.py's recipe",
+          t18_split_block_recipe_matches_train_py)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

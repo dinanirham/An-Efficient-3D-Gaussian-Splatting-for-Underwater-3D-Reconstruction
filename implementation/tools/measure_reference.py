@@ -68,6 +68,28 @@ EVAL_SCHEMA_KEYS: dict[str, tuple[str, ...]] = {
     "cost": tuple(CONSUMER_COST),
 }
 
+# The EXACT key set train.py writes for every other cell, so SS's file is
+# schema-identical rather than merely a superset. Extra keys are a slow
+# poison: a consumer written against A0 ignores them today and someone
+# writes one against SS tomorrow. Anything SS-specific goes to a sidecar,
+# never into this file. verify_measure_reference T17 reads train.py's source
+# and fails if this drifts from what it actually writes.
+A0_TOP_KEYS: tuple[str, ...] = (
+    "container", "lpips_backbone", "masking", "conventions", "cost", "Train", "Test",
+)
+A0_COST_KEYS: tuple[str, ...] = (
+    "iterations", "effective_optimizer_steps", "train_wall_seconds",
+    "n_primitives_final", "population_collapsed",
+    # from utils.render_profile.profile_rendering
+    "render_fps", "render_ms_per_frame", "render_ms_per_frame_sd",
+    "render_ms_per_frame_cv", "render_frames_timed", "render_warmup_frames",
+    "render_repeats", "render_note", "render_peak_mem_mb",
+)
+A0_SPLIT_KEYS: tuple[str, ...] = (
+    "n_images", "psnr_pooled", "psnr_per_channel", "ssim", "lpips",
+    "SSIM", "PSNR", "LPIPS", "per_image",
+)
+
 MARGIN_TO_METRIC = {
     "psnr_pooled_db": ("psnr_pooled", "absolute"),
     "lpips": ("lpips", "absolute"),
@@ -337,47 +359,66 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
             artifact_bytes += p.stat().st_size
 
     results = {
-        # Top level mirrors train.py's file exactly, so every consumer reads it
-        # the way it reads A0's. The SS-specific provenance sits under keys
-        # none of them look at.
+        # Exactly train.py's key set -- see A0_TOP_KEYS / A0_COST_KEYS. Nothing
+        # SS-specific lives here; it goes to reference.json beside this file.
         "container": container,
         "lpips_backbone": lpips_net,
         "masking": "none",
         "conventions": convention_note(lpips_net, container),
-        "cell": "SS",
-        "source": str(ref_root),
-        "_note": (
-            "Vanilla SeaSplat, unmodified. Rendered with the upstream render_set "
-            "and scored with this campaign's metric harness, so the convention "
-            "matches A0 on both sides. Metrics come from 8-bit files written and "
-            "read back, reproducing the inherited evaluation quirk rather than "
-            "correcting it on one side only."
-        ),
         "cost": {
             "iterations": int(it),
             # Upstream's loop has the same `continue` past the counter that
             # gives A0 ~43 000 optimizer steps for 30 000 iterations (D-8); the
-            # exact figure is not recoverable from its artifacts, so it is
-            # reported absent rather than assumed equal.
+            # exact figure is not recoverable from its artifacts, so absent
+            # rather than assumed equal.
             "effective_optimizer_steps": None,
-            # From the subprocess clock when this measurement followed training
-            # in the same invocation; None when re-measuring an existing model,
-            # since the training time is then not ours to know.
+            # Subprocess clock when training preceded this measurement in the
+            # same invocation; None when re-measuring an existing model. Its
+            # span differs from A0's and is described in reference.json.
             "train_wall_seconds": train_wall_seconds,
-            "train_wall_span": (
-                "whole upstream train.py process: dataset load + training + "
-                "final renders + upstream's own metric scoring. A0's figure "
-                "excludes the first and last, so this is a superset by roughly "
-                "35 s (~2%)."
-            ) if train_wall_seconds is not None else None,
             "n_primitives_final": n,
             "population_collapsed": False,
             **prof,
         },
         **split_blocks,
     }
+    assert tuple(results) == A0_TOP_KEYS, tuple(results)
+    assert set(results["cost"]) == set(A0_COST_KEYS), sorted(results["cost"])
     (out_dir / "eval_metrics.json").write_text(json.dumps(results, indent=2),
                                                encoding="utf-8")
+
+    # Everything SS-specific, in a sidecar, so the metrics file's schema is
+    # identical to A0's and the provenance is still on disk beside it.
+    provenance = {
+        "cell": "SS",
+        "source": str(ref_root),
+        "iteration": int(it),
+        "what": (
+            "Vanilla SeaSplat, unmodified. Rendered with the upstream render_set "
+            "and scored with this campaign's metric harness, so the convention "
+            "matches A0 on both sides. Metrics come from 8-bit files written and "
+            "read back, reproducing the inherited evaluation quirk rather than "
+            "correcting it on one side only."
+        ),
+        "train_wall_span": (
+            "whole upstream train.py process: dataset load + training + final "
+            "renders + upstream's own metric scoring. A0's figure excludes the "
+            "first and last, so this is a superset by roughly 35 s (~2%)."
+            if train_wall_seconds is not None else
+            "not measured: this model was re-measured, not trained, in this "
+            "invocation"
+        ),
+        "effective_optimizer_steps": (
+            "not recoverable from upstream's artifacts; its loop bypasses the "
+            "counter the same way (D-8) but the count is not logged"
+        ),
+        "diagnostics": (
+            "final state only, one row; upstream carries no per-iteration "
+            "diagnostics (CD-12 is this repository's instrument)"
+        ),
+    }
+    (out_dir / "reference.json").write_text(json.dumps(provenance, indent=2),
+                                            encoding="utf-8")
 
     size = {
         "artifact_dir": str(ref_root),
