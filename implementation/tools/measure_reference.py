@@ -52,14 +52,20 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 CELLS = Path(__file__).resolve().parent.parent / "configs" / "cells.json"
 
-# The shape `collect_results.py` and `analyse.py` read by key. Emitting a
-# different shape would make SS invisible to the analysis while appearing to
-# have run -- a silent absence, which is the failure mode this project has
-# paid for more than once.
+# The shape collect_results.py and analyse.py read. Both take the split block
+# from ev["Test"] / ev["Train"] -- collect_results marks a run INCOMPLETE if the
+# split key is absent, and analyse skips it -- so a file that carried the right
+# numbers under any other key would be dropped by every consumer while looking
+# like a measured control. The first version of this tool did exactly that,
+# under a key named "quality", and its own test asserted the invented key
+# rather than the real one. The key lists are now imported from the consumer.
+from tools.collect_results import COST as CONSUMER_COST  # noqa: E402
+from tools.collect_results import FIDELITY as CONSUMER_FIDELITY  # noqa: E402
+
+SPLITS: tuple[str, ...] = ("Train", "Test")
 EVAL_SCHEMA_KEYS: dict[str, tuple[str, ...]] = {
-    "quality": ("psnr_pooled", "psnr_per_channel", "ssim", "lpips", "n_images"),
-    "cost": ("n_primitives_final", "train_wall_seconds", "render_fps",
-             "render_ms_per_frame", "render_peak_mem_mb"),
+    **{split: (*CONSUMER_FIDELITY, "n_images") for split in SPLITS},
+    "cost": tuple(CONSUMER_COST),
 }
 
 MARGIN_TO_METRIC = {
@@ -264,22 +270,43 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
     pipe = PipelineParams(_pp).extract(_pp.parse_args([]))
     bg = torch.zeros(3, device="cuda")
 
+    from utils.metrics_conventions import convention_note
+
     gt_dir = source_path / "images"
     use_jpeg = not list(gt_dir.glob("*.png"))
+    container = "jpeg" if use_jpeg else "png"
+    lpips_net = "vgg"
 
-    with torch.no_grad():
-        render_set(out_dir, "test", it, scene.getTestCameras(), gaussians, pipe, bg,
-                   True, False, False, None, bs_model, at_model, save_as_jpeg=use_jpeg)
-
-    image_dir = out_dir / "test" / "with_water"
-    records = []
-    fnames = [f.name for f in sorted(image_dir.iterdir()) if f.is_file()]
-    renders, gts, names = readImages(str(image_dir), str(gt_dir), fnames)
-    for i in range(len(renders)):
-        rec = evaluate_pair(renders[i], gts[i], ssim, lpips, lpips_net="vgg")
-        rec["image"] = names[i]
-        records.append(rec)
-    agg = aggregate_images(records)
+    # Both splits, the same way train.py does it for every other cell: render
+    # to disk through the inherited render_set, read the 8-bit files back, and
+    # score them. Train is kept because A0 reports it and a control that
+    # reports less than the thing it controls for is harder to compare.
+    split_blocks: dict[str, dict] = {}
+    for split_name, cams_for in (("train", scene.getTrainCameras()),
+                                 ("test", scene.getTestCameras())):
+        with torch.no_grad():
+            render_set(out_dir, split_name, it, cams_for, gaussians, pipe, bg,
+                       True, False, False, None, bs_model, at_model,
+                       save_as_jpeg=use_jpeg)
+        image_dir = out_dir / split_name / "with_water"
+        records = []
+        fnames = [f.name for f in sorted(image_dir.iterdir()) if f.is_file()]
+        renders, gts, names = readImages(str(image_dir), str(gt_dir), fnames)
+        for i in range(len(renders)):
+            rec = evaluate_pair(renders[i], gts[i], ssim, lpips, lpips_net=lpips_net)
+            rec["image"] = names[i]
+            records.append(rec)
+        agg = aggregate_images(records)
+        # Identical to train.py's block, aliases included: "PSNR" maps to the
+        # POOLED figure because that is what upstream's code computed here.
+        split_blocks[split_name.capitalize()] = {
+            **agg,
+            "SSIM": agg["ssim"],
+            "PSNR": agg["psnr_pooled"],
+            "LPIPS": agg["lpips"],
+            "per_image": records,
+        }
+    agg = split_blocks["Test"]
 
     with torch.no_grad():
         prof = profile_rendering(render, scene.getTestCameras(), gaussians, pipe, bg)
@@ -309,9 +336,15 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
             artifact_bytes += p.stat().st_size
 
     results = {
+        # Top level mirrors train.py's file exactly, so every consumer reads it
+        # the way it reads A0's. The SS-specific provenance sits under keys
+        # none of them look at.
+        "container": container,
+        "lpips_backbone": lpips_net,
+        "masking": "none",
+        "conventions": convention_note(lpips_net, container),
         "cell": "SS",
         "source": str(ref_root),
-        "iteration": it,
         "_note": (
             "Vanilla SeaSplat, unmodified. Rendered with the upstream render_set "
             "and scored with this campaign's metric harness, so the convention "
@@ -319,18 +352,19 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
             "read back, reproducing the inherited evaluation quirk rather than "
             "correcting it on one side only."
         ),
-        "quality": {
-            "psnr_pooled": agg["psnr_pooled"],
-            "psnr_per_channel": agg["psnr_per_channel"],
-            "ssim": agg["ssim"],
-            "lpips": agg["lpips"],
-            "n_images": agg["n_images"],
-        },
         "cost": {
+            "iterations": int(it),
+            # Upstream's loop has the same `continue` past the counter that
+            # gives A0 ~43 000 optimizer steps for 30 000 iterations (D-8); the
+            # exact figure is not recoverable from its artifacts, so it is
+            # reported absent rather than assumed equal.
+            "effective_optimizer_steps": None,
+            "train_wall_seconds": None,   # theirs to measure; their log has it
             "n_primitives_final": n,
-            "train_wall_seconds": None,   # not ours to measure; their log has it
+            "population_collapsed": False,
             **prof,
         },
+        **split_blocks,
     }
     (out_dir / "eval_metrics.json").write_text(json.dumps(results, indent=2),
                                                encoding="utf-8")

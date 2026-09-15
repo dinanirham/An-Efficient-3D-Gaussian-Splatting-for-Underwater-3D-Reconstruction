@@ -162,14 +162,30 @@ def t7_count_margin_is_relative_not_absolute():
 
 
 def t8_emitted_schema_matches_what_the_collectors_read():
-    """collect_results and analyse read eval_metrics.json by key.
+    """DECISIVE. The schema is whatever the consumers read -- not a guess.
 
-    A collector emitting a different shape would make SS invisible to the
-    analysis while appearing to have run.
+    collect_results takes fidelity from ev["Test"] and ev["Train"] and marks a
+    run INCOMPLETE if the split key is missing; analyse does ev[split] and
+    skips on absence. The first version of this tool wrote the right numbers
+    under a key named "quality", and its test asserted that invented key.
+    Every consumer would have dropped the cell while it looked measured.
+
+    So the expected shape is imported from the consumer and checked against
+    what train.py writes for A0, block by block.
     """
-    missing = [k for k in ("quality", "cost") if k not in EVAL_SCHEMA_KEYS]
-    ok = not missing and "n_primitives_final" in EVAL_SCHEMA_KEYS["cost"]
-    return ok, f"top-level {sorted(EVAL_SCHEMA_KEYS)}, cost carries n_primitives_final"
+    from tools.collect_results import COST, FIDELITY
+
+    # What collect_results / analyse need present.
+    need_split = set(FIDELITY) | {"n_images"}
+    ok_splits = all(
+        split in EVAL_SCHEMA_KEYS and need_split <= set(EVAL_SCHEMA_KEYS[split])
+        for split in ("Train", "Test")
+    )
+    ok_cost = "cost" in EVAL_SCHEMA_KEYS and set(COST) <= set(EVAL_SCHEMA_KEYS["cost"])
+    ok_no_invented = "quality" not in EVAL_SCHEMA_KEYS
+    ok = ok_splits and ok_cost and ok_no_invented
+    return ok, (f"Train/Test carry {sorted(need_split)}; cost carries the "
+                f"{len(COST)} consumer keys; no invented 'quality' block")
 
 
 def t9_verdict_is_reported_per_metric_not_only_overall():
