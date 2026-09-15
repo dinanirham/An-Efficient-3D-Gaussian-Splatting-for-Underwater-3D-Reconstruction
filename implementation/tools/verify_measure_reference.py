@@ -38,7 +38,9 @@ from tools.measure_reference import (  # noqa: E402
     A0_COST_KEYS,
     A0_SPLIT_KEYS,
     A0_TOP_KEYS,
+    Deps,
     EVAL_SCHEMA_KEYS,
+    measure,
     aggregate_by_scene,
     find_iteration,
     find_written_model,
@@ -397,6 +399,224 @@ def t18_split_block_recipe_matches_train_py():
     return ok, f"{sorted(block)} and PSNR aliases the pooled figure"
 
 
+# --------------------------------------------------------------------------
+# measure(), end to end. Every collaborator that touches torch, CUDA or the
+# rasterizer is stubbed -- and each stub enforces the same contract the real
+# one does, so a wrong TYPE at the boundary fails here rather than on Colab.
+# --------------------------------------------------------------------------
+
+
+class _Cam:
+    def __init__(self, name: str) -> None:
+        self.image_name = name
+
+
+class _Gaussians:
+    class _XYZ:
+        shape = (4_234_010, 3)
+    get_xyz = _XYZ()
+
+
+class _Scene:
+    def __init__(self, train: list, test: list) -> None:
+        self._train, self._test = train, test
+
+    def getTrainCameras(self):
+        return self._train
+
+    def getTestCameras(self):
+        return self._test
+
+
+class _Net:
+    """What DiagnosticLogger reads off the medium models."""
+
+    def __init__(self, att, bs, binf) -> None:
+        self.attenuation_conv_params = att
+        self.backscatter_conv_params = bs
+        self.B_inf = binf
+
+
+class _T:
+    """A minimal tensor stand-in for DiagnosticLogger._triple."""
+
+    def __init__(self, vals) -> None:
+        self._v = list(vals)
+
+    def detach(self):
+        return self
+
+    def flatten(self):
+        return self
+
+    def float(self):
+        return self
+
+    def cpu(self):
+        return self
+
+    def numel(self):
+        return len(self._v)
+
+    def __getitem__(self, i):
+        class _S:
+            def __init__(s, x): s.x = x
+            def item(s): return s.x
+        return _S(self._v[i])
+
+
+class _Diag:
+    """Writes the same one-row CSV DiagnosticLogger would, without torch."""
+
+    def __init__(self, out_dir: Path) -> None:
+        self.path = out_dir / "diagnostics.csv"
+        self.rows: list[dict] = []
+
+    def log(self, **kw) -> None:
+        self.rows.append(kw)
+
+    def close(self) -> None:
+        import csv
+        with open(self.path, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=["iteration", "event", "n_primitives", "note"])
+            w.writeheader()
+            for r in self.rows:
+                w.writerow({k: r.get(k, "") for k in w.fieldnames})
+
+
+def _stub_deps(calls: dict) -> Deps:
+    """Stubs that record what they were given and enforce the real contracts."""
+    import contextlib
+
+    def render_set(out_dir, split, it, cams, gaussians, pipe, bg,
+                   do_seathru, add_water, add_fog, learned_bg, bs, at,
+                   save_as_jpeg=False):
+        # The real one writes files here; measure() lists this directory.
+        d = Path(out_dir) / split / "with_water"
+        d.mkdir(parents=True, exist_ok=True)
+        for c in cams:
+            (d / f"{c.image_name}.png").write_bytes(b"png")
+        calls.setdefault("render_set", []).append((split, len(cams), do_seathru))
+
+    def read_images(renders_dir, gt_dir, fnames):
+        # The EXACT operation that crashed on Colab: metrics.readImages joins
+        # its directories with `/`. A str here raises TypeError, as it did.
+        import os
+        for f in fnames:
+            os.path.exists(gt_dir / (f.split(".")[0] + ".png"))
+            os.path.exists(renders_dir / f)
+        calls["read_images_types"] = (type(renders_dir).__name__, type(gt_dir).__name__)
+        return [object()] * len(fnames), [object()] * len(fnames), [f.split(".")[0] for f in fnames]
+
+    def evaluate_pair(r, g, net):
+        return {"psnr_pooled": 30.0, "psnr_per_channel": 30.2, "ssim": 0.9, "lpips": 0.18}
+
+    def aggregate_images(records):
+        n = len(records)
+        return {"n_images": n, "psnr_pooled": 30.0, "psnr_per_channel": 30.2,
+                "ssim": 0.9, "lpips": 0.18}
+
+    def profile_rendering(cams, g, pipe, bg):
+        return {"render_fps": 70.0, "render_ms_per_frame": 14.2,
+                "render_ms_per_frame_sd": 0.3, "render_ms_per_frame_cv": 2.1,
+                "render_frames_timed": len(cams), "render_warmup_frames": 5,
+                "render_repeats": 3, "render_note": "stub", "render_peak_mem_mb": 3500.0}
+
+    return Deps(
+        no_grad=contextlib.nullcontext,
+        model_params=lambda s, m, r: {"source": s, "model_path": m, "resolution": r},
+        pipe_params=lambda: object(),
+        load_gaussians=lambda ply, sh: _Gaussians(),
+        make_scene=lambda mp, g, it: _Scene(
+            [_Cam(f"tr{i:02d}") for i in range(18)], [_Cam(f"te{i:02d}") for i in range(3)]),
+        load_medium=lambda root, it: (
+            _Net(None, _T([6.9, 4.6, 3.5]), _T([0.2, 0.3, 0.4])),
+            _Net(_T([1.4, 1.3, 1.2]), None, None)),
+        background=lambda: object(),
+        render_set=render_set,
+        read_images=read_images,
+        evaluate_pair=evaluate_pair,
+        aggregate_images=aggregate_images,
+        convention_note=lambda net, c: {"psnr_pooled": "pooled", "container": c},
+        profile_rendering=profile_rendering,
+        diag_logger=_Diag,
+    )
+
+
+def _stage_run(tmp: Path) -> tuple[Path, Path]:
+    ref = tmp / "runs" / "SS" / "Curasao" / "s0"
+    make_ref(ref, [30000])
+    (ref / "bg_30000.pth").write_bytes(b"\x00" * 16)
+    src = tmp / "data" / "Curasao"
+    (src / "images").mkdir(parents=True)
+    (src / "images" / "tr00.png").write_bytes(b"png")   # so container resolves to png
+    return ref, src
+
+
+def t19_measure_writes_a0s_schema_end_to_end():
+    """DECISIVE. The real measure() body, boundary stubbed, file asserted.
+
+    Every previous check covered the helpers around measure(); measure()
+    itself had never run under test, which is why each Colab run found the
+    next wrong line. This executes it and reads back what it wrote.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        ref, src = _stage_run(Path(tmp))
+        calls: dict = {}
+        measure(ref, src, ref, iteration=30000, train_wall_seconds=1712.4,
+                deps=_stub_deps(calls))
+
+        ev = json.loads((ref / "eval_metrics.json").read_text(encoding="utf-8"))
+        a0 = json.load(open(Path(__file__).resolve().parent.parent.parent
+                            / "eval_metrics_A0_Curasao_s0.json")) \
+            if (Path(__file__).resolve().parent.parent.parent
+                / "eval_metrics_A0_Curasao_s0.json").exists() else None
+
+        problems = []
+        if tuple(ev) != A0_TOP_KEYS:
+            problems.append(f"top keys {tuple(ev)}")
+        if set(ev["cost"]) != set(A0_COST_KEYS):
+            problems.append(f"cost keys {sorted(set(ev['cost']) ^ set(A0_COST_KEYS))}")
+        for split, n in (("Train", 18), ("Test", 3)):
+            if set(ev[split]) != set(A0_SPLIT_KEYS):
+                problems.append(f"{split} keys {sorted(set(ev[split]) ^ set(A0_SPLIT_KEYS))}")
+            if ev[split]["n_images"] != n:
+                problems.append(f"{split} n_images {ev[split]['n_images']} != {n}")
+            if ev[split]["PSNR"] != ev[split]["psnr_pooled"]:
+                problems.append(f"{split} PSNR alias not pooled")
+        if ev["cost"]["train_wall_seconds"] != 1712.4:
+            problems.append("wall clock not carried")
+        if ev["cost"]["n_primitives_final"] != 4_234_010:
+            problems.append("count not from the model")
+        if ev["container"] != "png":
+            problems.append(f"container {ev['container']}")
+        # If the real A0 file is beside the repo, the shapes must match it too.
+        if a0 is not None and set(a0["cost"]) - set(ev["cost"]):
+            problems.append(f"A0 cost keys missing: {sorted(set(a0['cost']) - set(ev['cost']))}")
+
+        for side in ("model_size.json", "reference.json", "diagnostics.csv"):
+            if not (ref / side).exists():
+                problems.append(f"{side} not written")
+        if calls.get("render_set") != [("train", 18, True), ("test", 3, True)]:
+            problems.append(f"render_set calls {calls.get('render_set')}")
+
+        ok = not problems
+        return ok, ("eval_metrics.json is A0's schema; sidecars written; "
+                    "both splits rendered with the medium on"
+                    if ok else "; ".join(problems))
+
+
+def t20_read_images_receives_paths_not_strings():
+    """DECISIVE. The exact crash from Colab, reproduced by the stub's `/` join."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ref, src = _stage_run(Path(tmp))
+        calls: dict = {}
+        measure(ref, src, ref, iteration=30000, deps=_stub_deps(calls))
+        kinds = calls.get("read_images_types")
+        ok = kinds == ("PosixPath", "PosixPath") or kinds == ("WindowsPath", "WindowsPath")
+        return ok, f"readImages got {kinds}"
+
+
 def main() -> int:
     print("=" * 68)
     print("CD-31  vanilla SeaSplat collector")
@@ -433,6 +653,10 @@ def main() -> int:
           t17_contract_matches_what_train_py_writes)
     check("T18 split block uses train.py's recipe",
           t18_split_block_recipe_matches_train_py)
+    check("T19 measure() writes A0's schema end to end  <-- decisive",
+          t19_measure_writes_a0s_schema_end_to_end)
+    check("T20 readImages receives Paths, not strings  <-- decisive",
+          t20_read_images_receives_paths_not_strings)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

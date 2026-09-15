@@ -46,7 +46,8 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Optional
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
@@ -215,49 +216,112 @@ def margin_verdict(ss: dict, a0: dict, margins: dict) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _model_params(source_path: str, model_path: str, resolution: int = -1):
-    """Every field Scene reads, from the real parser rather than a hand list.
+@dataclass
+class Deps:
+    """Everything measure() needs that touches torch, CUDA or the rasterizer.
 
-    A hand-built Namespace was the first version of this, and it was missing
-    subsample, start_cam, end_cam, rescale_units, scene_bounds_xxyyzz and
-    skip_first_n_images. Scene raised on the first one, measure() died before
-    writing anything, and the run directory was left holding upstream's own
-    eval_metrics.json in a different schema -- which looked like a measured
-    control and was not one. Going through ModelParams means the field set is
-    whatever Scene actually reads, today and after the next change to it.
+    measure() had never been executed by any test: its collaborators are all
+    GPU-bound, so the checks covered the helpers around it and each Colab run
+    found the next line that was wrong -- a missing Scene field, then a str
+    where readImages wanted a Path. Routing those collaborators through this
+    object lets a test run the REAL function body with only the boundary
+    stubbed, and the stubs enforce the same contracts the real callables do.
     """
+
+    no_grad: Callable[[], Any]
+    model_params: Callable[[str, str, int], Any]
+    pipe_params: Callable[[], Any]
+    load_gaussians: Callable[[Path, int], Any]
+    make_scene: Callable[[Any, Any, int], Any]
+    load_medium: Callable[[Path, int], tuple[Any, Any]]
+    background: Callable[[], Any]
+    render_set: Callable[..., None]
+    read_images: Callable[[Path, Path, list[str]], tuple[list, list, list]]
+    evaluate_pair: Callable[[Any, Any, str], dict]
+    aggregate_images: Callable[[list[dict]], dict]
+    convention_note: Callable[[str, str], dict]
+    profile_rendering: Callable[[list, Any, Any, Any], dict]
+    diag_logger: Callable[[Path], Any]
+
+
+def _real_deps() -> Deps:
+    """The production wiring. Imported lazily so the pure paths stay CPU-only."""
+    import torch
     from argparse import ArgumentParser
 
-    from arguments import ModelParams
+    from arguments import ModelParams, PipelineParams
+    from deepseecolor.models import AttenuateNetV3, BackscatterNetV2
+    from gaussian_renderer import render
+    from lpipsPyTorch import lpips
+    from metrics import readImages
+    from render_uw import render_set
+    from scene import GaussianModel, Scene
+    from utils.diagnostics import DiagnosticLogger
+    from utils.loss_utils import ssim
+    from utils.metrics_conventions import (aggregate_images, convention_note,
+                                           evaluate_pair)
+    from utils.render_profile import profile_rendering
 
-    parser = ArgumentParser()
-    lp = ModelParams(parser)
-    args = parser.parse_args([
-        "-s", str(source_path),
-        "--model_path", str(model_path),
-        "--images", "images",
-        "--resolution", str(resolution),
-        "--eval",
-    ])
-    return lp.extract(args)
+    def model_params(source: str, model_path: str, resolution: int):
+        # Every field Scene reads, from the real parser. A hand-built Namespace
+        # was missing subsample, start_cam, end_cam, rescale_units,
+        # scene_bounds_xxyyzz and skip_first_n_images, and Scene raised on the
+        # first.
+        p = ArgumentParser()
+        lp = ModelParams(p)
+        return lp.extract(p.parse_args([
+            "-s", source, "--model_path", model_path, "--images", "images",
+            "--resolution", str(resolution), "--eval",
+        ]))
+
+    def pipe_params():
+        p = ArgumentParser()
+        return PipelineParams(p).extract(p.parse_args([]))
+
+    def load_gaussians(ply: Path, sh_degree: int):
+        g = GaussianModel(sh_degree)
+        g.load_ply(str(ply))
+        return g
+
+    def make_scene(mp, gaussians, it: int):
+        return Scene(mp, gaussians, load_iteration=it, shuffle=False)
+
+    def load_medium(ref_root: Path, it: int):
+        # Their medium model in the classes it was trained with -- both are
+        # inherited from the upstream fork, so this is their model in their
+        # code, and only the harness around it is ours.
+        at = AttenuateNetV3(scale=5.0).cuda()
+        bs = BackscatterNetV2(use_residual=False, scale=5.0).cuda()
+        at.load_state_dict(torch.load(ref_root / f"attenuate_{it}.pth"))
+        bs.load_state_dict(torch.load(ref_root / f"backscatter_{it}.pth"))
+        at.eval()
+        bs.eval()
+        return bs, at
+
+    return Deps(
+        no_grad=torch.no_grad,
+        model_params=model_params,
+        pipe_params=pipe_params,
+        load_gaussians=load_gaussians,
+        make_scene=make_scene,
+        load_medium=load_medium,
+        background=lambda: torch.zeros(3, device="cuda"),
+        render_set=render_set,
+        read_images=readImages,
+        evaluate_pair=lambda r, g, net: evaluate_pair(r, g, ssim, lpips, lpips_net=net),
+        aggregate_images=aggregate_images,
+        convention_note=convention_note,
+        profile_rendering=lambda cams, g, pipe, bg: profile_rendering(render, cams, g, pipe, bg),
+        diag_logger=lambda out: DiagnosticLogger(out, interval=1),
+    )
 
 
 def measure(ref_root: Path, source_path: Path, out_dir: Path,
             iteration: Optional[int] = None,
-            train_wall_seconds: Optional[float] = None) -> dict:
+            train_wall_seconds: Optional[float] = None,
+            deps: Optional[Deps] = None) -> dict:
     """Render a vanilla run through the campaign harness and emit our schema."""
-    import torch
-    from argparse import ArgumentParser
-
-    from gaussian_renderer import render
-    from metrics import readImages
-    from render_uw import render_set
-    from scene import GaussianModel, Scene
-    from utils.metrics_conventions import aggregate_images, evaluate_pair
-    from utils.render_profile import profile_rendering
-    from deepseecolor.models import AttenuateNetV3, BackscatterNetV2
-    from lpipsPyTorch import lpips
-    from utils.loss_utils import ssim
+    d = deps or _real_deps()
 
     it = iteration or find_iteration(ref_root)
     if it is None:
@@ -271,29 +335,13 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    gaussians = GaussianModel(0)
-    scene = Scene(_model_params(str(source_path), str(ref_root), -1),
-                  gaussians, load_iteration=it, shuffle=False)
-
-    # Their medium model, loaded into the classes it was trained with. Both
-    # are inherited from the upstream fork, so this is their model in their
-    # code -- only the harness around it is ours.
-    at_model = AttenuateNetV3(scale=5.0).cuda()
-    bs_model = BackscatterNetV2(use_residual=False, scale=5.0).cuda()
-    at_model.load_state_dict(torch.load(ref_root / f"attenuate_{it}.pth"))
-    bs_model.load_state_dict(torch.load(ref_root / f"backscatter_{it}.pth"))
-    at_model.eval()
-    bs_model.eval()
-
-    # Same reasoning as _model_params: whatever render() reads, from the real
-    # parser, rather than a hand list that goes stale the next time a field
-    # is added.
-    from arguments import PipelineParams
-    _pp = ArgumentParser()
-    pipe = PipelineParams(_pp).extract(_pp.parse_args([]))
-    bg = torch.zeros(3, device="cuda")
-
-    from utils.metrics_conventions import convention_note
+    ply = ref_root / "point_cloud" / f"iteration_{it}" / "point_cloud.ply"
+    gaussians = d.load_gaussians(ply, 0)
+    scene = d.make_scene(d.model_params(str(source_path), str(ref_root), -1),
+                         gaussians, it)
+    bs_model, at_model = d.load_medium(ref_root, it)
+    pipe = d.pipe_params()
+    bg = d.background()
 
     gt_dir = source_path / "images"
     use_jpeg = not list(gt_dir.glob("*.png"))
@@ -307,20 +355,20 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
     split_blocks: dict[str, dict] = {}
     for split_name, cams_for in (("train", scene.getTrainCameras()),
                                  ("test", scene.getTestCameras())):
-        with torch.no_grad():
-            render_set(out_dir, split_name, it, cams_for, gaussians, pipe, bg,
-                       True, False, False, None, bs_model, at_model,
-                       save_as_jpeg=use_jpeg)
+        with d.no_grad():
+            d.render_set(out_dir, split_name, it, cams_for, gaussians, pipe, bg,
+                         True, False, False, None, bs_model, at_model,
+                         save_as_jpeg=use_jpeg)
         image_dir = out_dir / split_name / "with_water"
-        records = []
         fnames = [f.name for f in sorted(image_dir.iterdir()) if f.is_file()]
         # Path objects, as train.py passes them: readImages joins with `/`.
-        renders, gts, names = readImages(image_dir, gt_dir, fnames)
+        renders, gts, names = d.read_images(image_dir, gt_dir, fnames)
+        records = []
         for i in range(len(renders)):
-            rec = evaluate_pair(renders[i], gts[i], ssim, lpips, lpips_net=lpips_net)
+            rec = d.evaluate_pair(renders[i], gts[i], lpips_net)
             rec["image"] = names[i]
             records.append(rec)
-        agg = aggregate_images(records)
+        agg = d.aggregate_images(records)
         # Identical to train.py's block, aliases included: "PSNR" maps to the
         # POOLED figure because that is what upstream's code computed here.
         split_blocks[split_name.capitalize()] = {
@@ -332,8 +380,8 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
         }
     agg = split_blocks["Test"]
 
-    with torch.no_grad():
-        prof = profile_rendering(render, scene.getTestCameras(), gaussians, pipe, bg)
+    with d.no_grad():
+        prof = d.profile_rendering(scene.getTestCameras(), gaussians, pipe, bg)
 
     n = int(gaussians.get_xyz.shape[0])
 
@@ -341,18 +389,14 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
     # and upstream does not carry it, so there is no trajectory to record.
     # But the FINAL medium state is fully recoverable from the .pth files, and
     # writing it as one row in the same schema lets medium_collapse read the
-    # reference's beta beside A0's rather than skipping the cell. One row,
-    # labelled as such -- an absent trajectory is reported as absent, not
-    # faked from a single point.
-    from utils.diagnostics import DiagnosticLogger
-    diag = DiagnosticLogger(out_dir, interval=1)
+    # reference's beta beside A0's rather than skipping the cell.
+    diag = d.diag_logger(out_dir)
     diag.log(iteration=it, event="final", n_primitives=n,
              bs_model=bs_model, at_model=at_model,
              note="SS reference: final state only; upstream carries no "
                   "per-iteration diagnostics")
     diag.close()
 
-    ply = ref_root / "point_cloud" / f"iteration_{it}" / "point_cloud.ply"
     artifact_bytes = ply.stat().st_size
     for extra in (f"attenuate_{it}.pth", f"backscatter_{it}.pth", f"bg_{it}.pth"):
         p = ref_root / extra
@@ -365,7 +409,7 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
         "container": container,
         "lpips_backbone": lpips_net,
         "masking": "none",
-        "conventions": convention_note(lpips_net, container),
+        "conventions": d.convention_note(lpips_net, container),
         "cost": {
             "iterations": int(it),
             # Upstream's loop has the same `continue` past the counter that
@@ -374,8 +418,7 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
             # rather than assumed equal.
             "effective_optimizer_steps": None,
             # Subprocess clock when training preceded this measurement in the
-            # same invocation; None when re-measuring an existing model. Its
-            # span differs from A0's and is described in reference.json.
+            # same invocation; None when re-measuring an existing model.
             "train_wall_seconds": train_wall_seconds,
             "n_primitives_final": n,
             "population_collapsed": False,
@@ -388,8 +431,6 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
     (out_dir / "eval_metrics.json").write_text(json.dumps(results, indent=2),
                                                encoding="utf-8")
 
-    # Everything SS-specific, in a sidecar, so the metrics file's schema is
-    # identical to A0's and the provenance is still on disk beside it.
     provenance = {
         "cell": "SS",
         "source": str(ref_root),
