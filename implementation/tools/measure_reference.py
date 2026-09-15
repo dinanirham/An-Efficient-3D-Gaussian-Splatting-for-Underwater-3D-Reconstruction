@@ -314,7 +314,8 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
         image_dir = out_dir / split_name / "with_water"
         records = []
         fnames = [f.name for f in sorted(image_dir.iterdir()) if f.is_file()]
-        renders, gts, names = readImages(str(image_dir), str(gt_dir), fnames)
+        # Path objects, as train.py passes them: readImages joins with `/`.
+        renders, gts, names = readImages(image_dir, gt_dir, fnames)
         for i in range(len(renders)):
             rec = evaluate_pair(renders[i], gts[i], ssim, lpips, lpips_net=lpips_net)
             rec["image"] = names[i]
