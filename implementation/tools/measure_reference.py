@@ -221,7 +221,8 @@ def _model_params(source_path: str, model_path: str, resolution: int = -1):
 
 
 def measure(ref_root: Path, source_path: Path, out_dir: Path,
-            iteration: Optional[int] = None) -> dict:
+            iteration: Optional[int] = None,
+            train_wall_seconds: Optional[float] = None) -> dict:
     """Render a vanilla run through the campaign harness and emit our schema."""
     import torch
     from argparse import ArgumentParser
@@ -359,7 +360,16 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
             # exact figure is not recoverable from its artifacts, so it is
             # reported absent rather than assumed equal.
             "effective_optimizer_steps": None,
-            "train_wall_seconds": None,   # theirs to measure; their log has it
+            # From the subprocess clock when this measurement followed training
+            # in the same invocation; None when re-measuring an existing model,
+            # since the training time is then not ours to know.
+            "train_wall_seconds": train_wall_seconds,
+            "train_wall_span": (
+                "whole upstream train.py process: dataset load + training + "
+                "final renders + upstream's own metric scoring. A0's figure "
+                "excludes the first and last, so this is a superset by roughly "
+                "35 s (~2%)."
+            ) if train_wall_seconds is not None else None,
             "n_primitives_final": n,
             "population_collapsed": False,
             **prof,
@@ -536,7 +546,8 @@ def prune_intermediates(model_dir: Path, keep_iteration: int) -> list[str]:
 
 
 def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
-                  iterations: int = 30000, seathru_from_iter: int = 10000) -> int:
+                  iterations: int = 30000,
+                  seathru_from_iter: int = 10000) -> tuple[int, float]:
     """Run the upstream trainer, in the upstream checkout, unmodified.
 
     Invoked as a subprocess in `ref_repo` rather than imported, because that is
@@ -573,17 +584,23 @@ def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
     cmd = vanilla_command(scene_dir, out, seed, iterations, seathru_from_iter)
     print(f"[SS] training vanilla in {ref_repo}\n     {' '.join(cmd)}", flush=True)
     rc = subprocess.run(cmd, cwd=str(ref_repo)).returncode
+    # The subprocess clock. A0's train_wall_seconds is read inside train.py,
+    # from just before the loop to just after the final renders -- so it
+    # excludes dataset loading and metric scoring. This figure is the whole
+    # process and therefore a superset by those two, roughly 35 s on a
+    # 1700 s run. Reported with its span named, never silently as if equal.
+    elapsed = round(time.time() - started, 1)
     if rc != 0:
-        return rc
+        return rc, elapsed
 
     written = find_written_model([out, scene_dir, ref_repo], started)
     if written is None:
         print(f"[SS] training reported success but no complete model was written "
               f"after {started:.0f}. Searched {out}, {scene_dir}, {ref_repo}.")
-        return 1
+        return 1, elapsed
 
     if written.resolve() == out.resolve():
-        return 0
+        return 0, elapsed
 
     print(f"[SS] upstream wrote to {written} (it overrides --model_path);"
           f"\n     relocating to {out}", flush=True)
@@ -595,7 +612,7 @@ def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
         shutil.move(str(item), str(dest))
     shutil.rmtree(written, ignore_errors=True)
     prune_intermediates(out, iterations)
-    return 0
+    return 0, elapsed
 
 
 def main() -> int:
@@ -633,12 +650,15 @@ def main() -> int:
                 f"patched by tools.instrument_reference and is disqualified "
                 f"from producing SS numbers by its own docstring."
             )
-        rc = train_vanilla(repo, Path(args.source_path), Path(args.ref_root),
-                           args.seed, args.iterations)
+        rc, wall = train_vanilla(repo, Path(args.source_path), Path(args.ref_root),
+                                 args.seed, args.iterations)
         if rc != 0:
             raise SystemExit(f"vanilla training failed (exit {rc})")
+    else:
+        wall = None
 
-    measure(Path(args.ref_root), Path(args.source_path), Path(args.out), args.iteration)
+    measure(Path(args.ref_root), Path(args.source_path), Path(args.out),
+            args.iteration, train_wall_seconds=wall)
     return 0
 
 
