@@ -187,11 +187,38 @@ def margin_verdict(ss: dict, a0: dict, margins: dict) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _model_params(source_path: str, model_path: str, resolution: int = -1):
+    """Every field Scene reads, from the real parser rather than a hand list.
+
+    A hand-built Namespace was the first version of this, and it was missing
+    subsample, start_cam, end_cam, rescale_units, scene_bounds_xxyyzz and
+    skip_first_n_images. Scene raised on the first one, measure() died before
+    writing anything, and the run directory was left holding upstream's own
+    eval_metrics.json in a different schema -- which looked like a measured
+    control and was not one. Going through ModelParams means the field set is
+    whatever Scene actually reads, today and after the next change to it.
+    """
+    from argparse import ArgumentParser
+
+    from arguments import ModelParams
+
+    parser = ArgumentParser()
+    lp = ModelParams(parser)
+    args = parser.parse_args([
+        "-s", str(source_path),
+        "--model_path", str(model_path),
+        "--images", "images",
+        "--resolution", str(resolution),
+        "--eval",
+    ])
+    return lp.extract(args)
+
+
 def measure(ref_root: Path, source_path: Path, out_dir: Path,
             iteration: Optional[int] = None) -> dict:
     """Render a vanilla run through the campaign harness and emit our schema."""
     import torch
-    from argparse import Namespace
+    from argparse import ArgumentParser
 
     from gaussian_renderer import render
     from metrics import readImages
@@ -216,10 +243,8 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
     out_dir.mkdir(parents=True, exist_ok=True)
 
     gaussians = GaussianModel(0)
-    args = Namespace(source_path=str(source_path), model_path=str(ref_root),
-                     images="images", resolution=-1, white_background=False,
-                     data_device="cuda", eval=True, sh_degree=0)
-    scene = Scene(args, gaussians, load_iteration=it, shuffle=False)
+    scene = Scene(_model_params(str(source_path), str(ref_root), -1),
+                  gaussians, load_iteration=it, shuffle=False)
 
     # Their medium model, loaded into the classes it was trained with. Both
     # are inherited from the upstream fork, so this is their model in their
@@ -231,7 +256,12 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
     at_model.eval()
     bs_model.eval()
 
-    pipe = Namespace(convert_SHs_python=False, compute_cov3D_python=False, debug=False)
+    # Same reasoning as _model_params: whatever render() reads, from the real
+    # parser, rather than a hand list that goes stale the next time a field
+    # is added.
+    from arguments import PipelineParams
+    _pp = ArgumentParser()
+    pipe = PipelineParams(_pp).extract(_pp.parse_args([]))
     bg = torch.zeros(3, device="cuda")
 
     gt_dir = source_path / "images"
@@ -255,6 +285,22 @@ def measure(ref_root: Path, source_path: Path, out_dir: Path,
         prof = profile_rendering(render, scene.getTestCameras(), gaussians, pipe, bg)
 
     n = int(gaussians.get_xyz.shape[0])
+
+    # SS has no diagnostics.csv: that instrument is this repository's (CD-12)
+    # and upstream does not carry it, so there is no trajectory to record.
+    # But the FINAL medium state is fully recoverable from the .pth files, and
+    # writing it as one row in the same schema lets medium_collapse read the
+    # reference's beta beside A0's rather than skipping the cell. One row,
+    # labelled as such -- an absent trajectory is reported as absent, not
+    # faked from a single point.
+    from utils.diagnostics import DiagnosticLogger
+    diag = DiagnosticLogger(out_dir, interval=1)
+    diag.log(iteration=it, event="final", n_primitives=n,
+             bs_model=bs_model, at_model=at_model,
+             note="SS reference: final state only; upstream carries no "
+                  "per-iteration diagnostics")
+    diag.close()
+
     ply = ref_root / "point_cloud" / f"iteration_{it}" / "point_cloud.ply"
     artifact_bytes = ply.stat().st_size
     for extra in (f"attenuate_{it}.pth", f"backscatter_{it}.pth", f"bg_{it}.pth"):
@@ -406,7 +452,53 @@ def vanilla_command(scene_dir: Path, out: Path, seed: int,
         "--do_seathru",
         "--seathru_from_iter", str(seathru_from_iter),
         "--eval", "--seed", str(seed),
+        # Upstream saves at 1k/7k/15k/30k and checkpoints at four more. Only
+        # the final model is measured, and the intermediates are ~900 MB per
+        # run of Drive for nothing (configs/cells.json _storage_note). These
+        # are ordinary 3DGS flags upstream accepts, so no code is touched.
+        # Upstream appends --iterations to both lists regardless, so 30000
+        # appears twice; harmless. The 30000 checkpoint itself cannot be
+        # suppressed from the CLI and is pruned after relocation.
+        "--save_iterations", str(iterations),
+        "--checkpoint_iterations", str(iterations),
     ]
+
+
+def prune_intermediates(model_dir: Path, keep_iteration: int) -> list[str]:
+    """Drop everything but the final model.
+
+    --save_iterations and --checkpoint_iterations remove the intermediate
+    saves, but upstream appends --iterations to the checkpoint list
+    unconditionally, so chkpnt30000.pth -- the full optimiser state, ~300 MB
+    at 4M primitives -- is written regardless. Interrupted runs are restarted
+    rather than resumed (CD-18), so it has no use. Any intermediate that
+    slipped through a different upstream default is removed on the same
+    grounds. Returned so the caller can log what went.
+    """
+    import shutil
+
+    removed: list[str] = []
+    pc = model_dir / "point_cloud"
+    if pc.is_dir():
+        for d in pc.iterdir():
+            if d.is_dir() and d.name != f"iteration_{keep_iteration}":
+                shutil.rmtree(d, ignore_errors=True)
+                removed.append(f"point_cloud/{d.name}")
+    for p in model_dir.iterdir():
+        if not p.is_file():
+            continue
+        if p.name.startswith("chkpnt"):
+            p.unlink()
+            removed.append(p.name)
+            continue
+        for prefix in ("attenuate_", "backscatter_", "bg_"):
+            if p.name.startswith(prefix) and p.name != f"{prefix}{keep_iteration}.pth":
+                p.unlink()
+                removed.append(p.name)
+    if removed:
+        shown = ", ".join(removed[:8]) + (" ..." if len(removed) > 8 else "")
+        print(f"[SS] pruned {len(removed)} intermediate artifact(s): {shown}")
+    return removed
 
 
 def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
@@ -468,6 +560,7 @@ def train_vanilla(ref_repo: Path, scene_dir: Path, out: Path, seed: int,
             shutil.rmtree(dest) if dest.is_dir() else dest.unlink()
         shutil.move(str(item), str(dest))
     shutil.rmtree(written, ignore_errors=True)
+    prune_intermediates(out, iterations)
     return 0
 
 

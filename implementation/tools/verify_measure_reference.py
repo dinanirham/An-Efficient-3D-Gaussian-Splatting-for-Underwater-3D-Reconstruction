@@ -39,6 +39,7 @@ from tools.measure_reference import (  # noqa: E402
     aggregate_by_scene,
     find_iteration,
     find_written_model,
+    prune_intermediates,
     vanilla_command,
     load_margins,
     margin_verdict,
@@ -281,6 +282,54 @@ def t14_vanilla_command_enables_the_medium_model():
                          f"(missing: {missing or 'none'})")
 
 
+def t15_prune_keeps_only_the_final_model():
+    """DECISIVE. Pruning deletes files; it must never touch the target.
+
+    Upstream saves at 1k/7k/15k/30k with medium nets and a background at each,
+    plus a full-optimiser checkpoint it appends unconditionally. Only the
+    30000 model is measured. Everything else is Drive for nothing -- but a
+    prune that overreached by one name would delete the model it exists to
+    keep, and the run would report success with nothing measurable behind it.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        for it in (1000, 7000, 15000, 30000):
+            (d / "point_cloud" / f"iteration_{it}").mkdir(parents=True)
+            (d / "point_cloud" / f"iteration_{it}" / "point_cloud.ply").write_bytes(b"ply")
+            for pre in ("attenuate_", "backscatter_", "bg_"):
+                (d / f"{pre}{it}.pth").write_bytes(b"\x00")
+        for it in (1000, 7000, 15000, 30000):
+            (d / f"chkpnt{it}.pth").write_bytes(b"\x00")
+        (d / "cameras.json").write_text("{}", encoding="utf-8")
+        (d / "cfg_args").write_text("", encoding="utf-8")
+        (d / "input.ply").write_bytes(b"ply")
+
+        removed = prune_intermediates(d, 30000)
+
+        kept = sorted(p.name for p in d.iterdir())
+        pcs = sorted(p.name for p in (d / "point_cloud").iterdir())
+        ok = (
+            pcs == ["iteration_30000"]
+            and "attenuate_30000.pth" in kept
+            and "backscatter_30000.pth" in kept
+            and "bg_30000.pth" in kept
+            and "cameras.json" in kept and "cfg_args" in kept and "input.ply" in kept
+            and not any(n.startswith("chkpnt") for n in kept)
+            and not any(n.endswith(("_1000.pth", "_7000.pth", "_15000.pth")) for n in kept)
+            and len(removed) == 3 + 9 + 4      # 3 clouds, 9 medium/bg, 4 checkpoints
+        )
+        return ok, (f"kept iteration_30000 + its nets + cameras/cfg/input; "
+                    f"removed {len(removed)}")
+
+
+def t16_vanilla_command_trims_the_save_schedule():
+    """The intermediates are stopped at the source where the CLI allows it."""
+    cmd = vanilla_command(Path("/data/Curasao"), Path("/out"), seed=0)
+    j = " ".join(cmd)
+    ok = "--save_iterations 30000" in j and "--checkpoint_iterations 30000" in j
+    return ok, "save and checkpoint schedules pinned to the final iteration"
+
+
 def main() -> int:
     print("=" * 68)
     print("CD-31  vanilla SeaSplat collector")
@@ -309,6 +358,10 @@ def main() -> int:
           t13_a_previous_seeds_model_is_not_adopted)
     check("T14 vanilla command enables the medium model  <-- decisive",
           t14_vanilla_command_enables_the_medium_model)
+    check("T15 prune keeps only the final model  <-- decisive",
+          t15_prune_keeps_only_the_final_model)
+    check("T16 vanilla command trims the save schedule",
+          t16_vanilla_command_trims_the_save_schedule)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
