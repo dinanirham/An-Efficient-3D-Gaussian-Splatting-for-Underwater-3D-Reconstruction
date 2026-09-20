@@ -14,6 +14,7 @@ import json
 import os
 import sys
 from argparse import ArgumentParser, Namespace
+from typing import Any
 from pathlib import Path
 
 class GroupParams:
@@ -336,6 +337,36 @@ def load_cells() -> dict:
     """Read the ablation-matrix definition."""
     with open(CELLS_PATH, encoding="utf-8") as fh:
         return json.load(fh)
+
+
+def resolve_cell(opt: Any) -> tuple[tuple[bool, bool, bool], str]:
+    """Which cell these resolved flags describe. Pure, so it can be tested.
+
+    Mechanism D is the supplementary contrast, not a fourth factor: it shares
+    A0's three flags and differs by detach_alpha_gradient alone. A map keyed
+    on the factorial triple cannot express it, and before D was added here
+    preflight refused every A0D run as "the flags describe A0" -- true of the
+    triple, false of the cell -- which stopped S6 at zero iterations, three
+    attempts each, across all twelve rows. D is legitimate only on the A0
+    corner; the D guard in preflight_args refuses it anywhere else.
+    """
+    flags = (
+        bool(getattr(opt, "m1_dense_init", False)),
+        bool(getattr(opt, "m2_simplify", False)),
+        bool(getattr(opt, "m3_quantize", False)),
+    )
+    known = {
+        (False, False, False): "A0", (True, False, False): "A1",
+        (False, True, False): "A2", (False, False, True): "A3",
+        (True, True, False): "A4", (True, False, True): "A5",
+        (False, True, True): "A6", (True, True, True): "A7",
+    }
+    cell = known[flags]
+    if getattr(opt, "detach_alpha_gradient", False) and cell == "A0":
+        cell = "A0D"
+    return flags, cell
+
+
 
 
 def add_cell_argument(parser: ArgumentParser) -> None:

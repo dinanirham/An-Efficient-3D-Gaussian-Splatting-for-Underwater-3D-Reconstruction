@@ -30,6 +30,8 @@ from typing import Any
 
 import torch
 
+from arguments import resolve_cell
+
 
 class PreflightError(SystemExit):
     """Raised (as SystemExit) when a run must not proceed."""
@@ -172,23 +174,13 @@ def preflight_args(args: Any, opt: Any, dataset: Any) -> None:
         )
 
     # -- mechanism flags must correspond to a real cell ---------------------
-    flags = (
-        bool(getattr(opt, "m1_dense_init", False)),
-        bool(getattr(opt, "m2_simplify", False)),
-        bool(getattr(opt, "m3_quantize", False)),
-    )
-    known = {
-        (False, False, False): "A0", (True, False, False): "A1",
-        (False, True, False): "A2", (False, False, True): "A3",
-        (True, True, False): "A4", (True, False, True): "A5",
-        (False, True, True): "A6", (True, True, True): "A7",
-    }
-    cell = known[flags]
+    flags, cell = resolve_cell(opt)   # arguments.resolve_cell
     declared = getattr(args, "cell", None)
     if declared is not None and declared.upper() != cell:
         fail.append(
             f"--cell {declared} was requested but the resolved mechanism flags "
-            f"describe {cell} (m1={flags[0]}, m2={flags[1]}, m3={flags[2]}). "
+            f"describe {cell} (m1={flags[0]}, m2={flags[1]}, m3={flags[2]}, "
+            f"D={bool(getattr(opt, 'detach_alpha_gradient', False))}). "
             f"A command-line flag has overridden the cell file; that is allowed, "
             f"but it means the run is not the cell it claims to be."
         )

@@ -65,9 +65,11 @@ def t1_cells_complete():
     want = {f"A{i}" for i in range(8)}
     got = set(cells)
     missing = want - got
+    # SS is trained by the upstream checkout, not this codebase, so its `set`
+    # block is empty by design and it carries no mechanism triple to compare.
     flags = {
         n: (c["set"]["m1_dense_init"], c["set"]["m2_simplify"], c["set"]["m3_quantize"])
-        for n, c in cells.items()
+        for n, c in cells.items() if not c.get("external")
     }
     distinct = len(set(flags.values())) == 8
     return (not missing and distinct), f"{len(got)} cells, all flag triples distinct={distinct}"
@@ -132,6 +134,46 @@ def t6_unknown_cell_rejected():
     return False, "an unknown cell was accepted"
 
 
+def t7_every_cell_resolves_to_itself():
+    """DECISIVE. --cell X must resolve to X for all nine cells, D included.
+
+    A0D failed preflight twelve times for zero iterations because the
+    cell-resolution map was keyed on the factorial triple and could not
+    express a cell that differs from A0 by a fourth flag. Every cell in
+    cells.json is checked here so the next supplementary cell fails this test
+    rather than S6.
+    """
+    from arguments import resolve_cell
+    import json
+    from pathlib import Path
+
+    cfg = json.loads((Path(__file__).resolve().parent.parent / "configs"
+                      / "cells.json").read_text(encoding="utf-8"))
+    bad = []
+    for name in cfg["cells"]:
+        if cfg["cells"][name].get("external"):
+            continue          # SS is not trained by this codebase at all
+        args, cell_name, _, _, op = build(["--cell", name])
+        _, resolved = resolve_cell(op.extract(args))
+        if resolved != name:
+            bad.append(f"{name}->{resolved}")
+    return not bad, ("all trainable cells resolve to themselves"
+                     if not bad else f"mismatch: {bad}")
+
+
+def t8_d_is_only_a0d_never_elsewhere():
+    """D on any corner but A0 must NOT be relabelled -- the D guard refuses it."""
+    from arguments import resolve_cell
+    from types import SimpleNamespace as NS
+
+    on_a0 = resolve_cell(NS(m1_dense_init=False, m2_simplify=False,
+                            m3_quantize=False, detach_alpha_gradient=True))[1]
+    on_a1 = resolve_cell(NS(m1_dense_init=True, m2_simplify=False,
+                            m3_quantize=False, detach_alpha_gradient=True))[1]
+    ok = on_a0 == "A0D" and on_a1 == "A1"
+    return ok, f"D on A0 -> {on_a0}; D on A1 -> {on_a1} (left for the guard to refuse)"
+
+
 def main() -> int:
     check("T1 all eight cells present and distinct", t1_cells_complete)
     check("T2 --cell applies flags and shared defaults", t2_cell_applies)
@@ -139,6 +181,9 @@ def main() -> int:
     check("T4 True-defaulting bools are clearable  <-- the CD-1 fix", t4_true_bools_clearable)
     check("T5 unpassed bools keep their defaults", t5_bool_default_preserved)
     check("T6 unknown cell is rejected", t6_unknown_cell_rejected)
+    check("T7 every trainable cell resolves to itself  <-- decisive",
+          t7_every_cell_resolves_to_itself)
+    check("T8 D relabels only the A0 corner", t8_d_is_only_a0d_never_elsewhere)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
