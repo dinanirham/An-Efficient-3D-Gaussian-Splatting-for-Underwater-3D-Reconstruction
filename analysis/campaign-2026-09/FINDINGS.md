@@ -341,3 +341,282 @@ reproducibly, boundary-aligned, in 9 of 24 large-cut runs and 0 of 48 others. *W
 registered answer is false and is withdrawn.** The replacement is descriptive: the size of the
 cut, and the medium re-fit that follows it. RQ3's *why* is open at the end of this campaign, and
 the thesis says so.
+
+## §6. Mechanism D — PRE
+
+Prediction written before A0D ran: *the count effect will resolve; the PSNR effect will not.*
+
+| scene | count ratio (z) | wall-clock (z) | fps (z) | PSNR (z) | LPIPS (z) | SSIM (z) |
+|---|---:|---:|---:|---:|---:|---:|
+| Curasao | **×0.19 (−16.3)** | ×0.68 (−21.3) | ×2.31 (+13.1) | +0.28 UNRES | **+0.011 (+3.9)** | +0.000 UNRES |
+| IUI3 | **×0.32 (−9.4)** | ×0.78 (−14.8) | ×1.35 (+6.5) | −0.09 UNRES | **+0.024 (+32.6)** | +0.003 (+3.4) |
+| JapaneseGardens | **×0.25 (−3.8)** | ×0.76 (−6.9) | ×1.70 (+6.5) | +0.30 UNRES | **+0.009 (+3.0)** | +0.007 UNRES |
+| Panama | **×0.33 (−3.1)** | ×0.81 (−3.4) | ×1.56 (+4.8) | +0.25 UNRES | **+0.026 (+4.7)** | +0.000 UNRES |
+
+**Both halves of the prediction held.** Count resolves on all four scenes: 3–5× fewer
+primitives, and with it 20–32 % less training time, 1.4–2.3× frame rate, and 40–60 % less peak
+render memory. PSNR is unresolved on all four — +0.25 to +0.30 on three and −0.09 on IUI3, every
+one under 1.1 SE — and is reported as `UNRESOLVED at n=3`, not as a point estimate. The old
+figure of "−0.107 dB" is retired; the honest figure is "within ±0.5 dB at this resolution".
+
+**LPIPS resolves worse on all four scenes** (+0.009 to +0.026; 3–33 SE). This was the metric
+flagged as the one that might resolve, and it resolves against D. The perceptual cost is real
+and smaller than M2's (+0.03 to +0.08) for a smaller count reduction (3–5× vs 14–25×). SSIM
+does not move.
+
+**No A0D run lost a channel** (0/12). D removes primitives by starving the densifier of the
+alpha-loss gradient, continuously, with no event — and the medium survives it. Read beside §5:
+the continuous 3–5× reduction leaves β intact where the two-step 14–25× cut does not. It is
+one more observation consistent with "the size and abruptness of the cut", and it is not a
+test of that account.
+
+**E.4 verdict.** Alive. A 3–5× count reduction at a resolved but small perceptual cost and an
+unresolved PSNR cost, from a *sound* baseline this time (§1). Reported as the supplementary
+contrast it is, never differenced with the factorial.
+
+## §7. Rate–distortion and Pareto — description only, by design
+
+One operating point per mechanism; no curve within a mechanism; R3.4 unanswered. Per scene,
+the non-dominated cells over the nine trained cells (SS excluded as the reference):
+
+| scene | count × LPIPS | bytes × LPIPS | count × PSNR | bytes × PSNR |
+|---|---|---|---|---|
+| Curasao | A0, **A1**, A4, A7 | A0, A1, A5, A6, A7 | A2, A4, A7 | A2, A4, A7 |
+| IUI3 | A0, A0D, **A1**, A2, A4, A5 | A0, A0D, A1, A5, A6, A7 | A1, A4 | A1, A4, A5, A7 |
+| JapaneseGardens | **A1**, A3, A4, A5 | A1, A3, A5, A7 | A4, A5, A7 | A5, A7 |
+| Panama | A0, **A1**, A4, A5 | A0, A1, A3, A5, A7 | A1, A2, A4 | A1, A2, A4, A7 |
+
+What the fronts show, described and not ranked:
+
+- **A1 is on the count × LPIPS front on all four scenes.** A 10–16× reduction at baseline LPIPS
+  on three scenes is the single most favourable operating point in the design, and it is the
+  one mechanism that is initialisation rather than removal.
+- **A2 and A6 are dominated on count × LPIPS on three scenes** — by A4 and A7, which have both
+  fewer primitives (§5d) and lower LPIPS (Curasao 0.215 vs 0.216, JapaneseGardens 0.202 vs
+  0.217, Panama 0.193 vs 0.203). M2 alone is not on the perceptual front where M1 + M2 is. IUI3
+  is again the exception.
+- **A7 is on the bytes front everywhere** — 2.4–2.7 MB against SS's 114–240 MB, a 45–90×
+  reduction in stored bytes — at an LPIPS cost of +0.06 to +0.11 over baseline.
+- **On PSNR the fronts are the M2-containing cells,** because PSNR does not resolve the
+  mechanisms' costs (§2, §3); a front drawn on an unresolved metric is a front drawn on noise,
+  and is shown for completeness only.
+- **M3 costs frame rate once the population is small.** A7 renders 8–18 % slower than A4 on every
+  scene; A6 5–22 % slower than A2 on three. Unresolved from below (§2), consistent from above.
+  Decoding a codebook is not free at 130 k primitives the way it is at 3 M.
+
+## §8. Fidelity metrics cannot see collapse — E.7, confirmatory at scale
+
+Within each cell × scene of A2 and A6 that has both strata (six of eight; IUI3 has no collapsed
+run in either cell), collapsed minus intact, in units of A0's per-scene sd:
+
+| cell × scene | n (coll/int) | PSNR | LPIPS | β_att,b collapsed → intact |
+|---|:-:|---:|---:|---|
+| A2 Curasao | 1/2 | +1.42 | −0.21 | −0.048 → 1.17, 1.36 |
+| A2 JapaneseGardens | 2/1 | −0.89 | +1.19 | −0.02, −0.04 → 1.00 |
+| A2 Panama | 2/1 | −0.38 | +1.63 | −0.06, −0.05 → 1.21 |
+| A6 Curasao | 2/1 | −0.27 | +1.93 | −0.03, −0.06 → 1.18 |
+| A6 JapaneseGardens | 1/2 | **+4.54** | −0.70 | −0.056 → 1.21, 1.07 |
+| A6 Panama | 1/2 | −0.05 | +0.24 | −0.038 → 0.93, 1.27 |
+
+**E.7 holds at 48 runs.** Twelve comparisons; median |difference| 0.8 sd; PSNR sign 2+/4−,
+LPIPS 4+/2−. The one comparison beyond 2 sd (A6/JapaneseGardens PSNR, +4.5 sd) has the collapsed
+run *better*, at n = 1 against 2, on the scene whose PSNR sd is 0.126 dB — so +0.57 dB is
+4.5 sd. Fidelity does not distinguish a run whose blue attenuation is −0.05 from one whose blue
+attenuation is +1.2. Train PSNR does not either (every stratum pair within 0.6 dB).
+
+That is the finding stated precisely: a physically meaningless medium — negative attenuation
+— renders held-out views as well as a physically plausible one, because Ĵ absorbs whatever β
+does not model. The per-image metrics measure Î; the thesis's claim of *decomposition* is not
+something they can check, and every LPIPS or PSNR number in this document is a statement about
+Î alone. Ĵ self-consistency (§10) is the only instrument here that looks past Î, and it is
+n = 1 per scene.
+
+## §9. Geometric pathology — EXP, seed 0 only (SS all three seeds)
+
+Detector of failure modes; never a proxy for medium health (E.17). 48 rows.
+
+**The invisible population.** Fraction of primitives above the visibility threshold:
+
+| | A0 | SS (3 seeds) | A0D | A1 | A2 | A4 |
+|---|---|---|---|---|---|---|
+| Curasao | 27 % | 23–26 % | 68 % | 87 % | 96 % | 98 % |
+| IUI3 | 40 % | 29–43 % | 76 % | 94 % | 88 % | 100 % |
+| JapaneseGardens | 41 % | 36–37 % | 74 % | 87 % | 93 % | 99 % |
+| Panama | 36 % | 26–37 % | 65 % | 78 % | 94 % | 95 % |
+
+**Sixty to seventy-five per cent of the baseline's primitives are invisible, and vanilla
+SeaSplat carries the same fraction.** This is the population M2 and D remove, and the one M1
+never creates. It is the single clearest description of *what* the mechanisms are cutting: not
+the reconstruction, but a halo the baseline optimiser grows and never renders. The
+mechanisms' count reductions (§2) should be read against the ~30 % of A0 that is visible, not
+against its total: A2's 25× reduction on Curasao is a ~7× reduction of the visible population.
+
+**Detached outliers.** Bounding-box inflation (full box over the 1–99 % box) is 2–25× on most
+rows and pathological on a few: A3/Curasao **1 301×** (z-axis 15×; 40 % of primitives within
+2× the median radius), SS/Panama s2 **313×**, A0D/Panama 138×, A3/Panama 43×, A4 and
+A7/JapaneseGardens 38–39×. **Vanilla SeaSplat produces a 313× inflation on one of three
+seeds** — the detached-cluster pathology belongs to the baseline optimiser and its seed, not
+to any mechanism. A3's two large values are noted; with one seed per cell they cannot be
+attributed.
+
+**M2 cells have the tightest geometry:** inflation 1.8–6.8×, occupancy 1.3–3.3 % of the
+footprint grid, the smallest radius ratios (2.5–7.5). What survives the cut is compact.
+
+## §10. Ĵ self-consistency — EXP, n = 1 per scene — **the instrument's premise does not hold**
+
+Sixteen runs (seed 0 of A3, A5, A6, A7), each the same model rendered twice with the three
+quantized attributes in their continuous and their codebook states:
+
+| | A3 | A5 | A6 | A7 |
+|---|---:|---:|---:|---:|
+| Curasao | 23.3 | 22.9 | 26.0 | 23.8 |
+| IUI3 | 23.1 | 24.5 | 26.2 | 25.3 |
+| JapaneseGardens | 25.3 | 24.5 | 26.1 | 22.2 |
+| Panama | **17.0** | 26.6 | 26.5 | 26.0 |
+
+Predicted range: high-30s to 40s dB. **Observed: 17–27 dB.** The two states of the same model
+differ by more than the model's own in-medium error against ground truth (A3 test PSNR 26–30
+dB).
+
+The likely reason is in the quantizer, not the tool. `quantize.py:201` is a straight-through
+estimator with no commitment term: forward uses the centroid, backward updates the continuous
+parameter, and *nothing in the loss keeps the continuous value near its centroid*. From
+iteration 22 000 to 30 000 the continuous `_features_dc`, `_scaling`, `_rotation` are latent
+variables whose only role is the nearest-centroid assignment; they are never rendered. The
+"continuous state" the tool renders is therefore not an unquantized model — it is a latent that
+has drifted for 8 000 iterations. The tool's premise, *swapping between the two states holds
+everything else fixed and isolates quantization's effect on Ĵ*, is true of the swap and false
+of the interpretation.
+
+**Reported as:** the measurement was made, the number is not a restoration-quality measure, and
+the question it was built to answer — whether quantization damages Ĵ in the far field the
+composed metrics cannot see — is **unmeasured** at the end of this campaign. One check would
+settle whether the reading above is right or the tool is wrong: render Î from the continuous
+state and score it against ground truth. ~10 dB means drift, and this section stands; ~29 dB
+means the tool has a bug, and this section is rewritten. That check is a one-line addition to
+`j_consistency.py` and is left for the user to run on Colab; nothing in this document depends
+on its outcome except this section.
+
+## §11. Replication across campaigns — EXP
+
+A0–A3, four scenes, n = 3 in both campaigns; new minus old, z on the pooled SE.
+
+| | PSNR beyond 2 SE | LPIPS beyond 2 SE | count |
+|---|---|---|---|
+| A0 | IUI3 **+0.76** (2.4); JG −0.31 (−2.1) | none | ×0.86–1.17 |
+| A1 | none | none | **×1.00 on all four** |
+| A2 | none | none | ×0.97–1.02 |
+| A3 | IUI3 **−0.95** (−2.8); Panama −0.35 (−3.3) | none | ×0.78–1.24 |
+
+**LPIPS replicates on all sixteen comparisons. Count replicates for A1 to three figures — dense
+initialisation is deterministic — and for A2 within 3 %.** A2's collapse rate replicates in form
+(seed-conditioned, roughly half). Twelve of sixteen PSNR comparisons replicate.
+
+**Four do not, and two of them matter.** On IUI3-RedSea, A0 rose by 0.76 dB (old 26.35–27.29;
+new 27.38–27.86, non-overlapping) and A3 fell by 0.95 dB (old 27.08–27.53; new 25.68–26.67,
+non-overlapping). The new A0 agrees with vanilla SeaSplat on the same scene (27.0–27.8), so it
+is the new figure that is anchored. But the consequence for §2 is direct: **in the old campaign
+M3's PSNR effect on IUI3 was +0.35 dB; in this one it is −1.36 dB.** The "resolved 1.36 dB loss
+on IUI3" in §2 is resolved *within* this campaign and reversed *across* campaigns. It is
+downgraded: M3's PSNR effect on IUI3-RedSea is `UNRESOLVED across campaigns`, and the §2 scene
+finding rests on LPIPS (which replicates) and not on PSNR.
+
+**Why is not established.** The training code changed between the campaigns — CD-22/23 (alpha
+gradient routing, 2 Sept), the M1 opacity-schedule fixes (10 Sept), CD-27 (12–13 Sept) — and
+**neither campaign's `git_commit` column is populated**, so which of those the old A3 runs
+predate is unrecorded. A discrepancy of this size on one scene in two cells, with the reference
+control agreeing with the new baseline, is reported here as what it is: a non-replication with
+an unidentified cause, on the scene that is anomalous in every other section.
+
+## §12. Computational cost — EXP
+
+| | wall-clock vs A0 | fps vs A0 | peak render memory vs A0 |
+|---|---|---|---|
+| M1 (A1) | ×0.76–0.93 | ×1.3–2.2 | — |
+| M2 (A2) | ×0.67–0.81 | ×1.9–3.5 | — |
+| M3 (A3) | ×0.99–1.12 | ×0.84–1.21 UNRES | — |
+| D (A0D) | ×0.68–0.81 | ×1.35–2.31 | ×0.41–0.60 |
+| all three (A7) | ×0.76–0.95 | ×1.2–2.5 | — |
+
+Effective optimiser steps are 43 000 for every non-M2 cell and 43 400 for every M2 cell; the
+mechanisms change what an iteration costs, not how many there are. **fps is sub-linear in count
+reduction on every scene**: A2's 25× on Curasao buys 3.5×, its 20× on IUI3 buys 1.9×; A4's
+31× buys 2.7× and 1.5×. The exponent is scene-dependent (E.9), and the residual is the
+per-frame cost that does not scale with primitives. M3 adds decode cost that shows once the
+population is small (§7). The instrumented sweep costs ~3 s per run and is in every wall-clock
+above; the archived A6/Curasao/s0 with its 75 s of over-firing is not in this bundle.
+
+## §13. Related work — BLOCKED
+
+Unchanged. The numbers this chapter needs exist; the six literature breakdowns Chapter 2 needs
+do not, and nothing in this bundle changes that.
+
+## §14. Limitations and anomalies — written last
+
+**Unresolved by construction.** Every PSNR interaction (§3, §4); PSNR main effects on 5 of 12
+scene × mechanism cells (§2); every count interaction beyond M1×M2 (§3, §4); the three-way term
+on three of four scenes on LPIPS; A0D's PSNR effect on all four scenes (§6). Each is a statement
+about n = 3, not about the mechanism.
+
+**Unresolved across campaigns.** M3's PSNR effect on IUI3-RedSea (§11). The §2 figure of
+−1.36 dB is carried nowhere else in this document.
+
+**Unpredictable at this instrument set.** Which large-cut seed crosses zero (§5, point 3). AUC ≤
+0.65 for every pre-cut covariate. The collapse is reproducible as a rate and not as an event.
+
+**Unmeasured.** Restoration quality (§10). The instrument built for it measures latent drift
+under a straight-through quantizer with no commitment term, and the far-field question it was
+meant to answer is open. Whether the medium-only burst *causes* the β fall or merely hosts it
+(§5e) — every M2 cell has the burst; no cell lacks it.
+
+**Confounded.** M1's three protections — removal fraction, entering β, entering count — are set
+together by M1 and cannot be separated by this design (§5, point 5). Any of the three, or
+initialisation itself, may be the operative one.
+
+**IUI3-RedSea.** The scene where every mechanism costs LPIPS (M1 +0.059, M2 +0.082, M3 +0.028,
+each ≥ 20 SE); where A1's LPIPS front position is lost; where no M2 run collapses in six tries;
+where H3 does not resolve; where the M1×M3 LPIPS interaction has the opposite sign to the other
+three scenes; where PSNR does not replicate across campaigns. It has the most training views
+(25) and, per CD-26, consecutive views along a reef wall — the worst-conditioned camera pairing
+in the set. THESIS.md asks that inconsistent scenes be treated as evidence requiring
+explanation; this document has none to offer beyond that conditioning, and records IUI3 as the
+scene on which every per-scene claim in this chapter must be checked before it is generalised.
+
+**The count noise floor on JapaneseGardens and Panama** widened to 34 % and 37 % CV at A0 (§0).
+Every A0-anchored count contrast on those scenes carries that floor; the mechanisms' count
+effects still resolve because they are 10–25×, and a 37 % floor is a 1.4× floor. Interactions
+on count do not resolve on those scenes for the same reason.
+
+**One seed per cell for geometry and Ĵ.** §9 and §10 are n = 1 per scene. A3/Curasao's 1 301×
+inflation and A3/Panama's 17 dB are single observations and are labelled so.
+
+**Provenance.** `git_commit` is empty in all 120 rows and in the archived campaign. The one-code-
+version claim rests on the run ledger and the worker log, not on the results table. *Action
+outstanding:* sample `run_config.json` from three cells on Drive.
+
+---
+
+## What changed the thesis
+
+Ranked as PLAN.md ranked it, with the outcome.
+
+1. **§5b failed.** The dispersion account is withdrawn. The thesis reverts to Framing A: a
+   controlled factorial study of three efficiency mechanisms on a physically-grounded
+   estimator, with a measured, reproducible, boundary-aligned coupling between large-cut
+   simplification and the medium model — and with an unexplained failed remedy. The *why* is
+   open, and Chapter 4 says so in those words. What replaces the account is description
+   (§5, "what the same data show instead"), labelled post-hoc, and not promoted to a claim.
+2. **§6 held.** D resolves on count at a resolved perceptual cost and an unresolved PSNR cost.
+   The thesis has a positive engineering result from a sound baseline.
+3. **§5c held on rate, failed on mechanism.** M1 cells do not collapse — 0 of 24 — and the
+   stated reason was the withdrawn account.
+4. **§3's M2×M3 resolved positive on LPIPS on three scenes.** H3 holds; OMG's premise
+   transfers. M1×M3's additivity prediction failed with inconsistent sign, and is reported as a
+   failure.
+5. **§1 held.** A0 is vanilla SeaSplat to within the margin on every scene.
+
+Three things this campaign established that no prior run had: the baseline is sound (§1); 60–75 %
+of the baseline's primitives are invisible and vanilla carries the same halo (§9); the medium
+falls during the burst after every large cut and never after a small one (§5). Two things it
+retired: the dispersion account, and the "−0.107 dB" figure for D. One thing it could not do:
+say why.
