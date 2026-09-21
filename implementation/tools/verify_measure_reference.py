@@ -207,6 +207,34 @@ def t9_verdict_is_reported_per_metric_not_only_overall():
     return ok, "PSNR within, LPIPS outside, overall OUTSIDE -- both visible"
 
 
+def t9b_check_margin_finds_runs_under_the_campaign_root():
+    """DECISIVE. check_margin is given $DRIVE_ROOT and must look in runs/.
+
+    It globbed from the root itself and so could never find a run, reporting
+    "no SS runs found. S0 has not produced results yet" on a campaign whose
+    S0 was complete. A message that is true of the search and false of the
+    campaign is the worst kind, because nothing about it looks like a bug.
+    """
+    import io, contextlib
+    from tools.measure_reference import check_margin
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for cell, psnr in (("SS", 30.1), ("A0", 30.4)):
+            d = root / "runs" / cell / "Curasao" / "s0"
+            d.mkdir(parents=True)
+            (d / "eval_metrics.json").write_text(json.dumps({
+                "Test": {"psnr_pooled": psnr, "lpips": 0.18},
+                "cost": {"n_primitives_final": 4_000_000},
+            }), encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            check_margin(root)
+        out = buf.getvalue()
+        ok = "Curasao" in out and "no SS runs found" not in out
+        return ok, ("found SS and A0 under runs/ and produced a verdict"
+                    if ok else out.strip().split(chr(10))[-1])
+
+
 def t10_runs_are_aggregated_per_scene_not_per_seed():
     """DECISIVE. SS and A0 are not seed-matched, so they must not be paired.
 
@@ -635,6 +663,8 @@ def main() -> int:
           t8_emitted_schema_matches_what_the_collectors_read)
     check("T9  verdict is per metric, not only overall",
           t9_verdict_is_reported_per_metric_not_only_overall)
+    check("T9b check_margin finds runs under the campaign root  <-- decisive",
+          t9b_check_margin_finds_runs_under_the_campaign_root)
     check("T10 runs aggregate per scene, not per seed  <-- decisive",
           t10_runs_are_aggregated_per_scene_not_per_seed)
     check("T11 unlabelled runs are dropped, not misfiled",

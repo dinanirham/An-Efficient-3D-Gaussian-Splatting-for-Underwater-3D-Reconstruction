@@ -495,9 +495,12 @@ def check_margin(output_root: Path) -> int:
     print("seed does not reach its GPU draws, so s0/s1/s2 are repeat indices")
     print("on both sides and a paired comparison would be false precision.\n")
 
+    # As every other collector resolves it: runs live under output_root/runs.
+    runs_dir = output_root / "runs"
+
     def collect(cell: str) -> list[dict]:
         out = []
-        for p in sorted(output_root.glob(f"{cell}/*/s*/eval_metrics.json")):
+        for p in sorted(runs_dir.glob(f"{cell}/*/s*/eval_metrics.json")):
             try:
                 e = json.loads(p.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
@@ -509,7 +512,7 @@ def check_margin(output_root: Path) -> int:
     ss_by_scene = aggregate_by_scene(collect("SS"))
     a0_by_scene = aggregate_by_scene(collect("A0"))
     ss_n = {s: 0 for s in ss_by_scene}
-    for p in output_root.glob("SS/*/s*/eval_metrics.json"):
+    for p in runs_dir.glob("SS/*/s*/eval_metrics.json"):
         ss_n[p.parent.parent.name] = ss_n.get(p.parent.parent.name, 0) + 1
 
     if not ss_by_scene:

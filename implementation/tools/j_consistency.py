@@ -117,8 +117,15 @@ def discover_quantized_runs(output_root: Path) -> list[StoredRun]:
     there is no quantization to measure, and inventing a comparison would be
     reporting trajectory divergence under this metric's name.
     """
+    # output_root is the campaign root -- $DRIVE_ROOT -- and the runs live
+    # one level down, exactly as collect_results, medium_collapse and
+    # spatial_extent resolve it. The first two versions of this tool globbed
+    # from output_root directly and so could not reach a single run; the
+    # message they printed, "no quantized runs found", was true of the
+    # search and false of the campaign.
     runs: list[StoredRun] = []
-    for meta_path in sorted(output_root.glob(f"*/*/s*/{STORE_GLOB}/meta.json")):
+    runs_dir = output_root / "runs"
+    for meta_path in sorted(runs_dir.glob(f"*/*/s*/{STORE_GLOB}/meta.json")):
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):

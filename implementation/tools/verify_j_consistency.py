@@ -70,7 +70,13 @@ def check(name: str, fn) -> None:
 def write_run(root: Path, cell: str, scene: str, seed: int, *, quantized: bool,
               n: int = 64, k: int = 16) -> Path:
     """Materialise a minimal stored run, quantized or not."""
-    d = root / cell / scene / f"s{seed}" / "compressed_30000"
+    # The real layout: <campaign root>/runs/<cell>/<scene>/s<seed>/<store>.
+    # Two earlier versions of this fixture omitted runs/, and the tool's glob
+    # omitted it too, so the test passed while the tool found nothing on
+    # Drive. The fixture now builds exactly what the worker builds, and the
+    # discovery call receives the campaign root, exactly as 02_analysis
+    # passes $DRIVE_ROOT.
+    d = root / "runs" / cell / scene / f"s{seed}" / "compressed_30000"
     d.mkdir(parents=True, exist_ok=True)
 
     meta = {"num_primitives": n, "sh_degree": 0, "quantized": quantized,
