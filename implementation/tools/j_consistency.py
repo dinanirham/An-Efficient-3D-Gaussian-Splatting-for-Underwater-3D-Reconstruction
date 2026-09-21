@@ -265,13 +265,14 @@ def main() -> int:
     ap.add_argument("--output_root", required=True)
     ap.add_argument("--source_root", default=None,
                     help="dataset root holding <scene>/; defaults to "
-                         "<output_root>/../dataset/undistorted")
+                         "<output_root>/dataset/undistorted, where 00_setup "
+                         "writes it")
     ap.add_argument("--json", default=None)
     args = ap.parse_args()
 
     root = Path(args.output_root)
     src_root = Path(args.source_root) if args.source_root else \
-        root.parent / "dataset" / "undistorted"
+        root / "dataset" / "undistorted"   # inside the campaign root, not beside it
 
     runs = discover_quantized_runs(root)
     if not runs:
@@ -279,7 +280,11 @@ def main() -> int:
               "unquantized cells are skipped by design")
         return 0
 
-    print(f"{len(runs)} quantized run(s) found\n")
+    with_ply = sum(1 for r in runs if r.complete and
+                   list((r.store.parent / "point_cloud").glob("iteration_*/point_cloud.ply")))
+    print(f"{len(runs)} quantized run(s) found; {with_ply} carry a full-precision PLY.")
+    print("Only those are measurable: the PLY holds the continuous parameters this")
+    print("metric compares against, and train.py keeps it for seed 0 alone.\n")
     print(f"{'run':<30} {'views':>6} {'J-hat PSNR':>11} {'min':>8} {'max':>8}")
     print("-" * 68)
 
@@ -297,8 +302,16 @@ def main() -> int:
             report[rid] = {"error": f"{type(exc).__name__}: {exc}"}
             continue
         if m is None:
-            print(f"{rid:<30} {'-':>6} {'NO PLY':>11}")
-            report[rid] = {"skipped": "no point_cloud.ply"}
+            # Not missing data: train.py keeps the ~300 MB full-precision PLY
+            # for seed 0 only (--save_ply_all_seeds to keep them all), and the
+            # compressed store holds the QUANTIZED attributes alone. This
+            # metric needs the continuous ones too, so it is computable for
+            # one seed per quantized cell per scene -- 16 runs, not 48 -- and
+            # is reported at n=1 per scene, never as if three seeds existed.
+            print(f"{rid:<30} {'-':>6} {'NO PLY':>11}   seed>0: PLY not kept "
+                  f"under the storage policy; continuous params unavailable")
+            report[rid] = {"skipped": "no PLY -- seed>0 keeps only the compressed "
+                                      "store; needs continuous parameters"}
             continue
         print(f"{rid:<30} {m['n_views']:>6} {m['psnr_mean']:>11.2f} "
               f"{m['psnr_min']:>8.2f} {m['psnr_max']:>8.2f}")
