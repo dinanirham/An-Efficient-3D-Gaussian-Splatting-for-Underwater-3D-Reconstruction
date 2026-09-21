@@ -5,3 +5,4 @@ campaign-*/*.txt
 campaign-*/*.md
 campaign-*/diagnostics/
 !campaign-*/README.md
+!campaign-*/PLAN.md
