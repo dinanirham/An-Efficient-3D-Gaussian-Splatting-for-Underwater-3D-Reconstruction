@@ -21,25 +21,27 @@
 
 flowchart TB
 
-%% ─────────────────────────── ① PREPROCESSING ─────────────────────────
 subgraph PRE["① PREPROCESSING — offline, once per scene, frozen before training"]
   direction TB
-  S([Start]) --> IN[/"SeaThru-NeRF corpus<br/>4 scenes · 88 images · COLMAP poses"/]
-  IN --> UND["<b>CD</b> · Undistort OPENCV → PINHOLE"]
+  S([Start]) --> IN[/"`SeaThru-NeRF corpus
+4 scenes · 88 images · COLMAP poses`"/]
+  IN --> UND["`**CD** · Undistort OPENCV → PINHOLE`"]
   UND --> SPL["Hold out every 8th frame by index"]
   SPL --> DAT[/"75 training views · 13 held-out frames"/]
 end
 
-DAT --> Q1{"M1<br/>enabled?"}
+DAT --> Q1{"`M1
+enabled?`"}
 
-%% ─────────────────────────── ② INITIALIZATION ────────────────────────
 subgraph INI["② INITIALIZATION"]
   direction TB
   Q1 -->|"no · baseline"| SFM[/"COLMAP sparse cloud · ~26 000 points"/]
-  Q1 -->|"yes · M1"| ROMA[["<b>M1</b> · RoMa dense correspondence"]]
+  Q1 -->|"yes · M1"| ROMA[["`**M1** · RoMa dense correspondence`"]]
   ROMA --> TRI["Triangulate"]
-  TRI --> Q2{"Well<br/>conditioned?"}
-  Q2 -->|"parallax &lt; 1°<br/>or behind camera"| REJ["<b>CD</b> · Reject — 24% of triangulations"]
+  TRI --> Q2{"`Well
+conditioned?`"}
+  Q2 -->|"`parallax &lt; 1°
+or behind camera`"| REJ["`**CD** · Reject — 24% of triangulations`"]
   Q2 -->|"accept"| PLY[("Hashed dense cloud · 244k – 294k points")]
   SFM --> GAU["Initialise Gaussian primitives"]
   PLY --> GAU
@@ -47,67 +49,78 @@ end
 
 GAU --> ENT(("A"))
 
-%% ─────────────────────────── ③ TRAINING ──────────────────────────────
 subgraph TRN["③ TRAINING — 30 000 iterations"]
   direction TB
 
   ENT --> RAS["Rasterise → radiance J, depth Z, alpha"]
 
-  RAS --> SWP["<b>CD</b> · Cross-frame depth-range sweep<br/><i>at every event and every 2 500 it</i>"]
-  SWP --> QM{"i &gt; 10 000?<br/><b>image formation model</b>"}
+  RAS --> SWP["`**CD** · Cross-frame depth-range sweep
+*at every event and every 2 500 it*`"]
+  SWP --> QM{"`i &gt; 10 000?
+**image formation model**`"}
 
-  QM -->|"NO · geometry-only regime"| L1["Loss vs the <b>RAW render</b><br/><i>veiling haze must be paid for by geometry</i>"]
+  QM -->|"NO · geometry-only regime"| L1["`Loss vs the **RAW render**
+*veiling haze must be paid for by geometry*`"]
 
   QM -->|"YES · physics-aware regime"| NRM["Normalise depth per frame by its own min / max"]
-  NRM --> CMP["<b>Image formation model</b><br/>Î = J·exp&lpar;−β_att·Z&rpar; + σ&lpar;B∞&rpar;·&lpar;1−exp&lpar;−β_bs·Z&rpar;&rpar;"]
-  CMP --> L2["Loss vs the <b>COMPOSED image</b>"]
+  NRM --> CMP["`**Image formation model**
+Î = J·exp&lpar;−β_att·Z&rpar; + σ&lpar;B∞&rpar;·&lpar;1−exp&lpar;−β_bs·Z&rpar;&rpar;`"]
+  CMP --> L2["`Loss vs the **COMPOSED image**`"]
 
   L1 --> BP["Backpropagate"]
-  L2 --> BP2["Backpropagate → geometry <b>and</b> 9 medium scalars"]
+  L2 --> BP2["`Backpropagate → geometry **and** 9 medium scalars`"]
 
-  BP --> ACC{"Densification signal<br/>composition"}
+  BP --> ACC{"`Densification signal
+composition`"}
   BP2 --> ACC
-  ACC -->|"baseline"| SIG["accumulate image <b>+ alpha</b> gradients"]
-  ACC -->|"D"| SIGD["<b>D</b> · accumulate image gradients only<br/><i>alpha detached · cell A0D</i>"]
+  ACC -->|"baseline"| SIG["`accumulate image **+ alpha** gradients`"]
+  ACC -->|"D"| SIGD["`**D** · accumulate image gradients only
+*alpha detached · cell A0D*`"]
 
   SIG --> QD{"i &lt; 15 000?"}
   SIGD --> QD
-  QD -->|"yes"| DC{"Density<br/>control"}
+  QD -->|"yes"| DC{"`Density
+control`"}
   DC -->|"baseline"| ADC["Adaptive density control — clone · split · prune"]
-  DC -->|"M1"| PRN["<b>M1</b> · Prune only — <i>densification disabled</i>"]
+  DC -->|"M1"| PRN["`**M1** · Prune only — *densification disabled*`"]
 
-  QD -->|"no"| EV{"Scheduled<br/>event?"}
+  QD -->|"no"| EV{"`Scheduled
+event?`"}
   ADC --> EV
   PRN --> EV
 
-  EV -->|"M2 · i = 15 000 / 20 000"| SMP[["<b>M2</b> · Importance-weighted simplification<br/>cut to 200 000 primitives"]]
-  SMP --> RWM["<b>CD</b> · 200 medium-only steps, geometry frozen<br/><i>the interval in which β falls</i>"]
-  EV -->|"M3 · i ≥ 22 000"| QNT[["<b>M3</b> · Quantization-aware training<br/>3 codebooks · straight-through estimator"]]
+  EV -->|"M2 · i = 15 000 / 20 000"| SMP[["`**M2** · Importance-weighted simplification
+cut to 200 000 primitives`"]]
+  SMP --> RWM["`**CD** · 200 medium-only steps, geometry frozen
+*the interval in which β falls*`"]
+  EV -->|"M3 · i ≥ 22 000"| QNT[["`**M3** · Quantization-aware training
+3 codebooks · straight-through estimator`"]]
   EV -->|"none"| NXT
 
   RWM --> NXT{"i = 30 000?"}
   QNT --> NXT
-  NXT -->|"no · i ← i+1"| RET(("A"))
 end
 
-%% ─────────────────────────── ④ EVALUATION ────────────────────────────
+NXT -->|"no · i ← i+1"| RET(("A"))
 NXT -->|"yes"| OUT[/"Trained model + 9 medium scalars"/]
 
 subgraph EVA["④ EVALUATION"]
   direction TB
-  OUT --> FID["Fidelity on held-out frames<br/>PSNR both conventions · SSIM · LPIPS"]
-  OUT --> EFF["Efficiency<br/>count · storage · fps · peak memory"]
-  OUT --> DIA["<b>CD</b> · Diagnostics<br/>medium collapse · depth-range dispersion · occupancy · detached population"]
-  OUT --> JC["<b>CD</b> · Ĵ self-consistency<br/><i>quantised cells, seed 0: continuous vs codebook state</i>"]
-  REF[/"<b>Reference control</b> · unmodified upstream SeaSplat<br/>trained and measured on this harness, 12 runs"/] --> FID
+  OUT --> FID["`Fidelity · held-out frames
+PSNR · SSIM · LPIPS
+*+ vanilla reference, same harness*`"]
+  OUT --> EFF["`Efficiency
+count · bytes · fps
+peak memory`"]
+  OUT --> DIA["`**CD** · Diagnostics
+collapse · dispersion · geometry
+Ĵ continuous vs codebook, seed 0`"]
   FID --> REC[("Per-run record · 45 fields, hashed provenance")]
   EFF --> REC
   DIA --> REC
-  JC --> REC
   REC --> END([End])
 end
 
-%% ─────────────────────────── STYLE ───────────────────────────────────
 classDef inherited fill:#EDF2F2,stroke:#94A9A8,stroke-width:1px,color:#10201F
 classDef mech      fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,color:#10201F
 classDef supp      fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,stroke-dasharray:5 3,color:#10201F
@@ -121,8 +134,7 @@ class S,END term
 class IN,DAT,SFM,SPL,GAU,RAS,L1,L2,BP,BP2,SIG,ADC,FID,EFF,OUT,PLY,REC inherited
 class ROMA,TRI,PRN,SMP,QNT mech
 class SIGD supp
-class UND,REJ,RWM,DIA,SWP,JC ours
-class REF inherited
+class UND,REJ,RWM,DIA,SWP ours
 class NRM,CMP medium
 class Q1,Q2,QM,ACC,QD,DC,EV,NXT gate
 class ENT,RET conn

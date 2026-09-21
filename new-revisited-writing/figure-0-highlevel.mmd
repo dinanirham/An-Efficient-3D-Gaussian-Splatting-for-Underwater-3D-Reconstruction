@@ -9,29 +9,43 @@
 flowchart TB
 
 IMG[/"Multi-view underwater images"/] --> INIT["Initialise primitives"]
-INIT --> GS["3D Gaussian primitives<br/><i>position · covariance · opacity · colour</i>"]
+INIT --> GS["`3D Gaussian primitives
+*position · covariance · opacity · colour*`"]
 GS --> RAS["Differentiable rasterisation"]
 
-RAS --> J["<b>J</b> — medium-free radiance<br/><i>the scene with the water removed</i>"]
-RAS --> Z["<b>Z</b> — rendered depth"]
+RAS --> J["`**J** — medium-free radiance
+*the scene with the water removed*`"]
+RAS --> Z["`**Z** — rendered depth`"]
 
 J --> IFM
 Z --> IFM
 
-IFM["<b>Image formation model</b><br/>Î = J · exp&lpar;−β_att·Z&rpar; + σ&lpar;B∞&rpar;·&lpar;1 − exp&lpar;−β_bs·Z&rpar;&rpar;<br/><i>9 scene-global medium scalars</i>"]
+IFM["`**Image formation model**
+Î = J · exp&lpar;−β_att·Z&rpar; + σ&lpar;B∞&rpar;·&lpar;1 − exp&lpar;−β_bs·Z&rpar;&rpar;
+*9 scene-global medium scalars*`"]
 
-IFM --> IHAT["<b>Î</b> — composed underwater image"]
-IHAT --> LOSS{{"Photometric loss<br/>against the capture"}}
+IFM --> IHAT["`**Î** — composed underwater image`"]
+IHAT --> LOSS{{"`Photometric loss
+against the capture`"}}
 
 LOSS -.->|"gradients"| GS
 LOSS -.->|"gradients"| IFM
-LOSS -.->|"‖∂L/∂means2D‖"| ADC["Adaptive density control<br/><i>what to clone, split, prune</i>"]
+LOSS -.->|"‖∂L/∂means2D‖"| ADC["`Adaptive density control
+*what to clone, split, prune*`"]
 ADC -.-> GS
 
-M1>"<b>M1</b> initialization<br/>dense correspondences<br/>replace the sparse cloud"] -.-> INIT
-M2>"<b>M2</b> simplification<br/>cut the population<br/>to a fixed budget"] -.-> GS
-M3>"<b>M3</b> quantization<br/>attributes become<br/>codebook indices"] -.-> GS
-MD>"<b>D</b> supplementary<br/>detach alpha gradients<br/>from the density signal"] -.-> ADC
+M1>"`**M1** initialization
+dense correspondences
+replace the sparse cloud`"] -.-> INIT
+M2>"`**M2** simplification
+cut the population
+to a fixed budget`"] -.-> GS
+M3>"`**M3** quantization
+attributes become
+codebook indices`"] -.-> GS
+MD>"`**D** supplementary
+detach alpha gradients
+from the density signal`"] -.-> ADC
 
 classDef base   fill:#EDF2F2,stroke:#94A9A8,stroke-width:1px,color:#10201F
 classDef medium fill:#EFEAF6,stroke:#7A5CA8,stroke-width:2px,color:#10201F
