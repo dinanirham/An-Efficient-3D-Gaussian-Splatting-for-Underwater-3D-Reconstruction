@@ -114,6 +114,14 @@ def analyse(path: Path) -> Optional[dict[str, Any]]:
     bs = [v for c in CHANNELS if (v := res["beta_bs_final"][c]) is not None]
     res["bs_saturated"] = bool(bs) and min(bs) > 5.0
 
+    # A one-row file is a final state, not a trajectory. SS carries exactly
+    # that: upstream has no per-iteration diagnostics, and measure_reference
+    # writes its terminal medium state as a single row so the reference's
+    # beta can sit beside A0's. Everything trajectory-shaped above -- the
+    # largest drop, the frozen check, the first-negative iteration -- is then
+    # unmeasurable rather than zero, and the report must say which.
+    res["final_state_only"] = len(its) == 1
+
     # CD-27: the cross-frame depth-range dispersion across each simplification
     # boundary.  The prediction under test is that collapse tracks the CHANGE
     # in this dispersion rather than the change in primitive count -- beta is
@@ -194,6 +202,8 @@ def main() -> int:
             flags.append("bs-saturated")
         if flags:
             n_bad += 1
+        if r.get("final_state_only"):
+            flags.append("final-state-only")
         print(f"{rid:<34} {r['n_primitives_final'] or 0:>10,} "
               + " ".join(f"{a[c]:>8.4f}" if a[c] is not None else f"{'-':>8}" for c in CHANNELS)
               + f" {max(bs) if bs else 0:>8.2f}  {', '.join(flags) or 'ok'}")
@@ -205,6 +215,10 @@ def main() -> int:
         print("\nlargest single-step attenuation drop, for affected runs:")
         for rid, r in report.items():
             if not (r["collapsed"] or r["bs_saturated"]):
+                continue
+            if r.get("final_state_only"):
+                print(f"  {rid:<34} {'n/a':>6}  final state only -- no trajectory to "
+                      f"locate a drop in")
                 continue
             d = r["largest_drop"]
             where = f"{d['between'][0]} -> {d['between'][1]}" if d["between"] else "-"
