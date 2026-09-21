@@ -65,6 +65,14 @@ GROUP_TO_ATTR: dict[str, str] = {
 
 PSNR_CAP = 100.0   # identical images; reported rather than inf
 
+# The compressed store's directory, as train.py names it: compressed_<iter>.
+# The first version of this tool globbed for "compact/", which nothing has
+# ever written, so it found no runs and reported that as "unquantized cells
+# are skipped by design" -- a message that was true and a search that was
+# looking in the wrong place. verify_j_consistency T11 reads train.py's
+# source and fails if this pattern drifts from what it actually writes.
+STORE_GLOB = "compressed_*"
+
 
 def psnr_pooled(a: np.ndarray, b: np.ndarray) -> float:
     """Pooled convention: one MSE over all pixels and channels, converted once.
@@ -95,7 +103,7 @@ class StoredRun:
     cell: str
     scene: str
     seed: int
-    compact: Path
+    store: Path
     meta: dict[str, Any]
     complete: bool = True
     why: str = ""
@@ -110,7 +118,7 @@ def discover_quantized_runs(output_root: Path) -> list[StoredRun]:
     reporting trajectory divergence under this metric's name.
     """
     runs: list[StoredRun] = []
-    for meta_path in sorted(output_root.glob("*/*/s*/compact/meta.json")):
+    for meta_path in sorted(output_root.glob(f"*/*/s*/{STORE_GLOB}/meta.json")):
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -118,18 +126,18 @@ def discover_quantized_runs(output_root: Path) -> list[StoredRun]:
         if not meta.get("quantized"):
             continue
 
-        compact = meta_path.parent
-        seed_dir = compact.parent
+        store = meta_path.parent
+        seed_dir = store.parent
         run = StoredRun(
             cell=seed_dir.parent.parent.name,
             scene=seed_dir.parent.name,
             seed=int(seed_dir.name.lstrip("s") or 0),
-            compact=compact,
+            store=store,
             meta=meta,
         )
 
-        cb_path = compact / "codebooks.npz"
-        idx_path = compact / "indices.bin"
+        cb_path = store / "codebooks.npz"
+        idx_path = store / "indices.bin"
         if not cb_path.exists() or not idx_path.exists():
             run.complete = False
             run.why = "codebooks.npz or indices.bin missing"
@@ -173,14 +181,14 @@ def measure_run(run: StoredRun, source_path: str, resolution: int = -1) -> Optio
     medium are untouched between them.
     """
     import torch
-    from argparse import Namespace
+    from argparse import ArgumentParser
 
     from gaussian_renderer import render
     from scene import GaussianModel, Scene
 
-    ply = run.compact.parent / "point_cloud" / "iteration_30000" / "point_cloud.ply"
+    ply = run.store.parent / "point_cloud" / "iteration_30000" / "point_cloud.ply"
     if not ply.exists():
-        cands = sorted((run.compact.parent).glob("point_cloud/iteration_*/point_cloud.ply"))
+        cands = sorted((run.store.parent).glob("point_cloud/iteration_*/point_cloud.ply"))
         if not cands:
             return None
         ply = cands[-1]
@@ -188,13 +196,24 @@ def measure_run(run: StoredRun, source_path: str, resolution: int = -1) -> Optio
     gaussians = GaussianModel(int(run.meta.get("sh_degree", 0)))
     gaussians.load_ply(str(ply))
 
-    args = Namespace(source_path=source_path, model_path=str(run.compact.parent),
-                     images="images", resolution=resolution, white_background=False,
-                     data_device="cuda", eval=True)
-    scene = Scene(args, gaussians, load_iteration=-1, shuffle=False)
+    # Through the real parsers, never a hand-built Namespace. Scene reads
+    # subsample, start_cam, end_cam, rescale_units, scene_bounds_xxyyzz and
+    # skip_first_n_images; a Namespace listing only the obvious fields raised
+    # on the first of those in measure_reference, after the model had loaded
+    # and rendered. The set of fields is whatever Scene reads today and after
+    # the next change to it.
+    from arguments import ModelParams, PipelineParams
+    _mp = ArgumentParser()
+    _lp = ModelParams(_mp)
+    mp = _lp.extract(_mp.parse_args([
+        "-s", str(source_path), "--model_path", str(run.store.parent),
+        "--images", "images", "--resolution", str(resolution), "--eval",
+    ]))
+    scene = Scene(mp, gaussians, load_iteration=-1, shuffle=False)
     cams = scene.getTestCameras() or scene.getTrainCameras()
 
-    pipe = Namespace(convert_SHs_python=False, compute_cov3D_python=False, debug=False)
+    _pp = ArgumentParser()
+    pipe = PipelineParams(_pp).extract(_pp.parse_args([]))
     bg = torch.zeros(3, device="cuda")
 
     # Codebook values as raw-parameter overrides, matching AttributeQuantizer.apply.

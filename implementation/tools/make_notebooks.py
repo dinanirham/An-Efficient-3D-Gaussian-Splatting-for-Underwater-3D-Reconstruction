@@ -826,7 +826,7 @@ easy to forget. Each answers a question the contrasts cannot.
 # registers. Never a proxy for medium health -- that correlation was tested and
 # came out the wrong sign (E.17).
 !python -m tools.spatial_extent --output_root "$DRIVE_ROOT" \\
-    --out "$ANALYSIS_DIR/spatial_extent.csv"
+    --out_dir "$ANALYSIS_DIR"
 '''),
     code('''\
 # What did quantization cost the restored image? The only quantitative proxy

@@ -49,6 +49,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from source.storage import index_bits, pack_indices, unpack_indices  # noqa: E402
 from tools.j_consistency import (  # noqa: E402
     GROUP_TO_ATTR,
+    STORE_GLOB,
     discover_quantized_runs,
     psnr_pooled,
     reconstruct_quantized,
@@ -69,7 +70,7 @@ def check(name: str, fn) -> None:
 def write_run(root: Path, cell: str, scene: str, seed: int, *, quantized: bool,
               n: int = 64, k: int = 16) -> Path:
     """Materialise a minimal stored run, quantized or not."""
-    d = root / cell / scene / f"s{seed}" / "compact"
+    d = root / cell / scene / f"s{seed}" / "compressed_30000"
     d.mkdir(parents=True, exist_ok=True)
 
     meta = {"num_primitives": n, "sh_degree": 0, "quantized": quantized,
@@ -213,6 +214,23 @@ def t10_group_mapping_covers_every_quantized_attribute():
     return ok, f"groups {sorted(GROUP_TO_ATTR)} -> {sorted(GROUP_TO_ATTR.values())}"
 
 
+def t11_store_glob_matches_what_train_py_writes():
+    """DECISIVE. The search pattern is anchored to the writer, not to a guess.
+
+    The tool once globbed "compact/", a directory nothing writes, and found no
+    runs. Its own test passed because the fixture wrote "compact/" too -- the
+    test encoded the same wrong assumption as the code. The fixture now writes
+    what train.py writes, and this check reads train.py to confirm the pattern
+    would match it.
+    """
+    import fnmatch
+    src = (Path(__file__).resolve().parent.parent / "train.py").read_text(encoding="utf-8")
+    # train.py:  Path(model_params.model_path) / f"compressed_{iteration}"
+    written = "compressed_30000"
+    ok = ('f"compressed_{iteration}"' in src) and fnmatch.fnmatch(written, STORE_GLOB)
+    return ok, f"train.py writes compressed_<iter>; glob {STORE_GLOB!r} matches it"
+
+
 def main() -> int:
     print("=" * 68)
     print("CD-28  restored-image (J-hat) self-consistency")
@@ -232,6 +250,8 @@ def main() -> int:
     check("T9  PSNR uses the pooled convention", t9_psnr_uses_the_pooled_convention)
     check("T10 group mapping covers every quantized attribute",
           t10_group_mapping_covers_every_quantized_attribute)
+    check("T11 store glob matches what train.py writes  <-- decisive",
+          t11_store_glob_matches_what_train_py_writes)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
