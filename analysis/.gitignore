@@ -6,3 +6,4 @@ campaign-*/*.md
 campaign-*/diagnostics/
 !campaign-*/README.md
 !campaign-*/PLAN.md
+!campaign-*/FINDINGS.md
