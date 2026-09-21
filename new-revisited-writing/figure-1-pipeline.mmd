@@ -1,27 +1,5 @@
-%% Figure 1 — Detailed methodology pipeline, portrait.
-%%
-%% Shape conventions (ANSI/ISO flowchart):
-%%   ([  ])  terminal        — start / end
-%%   [/  /]  data            — input or output
-%%   [   ]   process         — an operation
-%%   [[  ]]  predefined      — a named sub-procedure from a source method
-%%   {   }   decision        — a branch
-%%   [(  )]  stored data     — a persisted, hashed artifact
-%%   (( ))   connector       — ON-PAGE CONNECTOR. Two circles with the same
-%%                             letter are the same point in the flow; the reader
-%%                             matches them by label. Used instead of a long
-%%                             backward edge, which would cross the phase blocks.
-%%
-%% Colour encodes ORIGIN, not function. Badges M1/M2/M3/D/CD carry identity.
-%%
-%% NOTE on the schedule: the two training regimes are drawn as a BRANCH rather
-%% than as nested blocks, because the gates overlap. Density control runs to
-%% iteration 15 000 — i.e. 5 000 iterations INTO the physics-aware regime — so a
-%% nested block would misstate it.
-
 flowchart TB
 
-%% ─────────────────────────── ① PREPROCESSING ─────────────────────────
 subgraph PRE["① PREPROCESSING — offline, once per scene, frozen before training"]
   direction TB
   S([Start]) --> IN[/"SeaThru-NeRF corpus<br/>4 scenes · 88 images · COLMAP poses"/]
@@ -32,7 +10,6 @@ end
 
 DAT --> Q1{"M1<br/>enabled?"}
 
-%% ─────────────────────────── ② INITIALIZATION ────────────────────────
 subgraph INI["② INITIALIZATION"]
   direction TB
   Q1 -->|"no · baseline"| SFM[/"COLMAP sparse cloud · ~26 000 points"/]
@@ -47,13 +24,13 @@ end
 
 GAU --> ENT(("A"))
 
-%% ─────────────────────────── ③ TRAINING ──────────────────────────────
 subgraph TRN["③ TRAINING — 30 000 iterations"]
   direction TB
 
   ENT --> RAS["Rasterise → radiance J, depth Z, alpha"]
 
-  RAS --> QM{"i &gt; 10 000?<br/><b>image formation model</b>"}
+  RAS --> SWP["<b>CD</b> · Cross-frame depth-range sweep<br/><i>at every event and every 2 500 it</i>"]
+  SWP --> QM{"i &gt; 10 000?<br/><b>image formation model</b>"}
 
   QM -->|"NO · geometry-only regime"| L1["Loss vs the <b>RAW render</b><br/><i>veiling haze must be paid for by geometry</i>"]
 
@@ -67,7 +44,7 @@ subgraph TRN["③ TRAINING — 30 000 iterations"]
   BP --> ACC{"Densification signal<br/>composition"}
   BP2 --> ACC
   ACC -->|"baseline"| SIG["accumulate image <b>+ alpha</b> gradients"]
-  ACC -->|"D"| SIGD["<b>D</b> · accumulate image gradients only<br/><i>alpha detached · cell A0D, not yet run</i>"]
+  ACC -->|"D"| SIGD["<b>D</b> · accumulate image gradients only<br/><i>alpha detached · cell A0D</i>"]
 
   SIG --> QD{"i &lt; 15 000?"}
   SIGD --> QD
@@ -80,7 +57,7 @@ subgraph TRN["③ TRAINING — 30 000 iterations"]
   PRN --> EV
 
   EV -->|"M2 · i = 15 000 / 20 000"| SMP[["<b>M2</b> · Importance-weighted simplification<br/>cut to 200 000 primitives"]]
-  SMP --> RWM["<b>CD</b> · Medium re-identification burst<br/><i>measured insufficient</i>"]
+  SMP --> RWM["<b>CD</b> · 200 medium-only steps, geometry frozen<br/><i>the interval in which β falls</i>"]
   EV -->|"M3 · i ≥ 22 000"| QNT[["<b>M3</b> · Quantization-aware training<br/>3 codebooks · straight-through estimator"]]
   EV -->|"none"| NXT
 
@@ -89,21 +66,22 @@ subgraph TRN["③ TRAINING — 30 000 iterations"]
   NXT -->|"no · i ← i+1"| RET(("A"))
 end
 
-%% ─────────────────────────── ④ EVALUATION ────────────────────────────
 NXT -->|"yes"| OUT[/"Trained model + 9 medium scalars"/]
 
 subgraph EVA["④ EVALUATION"]
   direction TB
   OUT --> FID["Fidelity on held-out frames<br/>PSNR both conventions · SSIM · LPIPS"]
   OUT --> EFF["Efficiency<br/>count · storage · fps · peak memory"]
-  OUT --> DIA["<b>CD</b> · Diagnostics<br/>medium collapse · occupancy · detached population"]
+  OUT --> DIA["<b>CD</b> · Diagnostics<br/>medium collapse · depth-range dispersion · occupancy · detached population"]
+  OUT --> JC["<b>CD</b> · Ĵ self-consistency<br/><i>quantised cells, seed 0: continuous vs codebook state</i>"]
+  REF[/"<b>Reference control</b> · unmodified upstream SeaSplat<br/>trained and measured on this harness, 12 runs"/] --> FID
   FID --> REC[("Per-run record · 45 fields, hashed provenance")]
   EFF --> REC
   DIA --> REC
+  JC --> REC
   REC --> END([End])
 end
 
-%% ─────────────────────────── STYLE ───────────────────────────────────
 classDef inherited fill:#EDF2F2,stroke:#94A9A8,stroke-width:1px,color:#10201F
 classDef mech      fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,color:#10201F
 classDef supp      fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,stroke-dasharray:5 3,color:#10201F
@@ -117,7 +95,8 @@ class S,END term
 class IN,DAT,SFM,SPL,GAU,RAS,L1,L2,BP,BP2,SIG,ADC,FID,EFF,OUT,PLY,REC inherited
 class ROMA,TRI,PRN,SMP,QNT mech
 class SIGD supp
-class UND,REJ,RWM,DIA ours
+class UND,REJ,RWM,DIA,SWP,JC ours
+class REF inherited
 class NRM,CMP medium
 class Q1,Q2,QM,ACC,QD,DC,EV,NXT gate
 class ENT,RET conn
