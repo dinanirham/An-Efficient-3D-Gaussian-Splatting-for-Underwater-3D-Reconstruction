@@ -56,3 +56,6 @@ for p in glob.glob(f'{DRIVE_ROOT}/runs/A[2467]/*/s*/diagnostics.csv'):
 ```
 
 Download the zip, unpack it here. One bundle, one place.
+
+Artifact source: `FINDINGS.html` renders FINDINGS.md as a page; published at
+https://claude.ai/artifact/RjJZsWg1CXVpg1oMmfCedj (same link as the 48-run page it replaced).

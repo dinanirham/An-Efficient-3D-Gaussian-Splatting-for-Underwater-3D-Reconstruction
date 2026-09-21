@@ -1,0 +1,633 @@
+<title>Three Mechanisms, 120 Runs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+
+<style>
+  :root{
+    --ground:#F4F7F7; --surface:#FFFFFF; --surface-2:#EDF2F2;
+    --ink:#10201F; --ink-soft:#48605F; --ink-faint:#7C908F;
+    --rule:#DBE5E4; --rule-soft:#E9EFEF;
+    --accent:#C8462E; --accent-soft:#F7E7E3;
+    --ok:#2E7D6B; --ok-soft:#E1F0EC; --warn:#9C6A1E; --warn-soft:#F5EBD9;
+    --shadow:0 1px 2px rgba(16,32,31,.05),0 8px 24px -12px rgba(16,32,31,.12);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0B1516; --surface:#111F20; --surface-2:#16292A;
+      --ink:#E4EDEC; --ink-soft:#A3B6B5; --ink-faint:#6E8382;
+      --rule:#1F3234; --rule-soft:#182A2B;
+      --accent:#F0705A; --accent-soft:#33201D;
+      --ok:#52BBA1; --ok-soft:#16302B; --warn:#D9A155; --warn-soft:#2E2617;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0B1516; --surface:#111F20; --surface-2:#16292A;
+    --ink:#E4EDEC; --ink-soft:#A3B6B5; --ink-faint:#6E8382;
+    --rule:#1F3234; --rule-soft:#182A2B;
+    --accent:#F0705A; --accent-soft:#33201D;
+    --ok:#52BBA1; --ok-soft:#16302B; --warn:#D9A155; --warn-soft:#2E2617;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--ground); color:var(--ink);
+    font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    font-size:16px; line-height:1.65; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1220px; margin:0 auto; padding-block:0 96px; padding-inline:28px}
+  @media (max-width:520px){.wrap{padding-inline:18px}}
+  .col{max-width:68ch}
+  h1,h2{font-family:Newsreader,Georgia,"Times New Roman",serif; font-weight:500;
+    text-wrap:balance; letter-spacing:-.01em; margin:0}
+  h1{font-size:clamp(2.1rem,5vw,3.2rem); line-height:1.08}
+  h2{font-size:clamp(1.45rem,2.5vw,1.95rem); line-height:1.2}
+  h3{font-size:1.02rem; line-height:1.4; font-weight:600; margin:0;
+    font-family:"IBM Plex Sans",sans-serif}
+  p{margin:0} strong{font-weight:600} em{font-style:italic}
+  .mono,code{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+    font-variant-numeric:tabular-nums}
+  code{font-size:.88em; background:var(--surface-2); padding:.1em .34em; border-radius:3px}
+
+  header{padding:72px 0 40px; border-bottom:1px solid var(--rule)}
+  .eyebrow{font-family:"IBM Plex Mono",monospace; font-size:.72rem; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--accent); margin-bottom:18px}
+  .lede{font-size:1.14rem; color:var(--ink-soft); margin-top:20px; max-width:64ch}
+  .meta{display:flex; flex-wrap:wrap; gap:0 34px; margin-top:32px;
+    font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--ink-faint)}
+  .meta b{color:var(--ink); font-weight:500}
+
+  section{padding-top:56px}
+  .sec-head{display:flex; align-items:baseline; gap:14px; margin-bottom:10px}
+  .sec-num{font-family:"IBM Plex Mono",monospace; font-size:.78rem; color:var(--ink-faint);
+    letter-spacing:.06em; padding-top:.35em; white-space:nowrap}
+  .stack{display:flex; flex-direction:column; gap:16px}
+  .sub{font-family:"IBM Plex Mono",monospace; font-size:.74rem; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-faint); margin:34px 0 -8px}
+
+  .scroller{overflow-x:auto; margin-top:20px; border:1px solid var(--rule);
+    border-radius:6px; background:var(--surface); box-shadow:var(--shadow)}
+  table{border-collapse:collapse; width:100%; font-size:.86rem}
+  th,td{padding:10px 15px; text-align:right; white-space:nowrap;
+    border-bottom:1px solid var(--rule-soft)}
+  th:first-child,td:first-child{text-align:left; white-space:normal; min-width:146px;
+    color:var(--ink-soft)}
+  thead th{font-family:"IBM Plex Mono",monospace; font-size:.71rem; font-weight:500;
+    letter-spacing:.07em; text-transform:uppercase; color:var(--ink-faint);
+    background:var(--surface-2); border-bottom:1px solid var(--rule)}
+  tbody tr:last-child td{border-bottom:none}
+  td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+  td.l{text-align:left; white-space:normal}
+  .sd{color:var(--ink-faint); font-size:.92em}
+  .hot{color:var(--accent); font-weight:500}
+  .good{color:var(--ok); font-weight:500}
+  .dim{color:var(--ink-faint)}
+  caption{caption-side:bottom; text-align:left; padding:11px 15px; font-size:.79rem;
+    color:var(--ink-faint); border-top:1px solid var(--rule-soft); white-space:normal}
+  .z{font-family:"IBM Plex Mono",monospace; font-size:.78em; color:var(--ink-faint);
+    margin-left:5px}
+  .z.res{color:var(--accent)}
+
+  .runbar{display:inline-flex; gap:2px; align-items:center; vertical-align:-3px}
+  .runbar i{width:8px; height:15px; border-radius:1px; background:var(--ok); display:block}
+  .runbar i.broken{background:var(--accent)}
+  .runbar span{font-family:"IBM Plex Mono",monospace; font-size:.76rem;
+    color:var(--ink-faint); margin-left:9px}
+
+  .note{border-left:2px solid var(--accent); padding:2px 0 2px 20px; color:var(--ink-soft)}
+  .note strong{color:var(--ink)}
+  .verdict{border-left:2px solid var(--ok); padding:2px 0 2px 20px; color:var(--ink-soft)}
+  .verdict strong{color:var(--ink)}
+  .card{background:var(--surface); border:1px solid var(--rule); border-radius:6px;
+    padding:20px 22px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:9px}
+  .grid2{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(272px,1fr));
+    margin-top:24px}
+  .tag{font-family:"IBM Plex Mono",monospace; font-size:.69rem; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--accent)}
+  .tag.ok{color:var(--ok)}
+  ul{margin:0; padding-left:1.15em; display:flex; flex-direction:column; gap:8px}
+  li::marker{color:var(--ink-faint)}
+  .rq{display:grid; grid-template-columns:auto 1fr; gap:8px 18px; align-items:baseline;
+    margin:22px 0 0}
+  .rq dt{font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--accent);
+    font-weight:500}
+  .rq dd{margin:0; color:var(--ink-soft)} .rq dd b{color:var(--ink); font-weight:600}
+  .pill{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:.68rem;
+    letter-spacing:.08em; text-transform:uppercase; padding:2px 8px; border-radius:3px;
+    vertical-align:1px}
+  .pill.held{background:var(--ok-soft); color:var(--ok)}
+  .pill.failed{background:var(--accent-soft); color:var(--accent)}
+  .pill.open{background:var(--warn-soft); color:var(--warn)}
+
+  /* the collapse strip: one bar per event, height = beta loss */
+  .strip{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:14px;
+    margin-top:22px}
+  .strip .cell{background:var(--surface); border:1px solid var(--rule); border-radius:6px;
+    padding:14px 14px 12px; box-shadow:var(--shadow)}
+  .strip .lab{font-family:"IBM Plex Mono",monospace; font-size:.7rem; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-faint); display:flex; justify-content:space-between}
+  .strip .lab b{color:var(--ink); font-weight:500}
+  .strip .bars{display:flex; align-items:flex-end; gap:3px; height:64px; margin-top:10px;
+    border-bottom:1px solid var(--rule)}
+  .strip .bars i{flex:1; display:block; background:var(--ok); border-radius:1px 1px 0 0; min-height:2px}
+  .strip .bars i.broken{background:var(--accent)}
+  .strip .cap{font-size:.76rem; color:var(--ink-faint); margin-top:8px}
+
+  footer{margin-top:72px; padding-top:26px; border-top:1px solid var(--rule);
+    color:var(--ink-faint); font-size:.82rem}
+  a{color:var(--accent)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Underwater 3D Gaussian Splatting &middot; campaign 2026-09, complete</div>
+  <h1>Three efficiency mechanisms,<br>one physical model, 120 runs</h1>
+  <p class="lede">The baseline is vanilla SeaSplat to within a pre-registered margin on every
+  scene. Each mechanism moves the cost it targets beyond seed noise on every scene. The medium
+  model falls during the two hundred steps after every large cut and never after a small one
+  &mdash; and the explanation registered for that in advance failed its own test.</p>
+  <div class="meta">
+    <span><b>120</b> runs</span>
+    <span><b>10</b> cells &times; <b>4</b> scenes &times; <b>3</b> seeds</span>
+    <span><b>107</b> GPU-hours</span>
+    <span>15&ndash;21 Sept 2026</span>
+    <span>NVIDIA A100 40&nbsp;GB</span>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="sec-num">RULES</span><h2>Per scene, never pooled; resolved means two standard errors</h2></div>
+  <div class="col stack">
+    <p>Scene difficulty spans 7.2&nbsp;dB and the baseline's own dispersion varies four-fold
+    across scenes, so an effect that resolves on one scene may be invisible on another for
+    reasons of measurement. Every effect below is per scene, in units of that scene's baseline
+    noise. <code>UNRES</code> means below 2&nbsp;SE &mdash; a statement about three seeds, not
+    about the mechanism.</p>
+    <p class="dim">The design's own arithmetic settles one question before any data: the
+    smallest PSNR interaction three seeds can resolve is 0.5&ndash;1.6&nbsp;dB, and the largest
+    PSNR main effect is 0.8&nbsp;dB. <strong>PSNR interactions are undetermined by
+    construction.</strong> Interactions are adjudicated on LPIPS and primitive count.</p>
+  </div>
+  <div class="sub">Baseline noise floor, this campaign &mdash; A0 over three repeats</div>
+  <div class="scroller"><table>
+    <thead><tr><th>Scene</th><th>PSNR sd</th><th>LPIPS sd</th><th>count CV</th><th>prior count CV</th></tr></thead>
+    <tbody>
+      <tr><td>Curasao</td><td class="num">0.395</td><td class="num">0.0025</td><td class="num">8.6%</td><td class="num dim">14.7%</td></tr>
+      <tr><td>IUI3-RedSea</td><td class="num">0.245</td><td class="num">0.0013</td><td class="num">12.5%</td><td class="num dim">9.6%</td></tr>
+      <tr><td>JapaneseGardens</td><td class="num">0.126</td><td class="num">0.0050</td><td class="num hot">34.3%</td><td class="num dim">6.0%</td></tr>
+      <tr><td>Panama</td><td class="num">0.481</td><td class="num">0.0091</td><td class="num hot">36.6%</td><td class="num dim">29.3%</td></tr>
+    </tbody>
+    <caption>Count dispersion widened on two scenes. Same-seed non-determinism was measured at a
+    21% median with a 59% tail, so 34% is inside what the process produces; it widens the floor
+    for every count contrast on those scenes.</caption>
+  </table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;1</span><h2>The baseline is vanilla SeaSplat <span class="pill held">held</span></h2></div>
+  <div class="col stack">
+    <p>The unmodified upstream checkout was trained and measured on the same harness, twelve
+    runs, before any mechanism ran. Compared as scene means over repeats against a margin fixed
+    in the config before the reference existed: &plusmn;1.0&nbsp;dB, &plusmn;0.02 LPIPS,
+    &plusmn;30% count.</p>
+  </div>
+  <div class="scroller"><table>
+    <thead><tr><th>Scene</th><th>PSNR gap</th><th>LPIPS gap</th><th>count gap</th><th>of count margin</th><th>verdict</th></tr></thead>
+    <tbody>
+      <tr><td>Curasao</td><td class="num">+0.04</td><td class="num">&minus;0.0001</td><td class="num">+243 k</td><td class="num">20%</td><td class="num good">WITHIN</td></tr>
+      <tr><td>IUI3-RedSea</td><td class="num">&minus;0.15</td><td class="num">+0.0005</td><td class="num">+263 k</td><td class="num">31%</td><td class="num good">WITHIN</td></tr>
+      <tr><td>JapaneseGardens</td><td class="num">+0.25</td><td class="num">&minus;0.0067</td><td class="num">&minus;584 k</td><td class="num">74%</td><td class="num good">WITHIN</td></tr>
+      <tr><td>Panama</td><td class="num">+0.12</td><td class="num">&minus;0.0036</td><td class="num">+114 k</td><td class="num">19%</td><td class="num good">WITHIN</td></tr>
+    </tbody>
+    <caption>Every gap sits inside A0's own noise floor. Neither A0 nor the reference lost an
+    attenuation channel in any of 24 runs. <em>Within margin</em> supports &ldquo;equivalent to
+    within the stated margin&rdquo;; it does not support &ldquo;reproduces&rdquo;.</caption>
+  </table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;2</span><h2>Main effects <span class="pill held">H1 held</span></h2></div>
+  <div class="col stack">
+    <p>Each mechanism against the baseline, per scene. Effect, then <code>z</code>; accent where
+    it clears 2&nbsp;SE. Count and frame rate are ratios; LPIPS is signed with + worse.</p>
+  </div>
+
+  <div class="sub">M1 &mdash; dense correspondence initialisation (A1 &minus; A0)</div>
+  <div class="scroller"><table>
+    <thead><tr><th>Scene</th><th>count</th><th>wall-clock</th><th>PSNR</th><th>LPIPS</th></tr></thead>
+    <tbody>
+      <tr><td>Curasao</td><td class="num hot">&times;0.06<span class="z res">&minus;19.0</span></td><td class="num hot">&minus;1096 s<span class="z res">&minus;15.5</span></td><td class="num">+0.60<span class="z">1.7</span></td><td class="num">+0.002<span class="z">0.6</span></td></tr>
+      <tr><td>IUI3-RedSea</td><td class="num hot">&times;0.08<span class="z res">&minus;12.8</span></td><td class="num hot">&minus;227 s<span class="z res">&minus;4.3</span></td><td class="num">+0.21<span class="z">1.3</span></td><td class="num hot">+0.059<span class="z res">48.4</span></td></tr>
+      <tr><td>JapaneseGardens</td><td class="num hot">&times;0.09<span class="z res">&minus;4.6</span></td><td class="num hot">&minus;628 s<span class="z res">&minus;6.1</span></td><td class="num hot">+0.80<span class="z res">7.4</span></td><td class="num">+0.000<span class="z">0.0</span></td></tr>
+      <tr><td>Panama</td><td class="num hot">&times;0.10<span class="z res">&minus;4.3</span></td><td class="num hot">&minus;555 s<span class="z res">&minus;2.8</span></td><td class="num hot">+0.72<span class="z res">2.4</span></td><td class="num">+0.006<span class="z">0.9</span></td></tr>
+    </tbody>
+    <caption>10&ndash;16&times; fewer primitives and faster training on every scene. PSNR positive
+    everywhere and resolved on two; Panama, which reversed at n=1 in the old campaign, now
+    resolves positive. LPIPS at baseline on three scenes and 48&nbsp;SE worse on IUI3.</caption>
+  </table></div>
+
+  <div class="sub">M2 &mdash; importance-weighted simplification to a 200 k budget (A2 &minus; A0)</div>
+  <div class="scroller"><table>
+    <thead><tr><th>Scene</th><th>count</th><th>fps</th><th>PSNR</th><th>LPIPS</th></tr></thead>
+    <tbody>
+      <tr><td>Curasao</td><td class="num hot">&times;0.04<span class="z res">&minus;19.5</span></td><td class="num hot">&times;3.51<span class="z res">15.7</span></td><td class="num hot">+0.74<span class="z res">2.3</span></td><td class="num hot">+0.033<span class="z res">22.4</span></td></tr>
+      <tr><td>IUI3-RedSea</td><td class="num hot">&times;0.05<span class="z res">&minus;13.2</span></td><td class="num hot">&times;1.90<span class="z res">15.1</span></td><td class="num">&minus;0.26<span class="z">&minus;1.4</span></td><td class="num hot">+0.082<span class="z res">44.7</span></td></tr>
+      <tr><td>JapaneseGardens</td><td class="num hot">&times;0.05<span class="z res">&minus;4.8</span></td><td class="num hot">&times;2.67<span class="z res">9.4</span></td><td class="num hot">+0.53<span class="z res">2.6</span></td><td class="num hot">+0.032<span class="z res">7.7</span></td></tr>
+      <tr><td>Panama</td><td class="num hot">&times;0.07<span class="z res">&minus;4.4</span></td><td class="num hot">&times;1.89<span class="z res">6.4</span></td><td class="num">+0.01<span class="z">0.0</span></td><td class="num hot">+0.054<span class="z res">7.3</span></td></tr>
+    </tbody>
+    <caption>14&ndash;25&times; fewer primitives, 1.9&ndash;3.5&times; frame rate, LPIPS worse on all
+    four scenes at 7&ndash;45&nbsp;SE. Frame rate is sub-linear in count reduction and the exponent
+    is scene-dependent.</caption>
+  </table></div>
+
+  <div class="sub">M3 &mdash; quantisation-aware attribute VQ (A3 &minus; A0)</div>
+  <div class="scroller"><table>
+    <thead><tr><th>Scene</th><th>bytes / primitive</th><th>fps</th><th>PSNR</th><th>LPIPS</th></tr></thead>
+    <tbody>
+      <tr><td>Curasao</td><td class="num">&times;0.37</td><td class="num">&times;1.21<span class="z">1.5</span></td><td class="num">+0.38<span class="z">1.2</span></td><td class="num hot">+0.005<span class="z res">2.5</span></td></tr>
+      <tr><td>IUI3-RedSea</td><td class="num">&times;0.37</td><td class="num">&times;0.94<span class="z">&minus;0.9</span></td><td class="num hot">&minus;1.36<span class="z res">&minus;4.0</span></td><td class="num hot">+0.028<span class="z res">19.7</span></td></tr>
+      <tr><td>JapaneseGardens</td><td class="num">&times;0.37</td><td class="num">&times;1.05<span class="z">0.6</span></td><td class="num hot">+0.59<span class="z res">3.1</span></td><td class="num">&minus;0.003<span class="z">&minus;0.8</span></td></tr>
+      <tr><td>Panama</td><td class="num">&times;0.37</td><td class="num">&times;0.84<span class="z">&minus;1.1</span></td><td class="num">+0.24<span class="z">0.7</span></td><td class="num">+0.000<span class="z">0.0</span></td></tr>
+    </tbody>
+    <caption>2.72&times; compression on every scene, deterministic (56.0 &rarr; 20.6 bytes), and no
+    frame-rate change on any &mdash; predicted before the instrument existed. The IUI3 PSNR loss
+    resolves within this campaign and <em>reverses sign</em> against the archived one
+    (&sect;11); it is carried on LPIPS only.</caption>
+  </table></div>
+
+  <div class="col stack" style="margin-top:30px">
+    <div class="note">
+      <p><strong>IUI3-RedSea is where every mechanism costs perceptual quality</strong> &mdash;
+      M1 +0.059, M2 +0.082, M3 +0.028 LPIPS, each at 20&ndash;48&nbsp;SE. No other scene shows
+      this. It has the most training views and the worst-conditioned camera pairing in the
+      set, consecutive views along a reef wall. Every per-scene claim on this page is checked
+      against IUI3 before it is generalised.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;3&ndash;4</span><h2>Interactions, on LPIPS and count</h2></div>
+  <div class="col stack">
+    <p>Two-way terms from the four cells each pair spans, SE from four means; the three-way term
+    from all eight. Count is log-multiplicative, so &times;1 is the null.</p>
+  </div>
+  <div class="scroller"><table>
+    <thead><tr><th>Term</th><th>Curasao</th><th>IUI3-RedSea</th><th>JapaneseGardens</th><th>Panama</th><th style="text-align:left">Registered</th></tr></thead>
+    <tbody>
+      <tr><td>M1&times;M2 &middot; count</td><td class="num hot">&times;14.3<span class="z res">49.8</span></td><td class="num hot">&times;10.9<span class="z res">33.1</span></td><td class="num hot">&times;9.7<span class="z res">10.1</span></td><td class="num hot">&times;8.0<span class="z res">9.3</span></td><td class="l">H5 sub-additive: the 200 k budget binds <span class="pill held">held</span></td></tr>
+      <tr><td>M1&times;M2 &middot; LPIPS</td><td class="num">&minus;0.004<span class="z">&minus;1.2</span></td><td class="num hot">&minus;0.048<span class="z res">&minus;17.1</span></td><td class="num hot">&minus;0.015<span class="z res">&minus;2.6</span></td><td class="num hot">&minus;0.017<span class="z res">&minus;2.0</span></td><td class="l">unregistered; favourable, reported as observed</td></tr>
+      <tr><td>M2&times;M3 &middot; LPIPS</td><td class="num hot">+0.020<span class="z res">6.5</span></td><td class="num">&minus;0.006<span class="z">&minus;1.6</span></td><td class="num hot">+0.017<span class="z res">3.0</span></td><td class="num hot">+0.015<span class="z res">2.0</span></td><td class="l">H3 sub-additive on quality, OMG's premise <span class="pill held">held on 3</span></td></tr>
+      <tr><td>M1&times;M3 &middot; LPIPS</td><td class="num hot">+0.021<span class="z res">4.8</span></td><td class="num hot">&minus;0.008<span class="z res">&minus;4.4</span></td><td class="num">+0.005<span class="z">1.1</span></td><td class="num hot">+0.027<span class="z res">4.9</span></td><td class="l">approximately additive <span class="pill failed">failed</span>, sign inconsistent</td></tr>
+      <tr><td>M1&times;M2&times;M3 &middot; LPIPS</td><td class="num">&minus;0.016<span class="z">&minus;2.0</span></td><td class="num">+0.003<span class="z">0.4</span></td><td class="num">&minus;0.003<span class="z">&minus;0.4</span></td><td class="num hot">&minus;0.023<span class="z res">&minus;2.7</span></td><td class="l">no prediction; resolves on one scene, not interpreted</td></tr>
+    </tbody>
+    <caption>M1 alone gives &times;0.08, M2 alone &times;0.05; multiplied they would predict ~11 000
+    primitives, and A4 lands near 130 000 because the budget caps whichever cell reaches it. Every
+    other count interaction is unresolved. Every PSNR interaction is undetermined by construction
+    and none is shown.</caption>
+  </table></div>
+  <div class="col stack" style="margin-top:30px">
+    <div class="verdict">
+      <p><strong>RQ2, answered as the plan required.</strong> The mechanisms do not compose
+      additively: M1&times;M2 is strongly sub-additive on count and favourably non-additive on
+      LPIPS; M2&times;M3 is sub-additive on quality as the compression literature predicts;
+      M1&times;M3 is additive on count and resolves inconsistently on LPIPS.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;5</span><h2>The medium model, and the test that failed</h2></div>
+  <div class="col stack">
+    <p>The baseline fits nine scalars of a physical water model jointly with the geometry. An
+    attenuation channel driven negative is clamped out and never recovers. The instrument that
+    watches for it covers all 120 runs.</p>
+  </div>
+
+  <div class="scroller"><table>
+    <thead><tr><th>Cell</th><th style="text-align:left">Mechanisms</th><th style="text-align:left">Runs with the medium model intact</th><th>Curasao</th><th>IUI3</th><th>JG</th><th>Panama</th></tr></thead>
+    <tbody>
+      <tr><td>A0</td><td class="l">baseline</td><td class="l"><div class="runbar"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>12 / 12</span></div></td><td class="num">3/3</td><td class="num">3/3</td><td class="num">3/3</td><td class="num">3/3</td></tr>
+      <tr><td>SS</td><td class="l">vanilla reference</td><td class="l"><div class="runbar"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>12 / 12</span></div></td><td class="num">3/3</td><td class="num">3/3</td><td class="num">3/3</td><td class="num">3/3</td></tr>
+      <tr><td>A2</td><td class="l">M2</td><td class="l"><div class="runbar"><i class="broken"></i><i class="broken"></i><i class="broken"></i><i class="broken"></i><i class="broken"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>7 / 12</span></div></td><td class="num hot">2/3</td><td class="num">3/3</td><td class="num hot">1/3</td><td class="num hot">1/3</td></tr>
+      <tr><td>A6</td><td class="l">M2 + M3</td><td class="l"><div class="runbar"><i class="broken"></i><i class="broken"></i><i class="broken"></i><i class="broken"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>8 / 12</span></div></td><td class="num hot">1/3</td><td class="num">3/3</td><td class="num hot">2/3</td><td class="num hot">2/3</td></tr>
+      <tr><td>A4</td><td class="l"><strong>M1</strong> + M2</td><td class="l"><div class="runbar"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>12 / 12</span></div></td><td class="num">3/3</td><td class="num">3/3</td><td class="num">3/3</td><td class="num">3/3</td></tr>
+      <tr><td>A7</td><td class="l"><strong>M1</strong> + M2 + M3</td><td class="l"><div class="runbar"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>12 / 12</span></div></td><td class="num">3/3</td><td class="num">3/3</td><td class="num">3/3</td><td class="num">3/3</td></tr>
+    </tbody>
+    <caption><strong>Every cell with M1: 0 of 24. Every M2 cell without M1: 9 of 24.</strong>
+    Baseline and reference: 0 of 24. All 24 non-M1 M2 runs put their largest attenuation drop at
+    iteration 15 000, the first simplification boundary. The lost channel is blue in every case.
+    Seed-conditioned within scene; IUI3 never collapses.</caption>
+  </table></div>
+
+  <div class="sub">The registered mechanism &mdash; and its test</div>
+  <div class="col stack" style="margin-top:26px">
+    <p>Written before the data: <em>collapse at a simplification event is governed by the
+    change in cross-frame dispersion of the depth range across that event &mdash; not by
+    primitive count, not by count ratio.</em> The test: within the M2 cells without M1, does the
+    dispersion ratio at the first event separate the nine runs that collapsed from the fifteen
+    that did not?</p>
+  </div>
+  <div class="scroller"><table>
+    <thead><tr><th>Stratum</th><th>n</th><th>ratio min</th><th>median</th><th>max</th></tr></thead>
+    <tbody>
+      <tr><td>collapsed</td><td class="num">9</td><td class="num">0.913</td><td class="num">1.017</td><td class="num">1.555</td></tr>
+      <tr><td>intact</td><td class="num">15</td><td class="num">0.845</td><td class="num">1.002</td><td class="num">1.396</td></tr>
+    </tbody>
+    <caption>Mann&ndash;Whitney U = 79 of 135, AUC 0.585, exact one-sided p = 0.26. On Curasao the
+    <em>intact</em> runs have the larger ratios. Four M1 runs broaden by 3.5&ndash;7.3&times; at the
+    second event and none collapse. Spearman between the ratio and the size of the &beta; drop is
+    &minus;0.32 within the non-M1 cells.</caption>
+  </table></div>
+  <div class="col stack" style="margin-top:30px">
+    <div class="note">
+      <p><strong>The identifiability account is withdrawn, not qualified</strong> <span class="pill failed">&sect;5b failed</span> &mdash; the
+      plan's own falsification clause, written in full before the campaign, and the one item
+      whose failure changes the thesis's central claim. What replaces it is description, labelled
+      post-hoc, and not promoted to a claim.</p>
+    </div>
+  </div>
+
+  <div class="sub">What the same 48 diagnostics show instead &mdash; post-hoc</div>
+  <div class="col stack" style="margin-top:26px">
+    <p>The cut itself never moves &beta;: on 48 of 48 runs at both events, the medium parameters
+    at <code>post_simp</code> equal those at <code>pre_simp</code>. They move during the two
+    hundred medium-only steps that follow the cut, with geometry frozen &mdash; the campaign's
+    own remedy. <strong>Six of the nine sign crossings happen at the end of that burst.</strong></p>
+  </div>
+  <div class="scroller"><table>
+    <thead><tr><th>At the first event</th><th>M2 without M1 (A2, A6)</th><th>M2 with M1 (A4, A7)</th></tr></thead>
+    <tbody>
+      <tr><td>count entering the event</td><td class="num">1.4&ndash;4.2 M</td><td class="num">196&ndash;247 k</td></tr>
+      <tr><td>fraction removed</td><td class="num hot">86&ndash;95%</td><td class="num good">29&ndash;36%</td></tr>
+      <tr><td>mean &beta;<sub>att</sub> entering</td><td class="num">0.66&ndash;1.71 <span class="sd">med 1.2</span></td><td class="num">1.60&ndash;5.35 <span class="sd">med 3.3</span></td></tr>
+      <tr><td>&beta;<sub>att</sub> after the burst, as fraction of before</td><td class="num hot">collapsed 0.00&ndash;0.47 &middot; intact 0.26&ndash;0.60</td><td class="num good">0.89&ndash;1.04 <span class="sd">med 0.97</span></td></tr>
+      <tr><td>collapses</td><td class="num hot">9 / 24</td><td class="num good">0 / 24</td></tr>
+    </tbody>
+    <caption>Every 86&ndash;95% cut loses 40&ndash;100% of its attenuation within 200 medium steps;
+    no 29&ndash;36% cut loses more than 11%. Spearman between fraction removed and &beta; drop is
+    0.83 across all 48. Within the large cuts, nothing measured before the cut predicts which
+    seed crosses zero (AUC &le; 0.65 for every pre-cut covariate). M1 sets removal fraction,
+    entering &beta; and entering count together, and this design cannot separate them.</caption>
+  </table></div>
+
+  <div class="strip">
+    <div class="cell"><div class="lab"><b>A2 Curasao</b><span>&beta; loss at 15 k</span></div><div class="bars"><i style="height:75%"></i><i class="broken" style="height:95%"></i><i style="height:67%"></i></div><div class="cap">s0 &middot; s1 &middot; s2</div></div>
+    <div class="cell"><div class="lab"><b>A2 JG</b><span></span></div><div class="bars"><i class="broken" style="height:56%"></i><i class="broken" style="height:59%"></i><i style="height:40%"></i></div><div class="cap">s0 &middot; s1 &middot; s2</div></div>
+    <div class="cell"><div class="lab"><b>A2 Panama</b><span></span></div><div class="bars"><i style="height:64%"></i><i class="broken" style="height:87%"></i><i class="broken" style="height:81%"></i></div><div class="cap">s0 &middot; s1 &middot; s2</div></div>
+    <div class="cell"><div class="lab"><b>A6 Curasao</b><span></span></div><div class="bars"><i class="broken" style="height:78%"></i><i class="broken" style="height:100%"></i><i style="height:67%"></i></div><div class="cap">s0 &middot; s1 &middot; s2</div></div>
+    <div class="cell"><div class="lab"><b>A4 Curasao</b><span></span></div><div class="bars"><i style="height:5%"></i><i style="height:73%"></i><i style="height:12%"></i></div><div class="cap">s0 &middot; s1 &middot; s2</div></div>
+    <div class="cell"><div class="lab"><b>A7 Panama</b><span></span></div><div class="bars"><i style="height:42%"></i><i style="height:43%"></i><i style="height:28%"></i></div><div class="cap">s0 &middot; s1 &middot; s2</div></div>
+  </div>
+  <p class="dim" style="font-size:.79rem;margin-top:10px">Bar height is the largest single-step
+  drop in mean attenuation over the run; accent marks a run that lost a channel. A4/Curasao s1
+  and A7/Panama drop 40&ndash;73% at the <em>second</em> event and keep every channel.</p>
+
+  <div class="col stack" style="margin-top:30px">
+    <p><strong>Size versus discontinuity, deconfounded at n=3.</strong> A4 finishes 13&ndash;17%
+    <em>below</em> A2 on every scene (130 k vs 150 k on Curasao, 115 k vs 139 k on Panama) with
+    the same two events at the same iterations, and does not collapse. Final size is not what
+    breaks the medium.</p>
+    <p><strong>The burst does not restore &beta;.</strong> It carries identical depth statistics
+    to the post-cut state on 48/48 runs, as designed, and it is the interval in which &beta;
+    falls. Whether the same fall would occur over the next 200 ordinary iterations is not tested
+    &mdash; every M2 cell has the burst.</p>
+    <div class="verdict">
+      <p><strong>RQ3.</strong> Does primitive reduction perturb medium identifiability? Yes
+      &mdash; reproducibly, boundary-aligned, in 9 of 24 large-cut runs and 0 of 48 others.
+      <em>Why?</em> The registered answer is false. The replacement is descriptive: the size of
+      the cut, and the medium re-fit that follows it. <span class="pill open">why is open</span></p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;6</span><h2>Mechanism D, a supplementary contrast <span class="pill held">prediction held</span></h2></div>
+  <div class="col stack">
+    <p>Detaching the alpha-loss gradient from density control starves the densifier
+    continuously, with no event. Written before A0D ran: <em>the count effect will resolve; the
+    PSNR effect will not.</em></p>
+  </div>
+  <div class="scroller"><table>
+    <thead><tr><th>Scene</th><th>count</th><th>wall-clock</th><th>fps</th><th>peak render mem</th><th>PSNR</th><th>LPIPS</th></tr></thead>
+    <tbody>
+      <tr><td>Curasao</td><td class="num hot">&times;0.19<span class="z res">&minus;16.3</span></td><td class="num hot">&times;0.68<span class="z res">&minus;21.3</span></td><td class="num hot">&times;2.31<span class="z res">13.1</span></td><td class="num">&times;0.41</td><td class="num">+0.28<span class="z">0.9</span></td><td class="num hot">+0.011<span class="z res">3.9</span></td></tr>
+      <tr><td>IUI3-RedSea</td><td class="num hot">&times;0.32<span class="z res">&minus;9.4</span></td><td class="num hot">&times;0.78<span class="z res">&minus;14.8</span></td><td class="num hot">&times;1.35<span class="z res">6.5</span></td><td class="num">&times;0.57</td><td class="num">&minus;0.09<span class="z">&minus;0.3</span></td><td class="num hot">+0.024<span class="z res">32.6</span></td></tr>
+      <tr><td>JapaneseGardens</td><td class="num hot">&times;0.25<span class="z res">&minus;3.8</span></td><td class="num hot">&times;0.76<span class="z res">&minus;6.9</span></td><td class="num hot">&times;1.70<span class="z res">6.5</span></td><td class="num">&times;0.48</td><td class="num">+0.30<span class="z">1.1</span></td><td class="num hot">+0.009<span class="z res">3.0</span></td></tr>
+      <tr><td>Panama</td><td class="num hot">&times;0.33<span class="z res">&minus;3.1</span></td><td class="num hot">&times;0.81<span class="z res">&minus;3.4</span></td><td class="num hot">&times;1.56<span class="z res">4.8</span></td><td class="num">&times;0.60</td><td class="num">+0.25<span class="z">0.7</span></td><td class="num hot">+0.026<span class="z res">4.7</span></td></tr>
+    </tbody>
+    <caption>3&ndash;5&times; fewer primitives, 20&ndash;32% less training time, 40&ndash;60% less
+    render memory; PSNR unresolved on all four; LPIPS resolved worse on all four, smaller than
+    M2's for a smaller reduction. No A0D run lost a channel. The old &ldquo;&minus;0.107 dB&rdquo;
+    figure is retired; the honest figure is &ldquo;within &plusmn;0.5 dB at this
+    resolution&rdquo;.</caption>
+  </table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;7</span><h2>Operating points, described and not ranked</h2></div>
+  <div class="col stack">
+    <p>One operating point per mechanism, so a front is a description of nine cells, not a
+    curve. Non-dominated cells per scene:</p>
+  </div>
+  <div class="scroller"><table>
+    <thead><tr><th>Scene</th><th style="text-align:left">count &times; LPIPS</th><th style="text-align:left">bytes &times; LPIPS</th><th style="text-align:left">count &times; PSNR</th></tr></thead>
+    <tbody>
+      <tr><td>Curasao</td><td class="l">A0, <strong>A1</strong>, A4, A7</td><td class="l">A0, A1, A5, A6, A7</td><td class="l dim">A2, A4, A7</td></tr>
+      <tr><td>IUI3-RedSea</td><td class="l">A0, A0D, <strong>A1</strong>, A2, A4, A5</td><td class="l">A0, A0D, A1, A5, A6, A7</td><td class="l dim">A1, A4</td></tr>
+      <tr><td>JapaneseGardens</td><td class="l"><strong>A1</strong>, A3, A4, A5</td><td class="l">A1, A3, A5, A7</td><td class="l dim">A4, A5, A7</td></tr>
+      <tr><td>Panama</td><td class="l">A0, <strong>A1</strong>, A4, A5</td><td class="l">A0, A1, A3, A5, A7</td><td class="l dim">A1, A2, A4</td></tr>
+    </tbody>
+    <caption>A1 is on the count &times; LPIPS front on every scene: a 10&ndash;16&times; reduction at
+    baseline LPIPS on three scenes. A2 and A6 are dominated on three scenes by A4 and A7, which
+    have both fewer primitives and lower LPIPS. A7 is on the bytes front everywhere at
+    2.4&ndash;2.7 MB against the reference's 114&ndash;240 MB. The PSNR fronts are drawn on an
+    unresolved metric and shown in grey for that reason.</caption>
+  </table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;8 &middot; &sect;10</span><h2>What the fidelity metrics cannot see</h2></div>
+  <div class="col stack">
+    <p>Every PSNR and LPIPS number on this page scores the composed in-medium image
+    <code>&Icirc; = &#284; &middot; A + B</code>, with attenuation <code>A &le; 1</code>. Two
+    instruments look past it.</p>
+  </div>
+
+  <div class="sub">A negative attenuation renders as well as a positive one</div>
+  <div class="scroller"><table>
+    <thead><tr><th>Cell &times; scene</th><th>collapsed / intact</th><th>&Delta;PSNR, in sd</th><th>&Delta;LPIPS, in sd</th><th style="text-align:left">&beta;<sub>att,b</sub> collapsed &rarr; intact</th></tr></thead>
+    <tbody>
+      <tr><td>A2 Curasao</td><td class="num">1 / 2</td><td class="num">+1.42</td><td class="num">&minus;0.21</td><td class="l mono">&minus;0.048 &rarr; 1.17, 1.36</td></tr>
+      <tr><td>A2 JapaneseGardens</td><td class="num">2 / 1</td><td class="num">&minus;0.89</td><td class="num">+1.19</td><td class="l mono">&minus;0.02, &minus;0.04 &rarr; 1.00</td></tr>
+      <tr><td>A2 Panama</td><td class="num">2 / 1</td><td class="num">&minus;0.38</td><td class="num">+1.63</td><td class="l mono">&minus;0.06, &minus;0.05 &rarr; 1.21</td></tr>
+      <tr><td>A6 Curasao</td><td class="num">2 / 1</td><td class="num">&minus;0.27</td><td class="num">+1.93</td><td class="l mono">&minus;0.03, &minus;0.06 &rarr; 1.18</td></tr>
+      <tr><td>A6 JapaneseGardens</td><td class="num">1 / 2</td><td class="num hot">+4.54</td><td class="num">&minus;0.70</td><td class="l mono">&minus;0.056 &rarr; 1.21, 1.07</td></tr>
+      <tr><td>A6 Panama</td><td class="num">1 / 2</td><td class="num">&minus;0.05</td><td class="num">+0.24</td><td class="l mono">&minus;0.038 &rarr; 0.93, 1.27</td></tr>
+    </tbody>
+    <caption>Twelve comparisons, median 0.8 sd, sign inconsistent. The one beyond 2 sd has the
+    collapsed run <em>better</em>, at n=1 against 2 on the scene with a 0.13 dB floor. A
+    physically meaningless medium renders held-out views as well as a plausible one, because
+    &#284; absorbs whatever &beta; does not model.</caption>
+  </table></div>
+
+  <div class="sub">Quantisation moves the restored image ~23 dB; the in-medium image barely registers it</div>
+  <div class="scroller"><table>
+    <thead><tr><th>Seed-0 run</th><th>&#284; gap, continuous vs codebook</th><th>&Icirc; vs truth, continuous</th><th>&Icirc; vs truth, codebook</th><th>in-medium loss</th></tr></thead>
+    <tbody>
+      <tr><td>A3 Curasao</td><td class="num hot">23.3</td><td class="num">28.6</td><td class="num">29.5</td><td class="num">0.9</td></tr>
+      <tr><td>A3 IUI3-RedSea</td><td class="num hot">23.1</td><td class="num">23.6</td><td class="num">26.7</td><td class="num">3.1</td></tr>
+      <tr><td>A3 Panama</td><td class="num hot">17.0</td><td class="num">21.9</td><td class="num">28.7</td><td class="num">6.8</td></tr>
+      <tr><td>A5 Curasao</td><td class="num hot">22.9</td><td class="num">28.3</td><td class="num">29.9</td><td class="num">1.6</td></tr>
+      <tr><td>A6 Curasao</td><td class="num hot">26.0</td><td class="num">27.8</td><td class="num">29.0</td><td class="num">1.3</td></tr>
+      <tr><td>A7 Curasao</td><td class="num hot">23.8</td><td class="num">29.6</td><td class="num">30.5</td><td class="num">0.9</td></tr>
+      <tr><td class="dim">&hellip; sixteen runs</td><td class="num dim">17&ndash;27</td><td class="num dim">21.9&ndash;29.6</td><td class="num dim">22.8&ndash;30.5</td><td class="num dim">0.6&ndash;6.8, med 1.4</td></tr>
+    </tbody>
+    <caption>One model, two states of three attributes, everything else fixed. The codebook
+    state reproduces each run's evaluated PSNR to &le;0.26 dB. The two states render the water
+    within 0.6&ndash;3.1 dB of each other and restore it 17&ndash;27 dB apart; the two figures are
+    uncorrelated (Spearman &minus;0.14). Consistency, not accuracy: the tool cannot say which
+    &#284; is nearer the truth. n=1 per scene, never a headline.</caption>
+  </table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;9</span><h2>Most of the baseline is invisible, and so is vanilla</h2></div>
+  <div class="scroller"><table>
+    <thead><tr><th>Fraction of primitives rendered</th><th>A0</th><th>SS, three seeds</th><th>A0D</th><th>A1</th><th>A2</th><th>A4</th></tr></thead>
+    <tbody>
+      <tr><td>Curasao</td><td class="num hot">27%</td><td class="num hot">23&ndash;26%</td><td class="num">68%</td><td class="num">87%</td><td class="num">96%</td><td class="num">98%</td></tr>
+      <tr><td>IUI3-RedSea</td><td class="num hot">40%</td><td class="num hot">29&ndash;43%</td><td class="num">76%</td><td class="num">94%</td><td class="num">88%</td><td class="num">100%</td></tr>
+      <tr><td>JapaneseGardens</td><td class="num hot">41%</td><td class="num hot">36&ndash;37%</td><td class="num">74%</td><td class="num">87%</td><td class="num">93%</td><td class="num">99%</td></tr>
+      <tr><td>Panama</td><td class="num hot">36%</td><td class="num hot">26&ndash;37%</td><td class="num">65%</td><td class="num">78%</td><td class="num">94%</td><td class="num">95%</td></tr>
+    </tbody>
+    <caption>Sixty to seventy-five per cent of the baseline's primitives sit below the visibility
+    threshold, and the upstream checkout carries the same halo. It is what M2 and D remove and
+    what M1 never creates: A2's 25&times; on Curasao is roughly 7&times; of the visible population.
+    Detached-cluster inflation of 313&times; appears on one of vanilla's three Panama seeds
+    &mdash; that pathology belongs to the baseline optimiser, not to any mechanism. Seed 0 only
+    for the trained cells.</caption>
+  </table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;11</span><h2>Against the archived campaign</h2></div>
+  <div class="col stack">
+    <p>A0&ndash;A3, four scenes, three seeds in both campaigns. <strong>LPIPS replicates on all
+    sixteen comparisons. Count replicates for A1 to three figures</strong> &mdash; dense
+    initialisation is deterministic &mdash; and for A2 within 3%. Twelve of sixteen PSNR
+    comparisons replicate.</p>
+    <p>On IUI3-RedSea, A0 rose by 0.76 dB and A3 fell by 0.95 dB, non-overlapping ranges both
+    times. The new A0 agrees with vanilla on that scene, so the new figure is the anchored one;
+    but M3's PSNR effect there was +0.35 in the old campaign and is &minus;1.36 in this one, and
+    is downgraded to <code>UNRESOLVED across campaigns</code>. The archived A3 manifest reads
+    <code>-dirty</code>: at least one old A3 run was trained from an uncommitted tree, which is
+    the likeliest home of the discrepancy and cannot be recovered now.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">RQ</span><h2>Research questions</h2></div>
+  <div class="col">
+    <dl class="rq">
+      <dt>RQ1</dt><dd><b>Supported.</b> Each mechanism moves its own target cost beyond seed
+        dispersion on every scene. Initialisation carries the only resolved fidelity gains and
+        an intact medium in every run it touches; simplification buys the most reduction and
+        breaks the physics on 9 of 24 runs; quantisation delivers 2.72&times; storage and nothing
+        else, as forecast.</dd>
+      <dt>RQ2</dt><dd><b>Answered on LPIPS and count; undetermined on PSNR by construction.</b>
+        The mechanisms do not compose additively. Initialisation with simplification is
+        sub-additive on count because the budget binds, and costs less perceptually than the
+        sum of its parts.</dd>
+      <dt>RQ3</dt><dd><b>The coupling is established; the mechanism is open.</b> The registered
+        account &mdash; dispersion, not count &mdash; failed its pre-written test and is
+        withdrawn. What the data show is that the medium falls during the re-fit after every
+        86&ndash;95% cut and never after a 29&ndash;36% one, and that nothing measured before the
+        cut predicts which seed crosses zero.</dd>
+      <dt>RQ4</dt><dd><b>Unchanged</b> from the main-effects campaign: five integration
+        properties, each found by running the pipeline rather than analysing it.</dd>
+    </dl>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">&sect;14</span><h2>What cannot be concluded</h2></div>
+  <div class="col">
+    <ul style="margin-top:20px">
+      <li><strong>Any PSNR interaction.</strong> Undetermined by construction at three seeds; several
+      clear 2&nbsp;SE and flip sign scene to scene, which is what noise at the limit looks like.</li>
+      <li><strong>Why the medium falls.</strong> The one registered account is withdrawn. Removal
+      fraction, entering &beta; and entering count are set together by M1 and cannot be separated by
+      this design.</li>
+      <li><strong>Which seed collapses.</strong> Reproducible as a rate, unpredictable as an event.</li>
+      <li><strong>Restoration accuracy.</strong> The &#284; instrument shows the two states differ by
+      17&ndash;27 dB and cannot say which is nearer the truth; the far-field location of the difference
+      is inferred from the formation model, not mapped.</li>
+      <li><strong>Anything about operating points.</strong> One budget, one codebook size; no ranking
+      across budgets.</li>
+      <li><strong>IUI3-RedSea.</strong> The scene on which every mechanism costs perceptual quality,
+      no M2 run collapses, and PSNR does not replicate across campaigns. Every per-scene claim is
+      checked against it before it is generalised.</li>
+      <li><strong>Geometry and &#284; are one seed per cell.</strong></li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">LEDGER</span><h2>What changed, ranked as the plan ranked it</h2></div>
+  <div class="grid2">
+    <div class="card">
+      <span class="tag">1 &middot; failed</span>
+      <h3>The dispersion account is withdrawn</h3>
+      <p>The thesis reverts to the approved framing: a controlled factorial with a measured,
+      reproducible, boundary-aligned coupling and an unexplained failed remedy. The <em>why</em>
+      is open, and the chapter says so in those words.</p>
+    </div>
+    <div class="card">
+      <span class="tag ok">2 &middot; held</span>
+      <h3>D resolves on count from a sound baseline</h3>
+      <p>3&ndash;5&times; at a resolved but small perceptual cost and an unresolved PSNR cost. The
+      thesis has a positive engineering result.</p>
+    </div>
+    <div class="card">
+      <span class="tag ok">3 &middot; rate held, reason failed</span>
+      <h3>M1 cells do not collapse</h3>
+      <p>0 of 24 against 9 of 24. The stated reason was the withdrawn account. What can be said:
+      M1's cloud enters the first event at ~224 k, so the budget removes a third, not nine
+      tenths.</p>
+    </div>
+    <div class="card">
+      <span class="tag ok">4 &middot; held on three scenes</span>
+      <h3>Simplification and quantisation are sub-additive on quality</h3>
+      <p>A smaller population is more sensitive to lossy attribute compression. The compression
+      literature's premise transfers.</p>
+    </div>
+    <div class="card">
+      <span class="tag ok">5 &middot; held</span>
+      <h3>A0 is vanilla SeaSplat to within the margin</h3>
+      <p>The one that mattered most. Every downstream contrast is anchored to a baseline that
+      matches the published method on the metrics the contrasts use.</p>
+    </div>
+    <div class="card">
+      <span class="tag">retired</span>
+      <h3>Two figures, one instrument reading</h3>
+      <p>The dispersion account; the &ldquo;&minus;0.107 dB&rdquo; for D; and this author's
+      reading of the &#284; gap as latent drift, which the continuous-state check refuted on
+      14 of 16 runs.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="col">
+    Campaign 2026-09: SS reference, A0&ndash;A7 factorial, A0D supplementary; 120 runs, one code
+    version, one GPU type. Effect sizes are differences over the baseline's per-scene standard
+    deviation; no claim of statistical significance in the hypothesis-testing sense is made.
+    Full derivations, predictions as registered, and every failed one, in
+    <code>analysis/campaign-2026-09/FINDINGS.md</code>.
+  </div>
+</footer>
+
+</div>
