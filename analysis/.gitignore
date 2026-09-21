@@ -1,0 +1,7 @@
+# Campaign data is large and lives on Drive; the README is the contract.
+campaign-*/*.csv
+campaign-*/*.json
+campaign-*/*.txt
+campaign-*/*.md
+campaign-*/diagnostics/
+!campaign-*/README.md
