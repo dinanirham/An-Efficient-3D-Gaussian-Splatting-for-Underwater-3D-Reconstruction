@@ -90,6 +90,51 @@ def psnr_pooled(a: np.ndarray, b: np.ndarray) -> float:
     return min(PSNR_CAP, 10.0 * float(np.log10(1.0 / mse)))
 
 
+# The continuous-state check (FINDINGS.md section 10). Under a straight-through
+# quantizer with no commitment term (quantize.py:201) nothing keeps the
+# continuous parameter near its centroid, so the "continuous state" this tool
+# renders may be a drifted latent rather than a model. Scoring the IN-MEDIUM
+# image from each state against ground truth decides which: a latent scores
+# far below the codebook state; a model scores alike. Three dB is six times
+# the campaign's largest per-scene PSNR sd, and an order of magnitude below
+# the ~19 dB gap the drift reading predicts.
+DRIFT_MARGIN_DB = 3.0
+
+
+def compose_in_medium(j: Any, attenuation: Any, backscatter: Any) -> Any:
+    """I = clamp(J * attenuation + backscatter, 0, 1) -- render_uw.py's formation.
+
+    Backend-agnostic so the formation can be tested without a GPU: torch
+    tensors clamp, numpy arrays clip, and the arithmetic is the same.
+    """
+    out = j * attenuation + backscatter
+    if hasattr(out, "clamp"):
+        return out.clamp(0.0, 1.0)
+    return np.clip(out, 0.0, 1.0)
+
+
+def continuous_state_verdict(psnr_truth_continuous: float,
+                             psnr_truth_codebook: float,
+                             margin_db: float = DRIFT_MARGIN_DB) -> str:
+    """What the continuous parameters are, decided by how their image scores.
+
+    DRIFT     -- the continuous state renders far worse than the codebook
+                 state: it is a latent, the J-hat gap measures drift, and the
+                 instrument's premise does not hold (section 10 stands).
+    MODEL     -- the two score alike: the continuous state is a real model and
+                 the J-hat gap is quantization damage (section 10 is rewritten).
+    INVERTED  -- the continuous state renders far BETTER than the codebook
+                 state, which the trained forward pass cannot produce; the
+                 override is not being applied and the tool has a bug.
+    """
+    gap = psnr_truth_codebook - psnr_truth_continuous
+    if gap > margin_db:
+        return "DRIFT"
+    if gap < -margin_db:
+        return "INVERTED"
+    return "MODEL"
+
+
 def reconstruct_quantized(
     centers: np.ndarray, indices: np.ndarray, vec_dim: int
 ) -> np.ndarray:
@@ -190,8 +235,10 @@ def measure_run(run: StoredRun, source_path: str, resolution: int = -1) -> Optio
     import torch
     from argparse import ArgumentParser
 
-    from gaussian_renderer import render
+    from deepseecolor.models import AttenuateNetV3, BackscatterNetV2
+    from gaussian_renderer import render, render_depth
     from scene import GaussianModel, Scene
+    from utils.depth_stats import normalise_depth
 
     ply = run.store.parent / "point_cloud" / "iteration_30000" / "point_cloud.ply"
     if not ply.exists():
@@ -223,6 +270,40 @@ def measure_run(run: StoredRun, source_path: str, resolution: int = -1) -> Optio
     pipe = PipelineParams(_pp).extract(_pp.parse_args([]))
     bg = torch.zeros(3, device="cuda")
 
+    # The run's own medium, in the classes it was trained with, so that the
+    # in-medium image is formed exactly as train.py and render_uw.py form it.
+    # The store is named compressed_<iter>; the medium weights carry the same
+    # iteration.
+    it = int(run.store.name.split("_")[-1])
+    run_dir = run.store.parent
+    at_model = AttenuateNetV3(scale=5.0).cuda()
+    bs_model = BackscatterNetV2(use_residual=False, scale=5.0).cuda()
+    at_model.load_state_dict(torch.load(run_dir / f"attenuate_{it}.pth"))
+    bs_model.load_state_dict(torch.load(run_dir / f"backscatter_{it}.pth"))
+    at_model.eval()
+    bs_model.eval()
+
+    # The depth-normalisation flags the run trained with, from its manifest;
+    # the OptimizationParams defaults otherwise (they have never been changed).
+    depth_flags: dict[str, Any] = {
+        "normalize_depth": 1.0, "filter_depth": True, "norm_depth_max": True,
+    }
+    cfg_path = run_dir / "run_config.json"
+    if cfg_path.exists():
+        resolved = json.loads(cfg_path.read_text(encoding="utf-8")).get("resolved_args", {})
+        depth_flags.update({k: resolved[k] for k in depth_flags if k in resolved})
+
+    def in_medium(j: torch.Tensor, cam: Any) -> torch.Tensor:
+        """Compose J into the water along the run's own depth, as training did."""
+        probe = render_depth(cam, gaussians, pipe, bg)
+        depth, _, _ = normalise_depth(
+            probe["depth"], probe["alpha"],
+            depth_flags["normalize_depth"], depth_flags["filter_depth"],
+            depth_flags["norm_depth_max"], nan_label=None,
+        )
+        d = depth.unsqueeze(0)
+        return compose_in_medium(j.unsqueeze(0), at_model(d), bs_model(d)).squeeze(0)
+
     # Codebook values as raw-parameter overrides, matching AttributeQuantizer.apply.
     overrides = {}
     for name, arr in run.groups.items():
@@ -232,20 +313,34 @@ def measure_run(run: StoredRun, source_path: str, resolution: int = -1) -> Optio
         overrides[GROUP_TO_ATTR[name]] = t
 
     per_view: list[float] = []
+    truth_cont: list[float] = []
+    truth_quant: list[float] = []
     with torch.no_grad():
         for cam in cams:
+            gt = cam.original_image.cuda().clamp(0, 1)
+
+            # Continuous state: J-hat, and the in-medium image scored against
+            # ground truth. The depth probe depends on scale and rotation, so
+            # it is taken under the same override state as the colour render.
             gaussians.clear_quant_override()
             j_cont = render(cam, gaussians, pipe, bg)["render"].clamp(0, 1)
+            i_cont = in_medium(j_cont, cam)
 
+            # Codebook state: the same, with the three attributes overridden.
             for attr, t in overrides.items():
                 gaussians.set_quant_override(attr, t)
             j_quant = render(cam, gaussians, pipe, bg)["render"].clamp(0, 1)
+            i_quant = in_medium(j_quant, cam)
             gaussians.clear_quant_override()
 
             per_view.append(psnr_pooled(j_cont.cpu().numpy(), j_quant.cpu().numpy()))
+            truth_cont.append(psnr_pooled(i_cont.cpu().numpy(), gt.cpu().numpy()))
+            truth_quant.append(psnr_pooled(i_quant.cpu().numpy(), gt.cpu().numpy()))
 
     if not per_view:
         return None
+    tc = float(np.mean(truth_cont))
+    tq = float(np.mean(truth_quant))
     return {
         "n_views": len(per_view),
         "psnr_mean": round(float(np.mean(per_view)), 4),
@@ -253,6 +348,14 @@ def measure_run(run: StoredRun, source_path: str, resolution: int = -1) -> Optio
         "psnr_max": round(float(np.max(per_view)), 4),
         "psnr_sd": round(float(np.std(per_view)), 4),
         "per_view": [round(v, 4) for v in per_view],
+        # The continuous-state check: in-medium PSNR against ground truth from
+        # each state. The codebook figure should reproduce eval_metrics.json's
+        # Test PSNR for this run to within the render path's tolerance.
+        "truth_psnr_continuous": round(tc, 4),
+        "truth_psnr_codebook": round(tq, 4),
+        "truth_per_view_continuous": [round(v, 4) for v in truth_cont],
+        "truth_per_view_codebook": [round(v, 4) for v in truth_quant],
+        "verdict": continuous_state_verdict(tc, tq),
     }
 
 
@@ -285,8 +388,9 @@ def main() -> int:
     print(f"{len(runs)} quantized run(s) found; {with_ply} carry a full-precision PLY.")
     print("Only those are measurable: the PLY holds the continuous parameters this")
     print("metric compares against, and train.py keeps it for seed 0 alone.\n")
-    print(f"{'run':<30} {'views':>6} {'J-hat PSNR':>11} {'min':>8} {'max':>8}")
-    print("-" * 68)
+    print(f"{'run':<30} {'views':>6} {'J-hat PSNR':>11} {'min':>8} {'max':>8} "
+          f"{'I~GT cont':>10} {'I~GT code':>10} {'verdict':>9}")
+    print("-" * 100)
 
     report: dict[str, Any] = {}
     for r in runs:
@@ -314,7 +418,9 @@ def main() -> int:
                                       "store; needs continuous parameters"}
             continue
         print(f"{rid:<30} {m['n_views']:>6} {m['psnr_mean']:>11.2f} "
-              f"{m['psnr_min']:>8.2f} {m['psnr_max']:>8.2f}")
+              f"{m['psnr_min']:>8.2f} {m['psnr_max']:>8.2f} "
+              f"{m['truth_psnr_continuous']:>10.2f} {m['truth_psnr_codebook']:>10.2f} "
+              f"{m['verdict']:>9}")
         report[rid] = m
 
     print()
@@ -324,6 +430,22 @@ def main() -> int:
     print()
     print(f"A value at the {PSNR_CAP:.0f} dB cap means the two renders were identical,")
     print("which is a BUG signal, not a result -- the override did not take.")
+
+    verdicts = [m["verdict"] for m in report.values()
+                if isinstance(m, dict) and "verdict" in m]
+    if verdicts:
+        counts = {v: verdicts.count(v)
+                  for v in ("DRIFT", "MODEL", "INVERTED") if v in verdicts}
+        print()
+        print(f"Continuous-state check ({len(verdicts)} runs): {counts}")
+        print("  DRIFT    -- the continuous parameters are a latent, not a model; the")
+        print("              J-hat gap above measures straight-through drift, and")
+        print("              restoration quality stays unmeasured (FINDINGS section 10 stands).")
+        print("  MODEL    -- the continuous state renders as well as the codebook state;")
+        print("              the J-hat gap is quantization damage (section 10 is rewritten).")
+        print("  INVERTED -- the continuous state renders better in the water than the")
+        print("              trained codebook state; the override is not taking. Bug.")
+        print("  'I~GT code' should match each run's eval_metrics.json Test PSNR.")
 
     if args.json:
         Path(args.json).write_text(json.dumps(report, indent=2), encoding="utf-8")

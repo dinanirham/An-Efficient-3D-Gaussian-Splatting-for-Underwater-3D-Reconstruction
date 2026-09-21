@@ -48,8 +48,11 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from source.storage import index_bits, pack_indices, unpack_indices  # noqa: E402
 from tools.j_consistency import (  # noqa: E402
+    DRIFT_MARGIN_DB,
     GROUP_TO_ATTR,
     STORE_GLOB,
+    compose_in_medium,
+    continuous_state_verdict,
     discover_quantized_runs,
     psnr_pooled,
     reconstruct_quantized,
@@ -237,6 +240,39 @@ def t11_store_glob_matches_what_train_py_writes():
     return ok, f"train.py writes compressed_<iter>; glob {STORE_GLOB!r} matches it"
 
 
+def t12_verdict_separates_drift_from_a_real_model():
+    """DECISIVE. The check that decides whether section 10 stands or falls.
+
+    The continuous parameters under a straight-through quantizer with no
+    commitment term are a latent, not a model: nothing keeps them near their
+    centroid. If rendering the in-medium image from them scores far below the
+    codebook state against ground truth, the J-hat gap measures drift and the
+    instrument's premise fails. If they score alike, the continuous state is a
+    real model and the gap is quantization damage, as the tool assumed.
+    """
+    cases = [
+        ((10.0, 29.0), "DRIFT"),
+        ((29.0 - DRIFT_MARGIN_DB + 0.1, 29.0), "MODEL"),
+        ((29.0, 29.0), "MODEL"),
+        ((29.0 - DRIFT_MARGIN_DB - 0.1, 29.0), "DRIFT"),
+        ((33.0, 29.0), "INVERTED"),
+    ]
+    bad = [(a, want, continuous_state_verdict(*a)) for a, want in cases
+           if continuous_state_verdict(*a) != want]
+    return not bad, ("all five boundaries classified" if not bad else f"wrong: {bad}")
+
+
+def t13_compose_is_the_baseline_image_formation():
+    """I = clamp(J * attenuation + backscatter, 0, 1), exactly as render_uw.py."""
+    j = np.array([[[0.5, 1.0], [0.2, 0.0]]] * 3)
+    att = np.full_like(j, 0.5)
+    bs = np.full_like(j, 0.3)
+    got = compose_in_medium(j, att, bs)
+    want = np.clip(j * 0.5 + 0.3, 0.0, 1.0)
+    ok = got.shape == j.shape and np.allclose(got, want) and got.max() <= 1.0
+    return ok, "J*att + bs, clamped to [0, 1]"
+
+
 def main() -> int:
     print("=" * 68)
     print("CD-28  restored-image (J-hat) self-consistency")
@@ -258,6 +294,10 @@ def main() -> int:
           t10_group_mapping_covers_every_quantized_attribute)
     check("T11 store glob matches what train.py writes  <-- decisive",
           t11_store_glob_matches_what_train_py_writes)
+    check("T12 verdict separates drift from a real model  <-- decisive",
+          t12_verdict_separates_drift_from_a_real_model)
+    check("T13 compose is the baseline image formation",
+          t13_compose_is_the_baseline_image_formation)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)
