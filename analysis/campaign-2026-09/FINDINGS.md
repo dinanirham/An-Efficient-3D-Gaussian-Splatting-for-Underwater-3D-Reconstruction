@@ -13,9 +13,21 @@ covers all 120; 48 carry dispersion ratios (the M2 cells); 12 are final-state-on
 
 **Provenance.** `effective_optimizer_steps` is 43 000 on every non-M2 cell and 43 400 on every M2
 cell — exactly D-8's accounting plus two CD-6 bursts of 200. GPU is A100-SXM4-40GB on all 108
-trained cells; SS's 12 are blank because `measure_reference` does not record it. **`git_commit`
-is empty in every row** — the collector did not capture it, so the one-code-version claim cannot
-be verified from this table. *Action: sample `run_config.json` from three cells on Drive.*
+trained cells; SS's 12 are blank because `measure_reference` does not record it.
+
+**Ledger.** 120 of 120 `done`, one stage per cell, 15–21 September 2026, one GPU type
+throughout, 107 GPU-hours in total (9–13 h per cell). Four runs needed more than one attempt
+(A0/JG s0, A3/JG s2, A6/JG s0 twice; A3/IUI3 s1 three times), each with an empty error field —
+the Colab disconnect signature — and each completed on the retry that is in the table. The
+ledger carries no commit sha.
+
+**`git_commit` is empty in every row, and the reason is now known:** every run directory
+holds a `run_config.json` with `git_sha` at the top level, and the collector read
+`cfg["git"]["commit"]`, a key the manifest never wrote. Fixed in `collect_results.provenance()`
+(verify_collect_results T1–T4); the column populates on the next `02_analysis` run. Until then
+the one-code-version claim rests on the ledger's span and the worker log. The sampled manifest
+from the archived campaign (`run_config_A3_Curasao_s0.json`, 10 Sept) reads
+`3c165ae1c-dirty` — **a dirty tree** — which §11 needs.
 
 **Noise floor — A0's per-scene sd over three repeats, this campaign.** Supersedes the prior.
 
@@ -462,40 +474,64 @@ attributed.
 **M2 cells have the tightest geometry:** inflation 1.8–6.8×, occupancy 1.3–3.3 % of the
 footprint grid, the smallest radius ratios (2.5–7.5). What survives the cut is compact.
 
-## §10. Ĵ self-consistency — EXP, n = 1 per scene — **the instrument's premise does not hold**
+## §10. Ĵ self-consistency — EXP, n = 1 per scene — **the check ran; the drift reading was wrong**
 
 Sixteen runs (seed 0 of A3, A5, A6, A7), each the same model rendered twice with the three
-quantized attributes in their continuous and their codebook states:
+quantized attributes in their continuous and their codebook states. The first version of this
+section read the 17–27 dB Ĵ gap as straight-through drift — the continuous parameters a
+latent, never rendered, unconstrained by any commitment term — and predicted that the
+continuous state would score ~10 dB in the water against ~29 for the codebook state. The
+check was added to the tool and run. Codebook-state Î reproduces each run's `eval_metrics.json`
+Test PSNR to within 0.00–0.26 dB on all sixteen, so the composition path is right and the
+columns mean what they say.
 
-| | A3 | A5 | A6 | A7 |
-|---|---:|---:|---:|---:|
-| Curasao | 23.3 | 22.9 | 26.0 | 23.8 |
-| IUI3 | 23.1 | 24.5 | 26.2 | 25.3 |
-| JapaneseGardens | 25.3 | 24.5 | 26.1 | 22.2 |
-| Panama | **17.0** | 26.6 | 26.5 | 26.0 |
+| | Ĵ gap (cont vs code) | Î vs truth, continuous | Î vs truth, codebook | in-medium loss | verdict |
+|---|---:|---:|---:|---:|---|
+| A3 Curasao | 23.3 | 28.6 | 29.5 | 0.9 | MODEL |
+| A3 IUI3 | 23.1 | 23.6 | 26.7 | 3.1 | DRIFT |
+| A3 JapaneseGardens | 25.3 | 23.0 | 23.6 | 0.6 | MODEL |
+| A3 Panama | **17.0** | 21.9 | 28.7 | **6.8** | DRIFT |
+| A5 Curasao | 22.9 | 28.3 | 29.9 | 1.6 | MODEL |
+| A5 IUI3 | 24.5 | 24.7 | 27.3 | 2.6 | MODEL |
+| A5 JapaneseGardens | 24.5 | 23.3 | 24.1 | 0.8 | MODEL |
+| A5 Panama | 26.6 | 25.2 | 27.8 | 2.6 | MODEL |
+| A6 Curasao | 26.0 | 27.8 | 29.0 | 1.3 | MODEL |
+| A6 IUI3 | 26.2 | 24.9 | 26.6 | 1.8 | MODEL |
+| A6 JapaneseGardens | 26.1 | 22.1 | 22.8 | 0.7 | MODEL |
+| A6 Panama | 26.5 | 27.0 | 28.0 | 0.9 | MODEL |
+| A7 Curasao | 23.8 | 29.6 | 30.5 | 0.9 | MODEL |
+| A7 IUI3 | 25.3 | 25.3 | 27.1 | 1.8 | MODEL |
+| A7 JapaneseGardens | 22.2 | 22.8 | 24.0 | 1.3 | MODEL |
+| A7 Panama | 26.0 | 25.9 | 27.9 | 2.0 | MODEL |
 
-Predicted range: high-30s to 40s dB. **Observed: 17–27 dB.** The two states of the same model
-differ by more than the model's own in-medium error against ground truth (A3 test PSNR 26–30
-dB).
+**MODEL on 14 of 16.** The continuous state renders the water 0.6–3.1 dB worse than the
+codebook state (median 1.4), not ~19 dB worse. It is a slightly degraded model, not a latent.
+The STE does let it drift, and the drift is visible — 1–3 dB in-medium is the size of a
+mechanism's main effect — but it is an order of magnitude too small to account for the Ĵ gap,
+and **the two are uncorrelated across the sixteen runs (Spearman −0.14)**. A3/Panama, the one
+run with a large in-medium loss (6.8 dB), is also the one with the smallest Ĵ gap (17 dB), and
+that is the wrong direction for a drift account.
 
-The likely reason is in the quantizer, not the tool. `quantize.py:201` is a straight-through
-estimator with no commitment term: forward uses the centroid, backward updates the continuous
-parameter, and *nothing in the loss keeps the continuous value near its centroid*. From
-iteration 22 000 to 30 000 the continuous `_features_dc`, `_scaling`, `_rotation` are latent
-variables whose only role is the nearest-centroid assignment; they are never rendered. The
-"continuous state" the tool renders is therefore not an unquantized model — it is a latent that
-has drifted for 8 000 iterations. The tool's premise, *swapping between the two states holds
-everything else fixed and isolates quantization's effect on Ĵ*, is true of the swap and false
-of the interpretation.
+**So the Ĵ gap is what the tool was built to expose, and the section is rewritten as it said
+it would be.** Two states of one model that render the in-medium image within ~1.4 dB of each
+other produce restored images that differ by 17–27 dB PSNR from each other. The quantization
+of three attributes changes Ĵ far more than it changes Î. That is the founding premise of the
+instrument, demonstrated: what the composed metrics score is Ĵ ⊙ A + B with A ≤ 1, and the
+part of Ĵ that A suppresses is free to move without the loss noticing. Every LPIPS and PSNR
+number in this document is a statement about Î, and §8 already showed Î is indifferent to a
+negative attenuation coefficient; this section shows it is indifferent to a ~23 dB change in
+the restoration as well.
 
-**Reported as:** the measurement was made, the number is not a restoration-quality measure, and
-the question it was built to answer — whether quantization damages Ĵ in the far field the
-composed metrics cannot see — is **unmeasured** at the end of this campaign. One check would
-settle whether the reading above is right or the tool is wrong: render Î from the continuous
-state and score it against ground truth. ~10 dB means drift, and this section stands; ~29 dB
-means the tool has a bug, and this section is rewritten. That check is a one-line addition to
-`j_consistency.py` and is left for the user to run on Colab; nothing in this document depends
-on its outcome except this section.
+**What it is not.** A consistency measure — the tool cannot say whether the codebook Ĵ or the
+continuous Ĵ is nearer the true medium-free image, only that they are far apart. n = 1 per
+scene. And the far-field attribution is inferred from the image-formation model, not measured:
+a per-depth-bin breakdown of the Ĵ difference would show *where* the two states disagree, and
+is not in this campaign. Reported as secondary; never a headline.
+
+**The prediction record.** Both figures I wrote before the check ran — ~10 dB for drift, ~29
+dB for a model — were wrong; the result sat between them and closer to the second. The
+instrument was right and its author was not. The verdict thresholds (3 dB) were fixed before
+the data were seen and are kept.
 
 ## §11. Replication across campaigns — EXP
 
@@ -564,10 +600,10 @@ about n = 3, not about the mechanism.
 **Unpredictable at this instrument set.** Which large-cut seed crosses zero (§5, point 3). AUC ≤
 0.65 for every pre-cut covariate. The collapse is reproducible as a rate and not as an event.
 
-**Unmeasured.** Restoration quality (§10). The instrument built for it measures latent drift
-under a straight-through quantizer with no commitment term, and the far-field question it was
-meant to answer is open. Whether the medium-only burst *causes* the β fall or merely hosts it
-(§5e) — every M2 cell has the burst; no cell lacks it.
+**Unmeasured.** Restoration *accuracy* (§10): the instrument shows the two states' Ĵ differ
+by 17–27 dB and cannot say which is nearer the truth, and the far-field location of the
+difference is inferred from the formation model, not mapped. Whether the medium-only burst
+*causes* the β fall or merely hosts it (§5e) — every M2 cell has the burst; no cell lacks it.
 
 **Confounded.** M1's three protections — removal fraction, entering β, entering count — are set
 together by M1 and cannot be separated by this design (§5, point 5). Any of the three, or
@@ -590,9 +626,11 @@ on count do not resolve on those scenes for the same reason.
 **One seed per cell for geometry and Ĵ.** §9 and §10 are n = 1 per scene. A3/Curasao's 1 301×
 inflation and A3/Panama's 17 dB are single observations and are labelled so.
 
-**Provenance.** `git_commit` is empty in all 120 rows and in the archived campaign. The one-code-
-version claim rests on the run ledger and the worker log, not on the results table. *Action
-outstanding:* sample `run_config.json` from three cells on Drive.
+**Provenance.** `git_commit` is empty in all 120 rows and in the archived campaign because the
+collector read a key the manifest never wrote (§0); fixed, and the column populates on the next
+collection. The archived campaign's sampled A3 manifest reads `-dirty`: at least one old A3 run
+was trained from an uncommitted tree, which is the most likely home of §11's non-replication and
+cannot be recovered now.
 
 ---
 
@@ -617,6 +655,7 @@ Ranked as PLAN.md ranked it, with the outcome.
 
 Three things this campaign established that no prior run had: the baseline is sound (§1); 60–75 %
 of the baseline's primitives are invisible and vanilla carries the same halo (§9); the medium
-falls during the burst after every large cut and never after a small one (§5). Two things it
-retired: the dispersion account, and the "−0.107 dB" figure for D. One thing it could not do:
-say why.
+falls during the burst after every large cut and never after a small one (§5); and the
+restored image moves ~23 dB under a quantization the in-medium image barely registers (§10).
+Two things it retired: the dispersion account, and the "−0.107 dB" figure for D. One thing it
+could not do: say why the medium falls.

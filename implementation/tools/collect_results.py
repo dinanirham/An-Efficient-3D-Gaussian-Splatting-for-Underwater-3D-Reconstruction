@@ -179,6 +179,26 @@ def read_diagnostics(path: Path) -> dict[str, Any]:
 # --- per-run collection ----------------------------------------------------
 
 
+def provenance(cfg: dict[str, Any]) -> dict[str, Any]:
+    """The provenance fields of a run, read from `run_config.json` as
+    `utils.preflight.write_manifest` writes it: top-level `git_sha`, `gpu`
+    (a dict with `name`), and `resolved_args`.
+
+    The first version read `cfg["git"]["commit"]` and `cfg["args"]` -- keys
+    the writer never wrote -- and both campaigns' tables carried an empty
+    `git_commit` in every row as a result. A `-dirty` suffix is kept: it is
+    the single most consequential provenance fact a run can carry.
+    """
+    sha = str(cfg.get("git_sha") or "")
+    dirty = sha.endswith("-dirty")
+    short = sha[:-len("-dirty")][:9] if dirty else sha[:9]
+    return {
+        "git_commit": f"{short}-dirty" if dirty and short else short,
+        "gpu": (cfg.get("gpu") or {}).get("name", ""),
+        "args": cfg.get("resolved_args") or cfg.get("args") or {},
+    }
+
+
 def collect_runs(output_root: Path, split: str = "Test") -> list[dict[str, Any]]:
     runs: list[dict[str, Any]] = []
     root = output_root / "runs"
@@ -237,10 +257,10 @@ def collect_runs(output_root: Path, split: str = "Test") -> list[dict[str, Any]]
                         "floats_per_primitive", ""
                     )
 
-                cfg = _read_json(seed_dir / "run_config.json") or {}
-                row["gpu"] = (cfg.get("gpu") or {}).get("name", "")
-                row["git_commit"] = (cfg.get("git") or {}).get("commit", "")[:9]
-                args = cfg.get("args") or cfg
+                prov = provenance(_read_json(seed_dir / "run_config.json") or {})
+                row["gpu"] = prov["gpu"]
+                row["git_commit"] = prov["git_commit"]
+                args = prov["args"]
                 for k in ("m1_dense_init", "m2_simplify", "m3_quantize",
                           "n_bud", "kmeans_k", "seathru_from_iter"):
                     if k in args:
