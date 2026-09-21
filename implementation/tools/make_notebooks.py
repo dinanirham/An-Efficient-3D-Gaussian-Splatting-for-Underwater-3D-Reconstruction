@@ -701,6 +701,17 @@ quotable without dispersion, so a partial campaign shows `nan` error bars and
     md("## 1. Drive and repo"),
     code(DRIVE_HEADER),
     code(CLONE),
+    md("""### 1b. Build the CUDA extensions  *(a few minutes)*
+
+Every collector in this notebook reads files -- JSON, CSV, PLY -- except one.
+`j_consistency` **renders**, twice per held-out view per quantized run, to
+compare a model's restored image against its own unquantized restoration.
+That needs the rasterizer compiled in this session, exactly as the worker
+needs it. Without this cell every quantized run reports
+`ModuleNotFoundError: diff_gaussian_rasterization_ms`.
+"""),
+    code(BUILD),
+    code(BUILD_CHECK),
     md("## 2. Campaign state"),
     code('!python -m tools.run_ledger status --output_root "$DRIVE_ROOT"\n'),
     md("""## 3. Contrasts
