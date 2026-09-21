@@ -785,7 +785,7 @@ for p in paths:
                                xytext=(0, 6), textcoords='offset points')
         ax[1].set_title('zr_cv — cross-frame depth-range dispersion')
     else:
-        ax[1].text(0.5, 0.5, 'no cross-frame sweep\n(run predates CD-27)',
+        ax[1].text(0.5, 0.5, 'no cross-frame sweep\\n(run predates CD-27)',
                    ha='center', va='center', transform=ax[1].transAxes)
         ax[1].set_title('zr_cv — not measured')
     for x in (15000, 20000):
@@ -1100,12 +1100,52 @@ measurement.
 ])
 
 
+def _check_cells_parse(name: str, nb: dict) -> None:
+    """Refuse to write a notebook whose code cells do not parse as Python.
+
+    Twice now a cell has reached Colab with a syntax error that the generator
+    could have caught: a string containing an unescaped `\n` that the
+    triple-quoted source turned into a real line break. The error surfaced
+    only when the operator ran the cell, a session and a round-trip later.
+    IPython magics (`!`, `%`) are stripped before parsing; everything else
+    must compile, or generation stops here.
+    """
+    import ast
+    for i, cell in enumerate(nb["cells"]):
+        if cell.get("cell_type") != "code":
+            continue
+        src = "".join(cell.get("source", []))
+        # A magic keeps its indentation and becomes `pass`, so a `for` whose
+        # whole body is a shell line still has a body. A magic continued over
+        # several lines with a trailing backslash is one statement; its
+        # continuation lines are dropped rather than parsed as Python.
+        out, in_magic = [], False
+        for l in src.split("\n"):
+            if in_magic:
+                in_magic = l.rstrip().endswith("\\")
+                continue
+            if l.lstrip().startswith(("!", "%")):
+                out.append(l[:len(l) - len(l.lstrip())] + "pass")
+                in_magic = l.rstrip().endswith("\\")
+            else:
+                out.append(l)
+        py = "\n".join(out)
+        try:
+            ast.parse(py)
+        except SyntaxError as exc:
+            raise SystemExit(
+                f"{name} cell {i}: generated code does not parse -- "
+                f"{exc.msg} at line {exc.lineno}:\n    {exc.text.rstrip() if exc.text else ''}"
+            ) from None
+
+
 def main() -> int:
     NB_DIR.mkdir(parents=True, exist_ok=True)
     for name, nb in (("00_setup.ipynb", SETUP),
                      ("01_worker.ipynb", WORKER),
                      ("02_analysis.ipynb", ANALYSIS),
                      ("04_densify_diagnostic.ipynb", DIAGNOSTIC)):
+        _check_cells_parse(name, nb)
         path = NB_DIR / name
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(nb, fh, indent=1, ensure_ascii=False)
