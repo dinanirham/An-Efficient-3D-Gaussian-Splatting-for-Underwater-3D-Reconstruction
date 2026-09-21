@@ -1,3 +1,11 @@
+%% Figure 0 — High-level schematic, in the style the source papers use for 3DGS
+%% and SeaSplat: the optimisation loop only, with the efficiency mechanisms
+%% shown as what they are — insertions into one cycle.
+%%
+%% M1, M2, M3 are the factorial mechanisms. D is a supplementary contrast
+%% (cell A0D, stage S6) and is drawn dashed because it is not a fourth factor:
+%% M1 disables densification, so D is provably inert in every M1 cell.
+
 flowchart TB
 
 IMG[/"Multi-view underwater images"/] --> INIT["Initialise primitives"]

@@ -1,5 +1,27 @@
+%% Figure 1 — Detailed methodology pipeline, portrait.
+%%
+%% Shape conventions (ANSI/ISO flowchart):
+%%   ([  ])  terminal        — start / end
+%%   [/  /]  data            — input or output
+%%   [   ]   process         — an operation
+%%   [[  ]]  predefined      — a named sub-procedure from a source method
+%%   {   }   decision        — a branch
+%%   [(  )]  stored data     — a persisted, hashed artifact
+%%   (( ))   connector       — ON-PAGE CONNECTOR. Two circles with the same
+%%                             letter are the same point in the flow; the reader
+%%                             matches them by label. Used instead of a long
+%%                             backward edge, which would cross the phase blocks.
+%%
+%% Colour encodes ORIGIN, not function. Badges M1/M2/M3/D/CD carry identity.
+%%
+%% NOTE on the schedule: the two training regimes are drawn as a BRANCH rather
+%% than as nested blocks, because the gates overlap. Density control runs to
+%% iteration 15 000 — i.e. 5 000 iterations INTO the physics-aware regime — so a
+%% nested block would misstate it.
+
 flowchart TB
 
+%% ─────────────────────────── ① PREPROCESSING ─────────────────────────
 subgraph PRE["① PREPROCESSING — offline, once per scene, frozen before training"]
   direction TB
   S([Start]) --> IN[/"SeaThru-NeRF corpus<br/>4 scenes · 88 images · COLMAP poses"/]
@@ -10,6 +32,7 @@ end
 
 DAT --> Q1{"M1<br/>enabled?"}
 
+%% ─────────────────────────── ② INITIALIZATION ────────────────────────
 subgraph INI["② INITIALIZATION"]
   direction TB
   Q1 -->|"no · baseline"| SFM[/"COLMAP sparse cloud · ~26 000 points"/]
@@ -24,6 +47,7 @@ end
 
 GAU --> ENT(("A"))
 
+%% ─────────────────────────── ③ TRAINING ──────────────────────────────
 subgraph TRN["③ TRAINING — 30 000 iterations"]
   direction TB
 
@@ -66,6 +90,7 @@ subgraph TRN["③ TRAINING — 30 000 iterations"]
   NXT -->|"no · i ← i+1"| RET(("A"))
 end
 
+%% ─────────────────────────── ④ EVALUATION ────────────────────────────
 NXT -->|"yes"| OUT[/"Trained model + 9 medium scalars"/]
 
 subgraph EVA["④ EVALUATION"]
@@ -82,6 +107,7 @@ subgraph EVA["④ EVALUATION"]
   REC --> END([End])
 end
 
+%% ─────────────────────────── STYLE ───────────────────────────────────
 classDef inherited fill:#EDF2F2,stroke:#94A9A8,stroke-width:1px,color:#10201F
 classDef mech      fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,color:#10201F
 classDef supp      fill:#E4F1ED,stroke:#1F7A66,stroke-width:1.5px,stroke-dasharray:5 3,color:#10201F
