@@ -15,7 +15,7 @@ submission.
 |---|---|---|---|
 | A.1 | Physics-aware underwater 3DGS is feasible and achieves real-time rendering | **Supported** | Independently reproduced. Current A0: 69.2 fps at 4.29M primitives, Curasao `[measured n=1]` |
 | A.2 | The baseline is "representation-heavy" — ~2.86M primitives, ~194 MB | **Supported**, with D-4 caveat | Current median 2 482 200 across 12 runs; the two agree within dispersion (D-6). "194 MB" is a **PLY** figure and must be labelled as such |
-| A.3 | A0 reproduces SeaSplat as published | **Partially supported — and materially narrower than stated** | What was measured is **converged primitive count only**, at **16 000 iterations**, on **Curasao alone**, 3 runs per side, mean ratio 1.036 `[repo: tools/replicate_baseline.py]`. No fidelity metric was compared. And the comparison is **underpowered**: at n=3 per side on a quantity whose CV is 14.7% on that scene, the 95% interval on the ratio is **±23.5%**, so the data are consistent with A0 differing from vanilla SeaSplat by a quarter. Absence of a detected difference is not evidence of equivalence `[09-supervisory-review-ii §3]`. Closed by S0's SS cell |
+| A.3 | A0 reproduces SeaSplat as published | **Supported, to within a pre-registered margin** `[measured n=3 vs n=3, four scenes]` | S0 measured vanilla SeaSplat from the unmodified upstream checkout under this campaign's harness: 30 000 iterations, full metric set, scene means over three repeats. **All four scenes WITHIN MARGIN** (PSNR ±1.0 dB, LPIPS ±0.02, count ±30%, fixed before S0 ran). Fidelity agreement is inside A0's own noise floor — largest PSNR gap 0.245 dB against a per-scene sd of 0.22–0.70; largest LPIPS gap 0.0067 against 0.003–0.010. Count is within margin but JapaneseGardens uses 74% of it (SS ~22% below A0), which is the high-variance outcome behaving as the loose margin anticipated. The word is *equivalent to within the margin*, never *reproduces* `[analysis/campaign-2026-09/check_margin.txt]` |
 | A.4 | Curasao renders slower (30.84 fps) because of higher image resolution and screen-space density | **Not yet tested** | Plausible but unverified; the current implementation measures Curasao *fastest-loaded* at 69.2 fps under a defined protocol. D-7: the two figures are not comparable |
 
 ---
@@ -99,7 +99,7 @@ LPIPS, including LPIPS, which is the metric that separates every other contrast 
 | E.9 | Frame-rate gain is sub-linear in primitive reduction, and not a single exponent | **Supported** `[measured n=1/cell]` | A1: 14.3× fewer → **1.48×** fps. A2: 29.7× fewer → **4.27×**. Per-primitive rasterization cost differs by cell, so a count ratio does not predict a frame-rate ratio `[§13.12]` |
 | E.3 | Converged primitive count carries 6–29% run-to-run dispersion, seeding notwithstanding | **Supported** | 12 A0 runs + 3+3 replication `[measured n=3/scene]` |
 | E.4 | Detaching alpha gradients from densification yields ~6× fewer primitives at ~−0.1 dB | **Not yet tested** | `[measured n=1]` against a *defective* baseline, different seeds. Not claimable until S6 `[12-novelty-defensibility.md §12.6.2]` |
-| E.5 | A0 is indistinguishable from unmodified SeaSplat | **Supported as stated, and the wording is load-bearing** | 3+3 runs on Curasao, count only, ratio 1.036. *Indistinguishable* is what was shown; *equivalent* is not, and the 95% interval on the ratio is ±23.5%. Per-scene bounds: JapaneseGardens ±9.6%, IUI3 ±15.3%, Curasao ±23.5%, Panama ±46.9%. Must not be stated for all scenes, and must not be upgraded to equivalence without a pre-specified margin `[09-supervisory-review-ii §3]` |
+| E.5 | A0 is indistinguishable from unmodified SeaSplat | **Supported on all four scenes** `[measured n=3 vs n=3]` — superseded by A.3 | Originally Curasao only, count only, 16 000 iterations. Now four scenes, three metrics, 30 000 iterations, against a pre-registered margin. See A.3 |
 
 ---
 
@@ -107,11 +107,19 @@ LPIPS, including LPIPS, which is the metric that separates every other contrast 
 
 | Verdict | Count |
 |---|---:|
-| Supported | 21 |
-| Partially supported | 5 |
+| Supported | 22 |
+| Partially supported | 4 |
 | **Contradicted** | **6** |
 | Not yet tested | 4 |
 | Methodologically untestable with the current design | 2 |
+
+### Closed by S0
+
+**A.3 returns to *Supported*, on evidence rather than assertion.** The reference control ran at
+the campaign's own protocol — four scenes, three repeats, 30 000 iterations, the full metric set,
+scored by the same harness — and A0 fell within the pre-registered margin on every scene. The
+fidelity agreement is inside A0's own run-to-run noise. This is the claim every other number in
+the thesis rests on, and it is now a measurement.
 
 ### Moved by supervisory review II
 
