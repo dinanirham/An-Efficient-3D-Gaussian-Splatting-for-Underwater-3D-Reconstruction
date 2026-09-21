@@ -230,9 +230,17 @@ def t9b_check_margin_finds_runs_under_the_campaign_root():
         with contextlib.redirect_stdout(buf):
             check_margin(root)
         out = buf.getvalue()
-        ok = "Curasao" in out and "no SS runs found" not in out
-        return ok, ("found SS and A0 under runs/ and produced a verdict"
-                    if ok else out.strip().split(chr(10))[-1])
+        # Finding the runs is necessary; reading their fidelity is the point.
+        # The first version of this test passed while every PSNR came back
+        # None and the verdict said INCOMPLETE, because it only checked that
+        # the scene name appeared. A verdict that is not WITHIN or OUTSIDE is
+        # a failure here.
+        ok = ("Curasao" in out and "no SS runs found" not in out
+              and "INCOMPLETE" not in out and "n/a" not in out
+              and "WITHIN MARGIN" in out)
+        return ok, ("found SS and A0 under runs/, read Test.psnr_pooled and "
+                    "lpips, and reached a verdict"
+                    if ok else out.strip().split(chr(10))[-6])
 
 
 def t10_runs_are_aggregated_per_scene_not_per_seed():
@@ -246,10 +254,10 @@ def t10_runs_are_aggregated_per_scene_not_per_seed():
     margin.
     """
     evals = [
-        {"_scene": "Curasao", "quality": {"psnr_pooled": 30.0}, "cost": {}},
-        {"_scene": "Curasao", "quality": {"psnr_pooled": 31.0}, "cost": {}},
-        {"_scene": "Curasao", "quality": {"psnr_pooled": 32.0}, "cost": {}},
-        {"_scene": "Panama", "quality": {"psnr_pooled": 28.0}, "cost": {}},
+        {"_scene": "Curasao", "Test": {"psnr_pooled": 30.0}, "cost": {}},
+        {"_scene": "Curasao", "Test": {"psnr_pooled": 31.0}, "cost": {}},
+        {"_scene": "Curasao", "Test": {"psnr_pooled": 32.0}, "cost": {}},
+        {"_scene": "Panama", "Test": {"psnr_pooled": 28.0}, "cost": {}},
     ]
     agg = aggregate_by_scene(evals)
     ok = (
@@ -262,7 +270,7 @@ def t10_runs_are_aggregated_per_scene_not_per_seed():
 
 def t11_unlabelled_runs_are_dropped_not_misfiled():
     """A run without a scene cannot be aggregated and must not land anywhere."""
-    agg = aggregate_by_scene([{"quality": {"psnr_pooled": 99.0}, "cost": {}}])
+    agg = aggregate_by_scene([{"Test": {"psnr_pooled": 99.0}, "cost": {}}])
     return agg == {}, "run with no _scene is dropped, not bucketed arbitrarily"
 
 

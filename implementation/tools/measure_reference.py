@@ -163,7 +163,12 @@ def aggregate_by_scene(evals: list[dict]) -> dict[str, dict[str, float]]:
         scene = e.get("_scene")
         if scene is None:
             continue
-        flat = {**e.get("quality", {}), **e.get("cost", {})}
+        # The held-out split and the cost block -- the same two places
+        # collect_results and analyse read, and the same file shape train.py
+        # writes for A0. An earlier version read a "quality" key that the
+        # writer had already stopped emitting, so every fidelity metric came
+        # back None and the verdict was INCOMPLETE on a finished campaign.
+        flat = {**e.get("Test", {}), **e.get("cost", {})}
         bucket = out.setdefault(scene, {})
         for k, v in flat.items():
             if isinstance(v, (int, float)):
