@@ -10,17 +10,25 @@ Listed newest first. "Source" is relative to the repository root.
 1. Three Insertion Points
    https://claude.ai/artifact/BqdkonmDqJsFYcVTcWJfKG
    Updated 2026-09-22 (v6)
-   Source: new-revisited-writing/figures-methodology.html
-   Diagrams: new-revisited-writing/figure-0-highlevel.mmd
-             new-revisited-writing/figure-1-pipeline.mmd
+   Source:     new-revisited-writing/figures-methodology.html
+   To open:    new-revisited-writing/figures-methodology.standalone.html
+   Rebuild it: python new-revisited-writing/build_standalone.py
+   Diagrams:   new-revisited-writing/figure-0-highlevel.mmd
+               new-revisited-writing/figure-1-pipeline.mmd
 
    Methodology schematics as run. Figure 0, the optimisation loop with the
    three mechanisms as insertions; figure 1, the detailed pipeline by phase;
    figure 2, the training schedule with the medium-only bursts and the
    depth-range sweeps, captioned with the campaign's numbers.
-   Needs the host's mermaid runtime to draw figures 0 and 1: opened as a
-   local file the two <pre class="mermaid"> blocks show as source text.
-   Figure 2 is hand-written SVG and draws anywhere.
+   The SOURCE is what publishes, and only the artifact host can draw it:
+   the host wraps it in a document and injects a mermaid runtime, so opened
+   as a local file its two <pre class="mermaid"> blocks are walls of source
+   text. Open the STANDALONE copy instead -- same content, wrapped in a real
+   document, drawing the diagrams in your own browser from a pinned mermaid
+   on cdnjs. It needs network on first open, as the page already does for its
+   typefaces; with none, the diagrams stay legible as source. Figure 2 is
+   hand-written SVG and draws either way.
+   Edit the source and rebuild; never edit the standalone copy.
 
 --------------------------------------------------------------------------
 2. Three Mechanisms, 120 Runs
