@@ -31,6 +31,11 @@ Listed newest first. "Source" is relative to the repository root.
    Rebuilding needs the library: npm install mermaid@11.16.1, then pass
    --mermaid <path to node_modules/mermaid/dist/mermaid.min.js>.
 
+   For the thesis document, the three figures are exported as standalone
+   files in figures/ -- .svg and .png each, with text as real <text> so
+   Word, Inkscape and LaTeX can open them. figures/README.txt records how
+   and how the export differs from the web page.
+
 --------------------------------------------------------------------------
 2. Three Mechanisms, 120 Runs
    https://claude.ai/artifact/RjJZsWg1CXVpg1oMmfCedj

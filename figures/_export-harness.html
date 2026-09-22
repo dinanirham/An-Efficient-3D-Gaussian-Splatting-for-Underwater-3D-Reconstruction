@@ -1,0 +1,77 @@
+<!doctype html><html><head><meta charset=utf-8></head><body style="margin:0;background:#fff">
+<div id="out"></div>
+<script src="node_modules/mermaid/dist/mermaid.min.js"></script>
+<script>
+var FONT = 'Arial, "Helvetica Neue", Helvetica, sans-serif';
+var MONO = 'Consolas, "Courier New", monospace';
+var PAL  = { surface:'#FFFFFF', text:'#10201F', line:'#7C908F', border:'#94A9A8', bg:'#FFFFFF' };
+
+// Figure 2 is hand-written SVG in the page and styled by page-level CSS with
+// custom properties. A standalone file carries neither, so its rules are
+// restated inside the SVG with the light palette resolved to literals.
+var FIG2_STYLE = [
+  '#fig2 text{font-family:' + MONO + ';fill:#48605F}',
+  '#fig2 .lab{fill:#10201F;font-family:' + FONT + ';font-weight:600}',
+  '#fig2 .tick{stroke:#CFDBDA;stroke-width:1}',
+  '#fig2 .axis{stroke:#7C908F;stroke-width:1}',
+  '#fig2 .geo{fill:#EDF2F2;stroke:#94A9A8}',
+  '#fig2 .phys{fill:#EFEAF6;stroke:#7A5CA8}',
+  '#fig2 .dens{fill:#EDF2F2;stroke:#94A9A8}',
+  '#fig2 .m2{fill:#E4F1ED;stroke:#1F7A66}',
+  '#fig2 .m3{fill:#E4F1ED;stroke:#1F7A66}',
+  '#fig2 .burst{fill:#C8462E;stroke:none}',
+  '#fig2 .sweep{fill:none;stroke:#C8462E;stroke-width:1.5}'
+].join('');
+
+window.__out = null;
+fetch('src.html').then(function (r) { return r.text(); }).then(function (txt) {
+  var re = /<pre class="mermaid">\r?\n([\s\S]*?)<\/pre>/g, m, srcs = [];
+  while ((m = re.exec(txt)) !== null) srcs.push(m[1]);
+
+  mermaid.initialize({
+    startOnLoad: false, securityLevel: 'strict', theme: 'base',
+    htmlLabels: false,
+    // htmlLabels false puts labels in <text>, not <foreignObject>: the
+    // difference between a figure Word and Inkscape can open and one they
+    // render as an empty box.
+    flowchart: { useMaxWidth: false, htmlLabels: false },
+    themeVariables: {
+      background: PAL.bg, mainBkg: PAL.surface, primaryColor: PAL.surface,
+      primaryTextColor: PAL.text, lineColor: PAL.line,
+      primaryBorderColor: PAL.border, nodeBorder: PAL.border,
+      clusterBorder: PAL.border, edgeLabelBackground: PAL.bg,
+      clusterBkg: 'rgba(127,127,127,0.07)', titleColor: PAL.text,
+      darkMode: false, fontSize: '16px', fontFamily: FONT
+    },
+    themeCSS: '.node rect, .node circle, .node polygon, .node path, ' +
+              '.cluster rect { stroke-width: 2px; }'
+  });
+
+  // Figure 2, lifted from the source and made self-contained.
+  var mt = txt.match(/<svg viewBox="0 0 900 250"[\s\S]*?<\/svg>/);
+  var fig2 = null;
+  if (mt) {
+    fig2 = mt[0]
+      .replace('<svg ', '<svg id="fig2" xmlns="http://www.w3.org/2000/svg" width="900" height="250" ')
+      .replace(/>/, '><style>' + FIG2_STYLE + '</style><rect width="900" height="250" fill="#fff"/>');
+  }
+
+  function decode(str) {
+    var ta = document.createElement('textarea');
+    ta.innerHTML = str;
+    return ta.value;
+  }
+
+  Promise.all(srcs.map(function (s, i) {
+    return mermaid.render('x' + i, decode(s)).then(function (r) { return r.svg; });
+  })).then(function (svgs) {
+    if (fig2) svgs.push(fig2);
+    // Show them so a screenshot can be taken per figure.
+    document.getElementById('out').innerHTML = svgs.map(function (s, i) {
+      return '<div id="fig' + i + '" style="display:inline-block">' + s + '</div>';
+    }).join('');
+    window.__out = svgs;
+  }, function (e) { window.__out = { error: String(e && e.message || e) }; });
+});
+</script>
+</body></html>
