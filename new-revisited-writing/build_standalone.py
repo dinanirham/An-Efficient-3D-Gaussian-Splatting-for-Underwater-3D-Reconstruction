@@ -1,71 +1,75 @@
-"""Build a viewable copy of the methodology figures page.
+"""Build a self-contained, double-clickable copy of the methodology figures page.
 
-    python new-revisited-writing/build_standalone.py
+    python new-revisited-writing/build_standalone.py [--mermaid PATH]
 
 `figures-methodology.html` is the artifact SOURCE. The artifact host wraps it
 in a document and injects a mermaid runtime that turns each
 `<pre class="mermaid">` block into a diagram. Opened as a local file it has
 neither, so figures 0 and 1 show as walls of mermaid source -- the page looks
 broken. This script writes `figures-methodology.standalone.html`: the same
-content, wrapped in a real document, with mermaid loaded from a CDN and
+content, in a real document, with the mermaid library embedded in the file and
 initialised exactly as the host initialises it.
 
 The source file is never modified. Rebuild after editing it.
 
-WHY NOT INLINE PRE-RENDERED SVG. That was the first attempt and it was wrong.
-mermaid sizes every node from the text metrics of the font in use at render
-time; render headlessly without the page's webfont and every label is measured
-in a fallback face, so the boxes come out too narrow and the displayed text is
-clipped ("Differentiable rasterisatio"). Rendering in the browser that
-displays the page makes the measuring font and the display font the same one
-by construction. It costs a network fetch on first open, which the page
-already pays for its typefaces.
+ONE FILE, NO NETWORK. The output is ~3.6 MB because the library is inlined
+rather than fetched. Both earlier attempts were smaller and both failed:
 
-OFFLINE. Without network, the diagrams stay visible as mermaid source and the
-banner says so -- degraded, not blank. Figure 2 is hand-written SVG in the
-source and always draws.
+  1. Pre-rendered SVG inlined at build time. mermaid sizes every node from the
+     text metrics of the font in use at render time, so rendering headlessly
+     without the page's webfont measured every label in a fallback face and
+     the displayed text was clipped ("Differentiable rasterisatio"). Rendering
+     in the browser that displays the page makes the measuring font and the
+     display font the same one by construction.
+  2. A <script src> to mermaid on a CDN. Renders only where that CDN is
+     reachable; from a file:// page behind a proxy, offline, or anywhere the
+     fetch is blocked, the guard finds no `mermaid` global and the blocks stay
+     as source -- the same symptom the script exists to fix.
+
+Embedding costs bytes once and removes every way it can fail. The page still
+links its typefaces from Google Fonts, as the live page does; without network
+the browser falls back, and because mermaid measures and draws in that same
+fallback face the layout stays correct.
+
+GETTING THE LIBRARY. Not vendored in this repository -- ~3.5 MB of third-party
+JavaScript that changes only when the host's version does. Fetch it once:
+
+    npm install mermaid@11.16.1
+
+then point the script at it, or let it find the install by itself:
+
+    python new-revisited-writing/build_standalone.py \\
+        --mermaid node_modules/mermaid/dist/mermaid.min.js
+
+11.16.1 is the version the artifact host serves; pinning it keeps the local
+copy and the live page laying out identically.
+
+Figure 2 is hand-written SVG in the source and draws with or without any of
+this.
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 from pathlib import Path
 
 HERE: Path = Path(__file__).resolve().parent
+ROOT: Path = HERE.parent
 SOURCE: Path = HERE / "figures-methodology.html"
 TARGET: Path = HERE / "figures-methodology.standalone.html"
 
 LIVE_URL: str = "https://claude.ai/artifact/BqdkonmDqJsFYcVTcWJfKG"
+MERMAID_VERSION: str = "11.16.1"
 
-# Pinned to the version the artifact host serves, so the offline copy and the
-# live page lay out identically. cdnjs is also the CDN the host's own content
-# policy allows, which keeps this file publishable if it is ever wanted.
-MERMAID_SRC: str = (
-    "https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.16.1/mermaid.min.js"
+# Where an `npm install mermaid` is likely to have put the bundle.
+CANDIDATES: tuple[Path, ...] = (
+    ROOT / "node_modules" / "mermaid" / "dist" / "mermaid.min.js",
+    HERE / "node_modules" / "mermaid" / "dist" / "mermaid.min.js",
+    Path("node_modules") / "mermaid" / "dist" / "mermaid.min.js",
 )
 
-# The host's own mermaid settings, transcribed from its injected runtime.
-# securityLevel 'strict' is the one that matters: it strips HTML from node
-# labels, which is why the diagram sources use mermaid markdown strings.
-INIT: str = """
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: 'base',
-    flowchart: { useMaxWidth: false },
-    themeVariables: {
-      background: bg, mainBkg: pal.surface, primaryColor: pal.surface,
-      primaryTextColor: pal.text, lineColor: pal.line,
-      primaryBorderColor: pal.border, nodeBorder: pal.border,
-      clusterBorder: pal.border, edgeLabelBackground: bg,
-      clusterBkg: 'rgba(127,127,127,0.07)', titleColor: pal.text,
-      darkMode: dark, fontSize: '16px',
-      fontFamily: getComputedStyle(document.body).fontFamily || 'sans-serif'
-    },
-    themeCSS: '.node rect, .node circle, .node polygon, .node path, ' +
-              '.cluster rect { stroke-width: 2px; }'
-  });
-"""
+BLOCK: re.Pattern[str] = re.compile(r'<pre class="mermaid">\r?\n(.*?)</pre>', re.S)
 
 HEAD: str = f"""<!doctype html>
 <html lang="en">
@@ -91,64 +95,90 @@ HEAD: str = f"""<!doctype html>
 <body>
 <div class="offline-note">
   Local copy, built from <code>figures-methodology.html</code> by
-  <code>build_standalone.py</code>. The two pipeline diagrams are drawn in your
-  browser from mermaid source, as they are on the live page at
-  <a href="{LIVE_URL}">claude.ai</a>; with no network they stay visible as that
-  source. Do not edit this file -- edit the source and rebuild.
+  <code>build_standalone.py</code>, with mermaid {MERMAID_VERSION} embedded:
+  one file, no network, nothing to install. The live page is at
+  <a href="{LIVE_URL}">claude.ai</a>.
+  Do not edit this file &mdash; edit the source and rebuild.
 </div>
 """
 
-RUNTIME: str = f"""
-<script src="{MERMAID_SRC}"></script>
+# The host's own mermaid settings, transcribed from its injected runtime.
+# securityLevel 'strict' is the one that matters: it strips HTML from node
+# labels, which is why the diagram sources use mermaid markdown strings.
+RUNTIME: str = """
 <script>
-(function () {{
-  if (typeof mermaid === 'undefined') return;   /* offline: leave the source */
+(function () {
+  if (typeof mermaid === 'undefined') {
+    var w = document.createElement('div');
+    w.className = 'offline-note';
+    w.textContent = 'The embedded mermaid library did not load, so the two ' +
+      'pipeline diagrams are shown as source below. Rebuild this file with ' +
+      'build_standalone.py.';
+    document.body.insertBefore(w, document.body.firstChild);
+    return;
+  }
   var pres = Array.prototype.slice.call(
     document.querySelectorAll('pre.mermaid'));
   if (!pres.length) return;
   var mq = window.matchMedia
     ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   var root = document.documentElement;
-  var items = pres.map(function (pre) {{
+  var items = pres.map(function (pre) {
     var mount = document.createElement('div');
     mount.className = 'mermaid-diagram';
-    return {{ pre: pre, mount: mount, src: pre.textContent || '' }};
-  }});
+    return { pre: pre, mount: mount, src: pre.textContent || '' };
+  });
   var seq = 0, gen = 0, lastKey = '';
 
-  function pageBg(fallback) {{
+  function pageBg(fallback) {
     var els = [document.body, document.documentElement];
-    for (var i = 0; i < els.length; i++) {{
+    for (var i = 0; i < els.length; i++) {
       var c = els[i] && getComputedStyle(els[i]).backgroundColor;
       if (c && c !== 'transparent' && c !== 'rgba(0, 0, 0, 0)') return c;
-    }}
+    }
     return fallback;
-  }}
+  }
 
-  function render() {{
+  function render() {
     var theme = root.getAttribute('data-theme');
     var dark = theme === 'dark' || (!!(mq && mq.matches) && theme !== 'light');
     var pal = dark
-      ? {{ surface: '#132223', text: '#E4EDEC', line: '#6E8382',
-          border: '#26393B', bg: '#0B1516' }}
-      : {{ surface: '#FFFFFF', text: '#10201F', line: '#7C908F',
-          border: '#94A9A8', bg: '#FFFFFF' }};
+      ? { surface: '#132223', text: '#E4EDEC', line: '#6E8382',
+          border: '#26393B', bg: '#0B1516' }
+      : { surface: '#FFFFFF', text: '#10201F', line: '#7C908F',
+          border: '#94A9A8', bg: '#FFFFFF' };
     var bg = pageBg(pal.bg);
     var key = (dark ? 'd' : 'l') + '|' + bg;
     if (key === lastKey) return;
     lastKey = key;
     var mine = ++gen;
-{INIT}
-    items.forEach(function (it) {{
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      flowchart: { useMaxWidth: false },
+      themeVariables: {
+        background: bg, mainBkg: pal.surface, primaryColor: pal.surface,
+        primaryTextColor: pal.text, lineColor: pal.line,
+        primaryBorderColor: pal.border, nodeBorder: pal.border,
+        clusterBorder: pal.border, edgeLabelBackground: bg,
+        clusterBkg: 'rgba(127,127,127,0.07)', titleColor: pal.text,
+        darkMode: dark, fontSize: '16px',
+        fontFamily: getComputedStyle(document.body).fontFamily || 'sans-serif'
+      },
+      themeCSS: '.node rect, .node circle, .node polygon, .node path, ' +
+                '.cluster rect { stroke-width: 2px; }'
+    });
+    items.forEach(function (it) {
       var id = 'fig-' + (seq++);
-      mermaid.render(id, it.src).then(function (r) {{
+      mermaid.render(id, it.src).then(function (r) {
         if (mine !== gen) return;
         it.mount.innerHTML = r.svg;
-        if (!it.mount.parentNode) {{
+        if (!it.mount.parentNode) {
           it.pre.parentNode.insertBefore(it.mount, it.pre);
-        }}
+        }
         it.pre.style.display = 'none';
-      }}, function () {{
+      }, function () {
         var scratch = document.getElementById(id);
         if (scratch) scratch.parentNode.removeChild(scratch);
         scratch = document.getElementById('d' + id);
@@ -156,37 +186,77 @@ RUNTIME: str = f"""
         if (mine !== gen) return;
         if (it.mount.parentNode) it.mount.parentNode.removeChild(it.mount);
         it.pre.style.display = '';   /* failed: show the source, not a gap */
-      }});
-    }});
-  }}
+      });
+    });
+  }
 
-  /* Fonts change text metrics, so lay out once the webfonts have landed. */
-  if (document.fonts && document.fonts.ready) {{
-    document.fonts.ready.then(render);
-  }} else {{
-    render();
-  }}
-  if (mq && mq.addEventListener) mq.addEventListener('change', render);
-}})();
+  /* Fonts change text metrics, so lay out once the webfonts have settled --
+     but never wait on them forever, since an unreachable font host would
+     otherwise leave the page as source text. */
+  var drawn = false;
+  function once() { if (!drawn) { drawn = true; render(); } }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(once);
+    setTimeout(once, 2000);
+  } else {
+    once();
+  }
+  if (mq && mq.addEventListener) mq.addEventListener('change', function () {
+    if (drawn) render();
+  });
+})();
 </script>
 </body>
 </html>
 """
 
-BLOCK: re.Pattern[str] = re.compile(r'<pre class="mermaid">\r?\n(.*?)</pre>', re.S)
+
+def find_mermaid(explicit: str | None) -> Path:
+    if explicit is not None:
+        path = Path(explicit)
+        if not path.is_file():
+            raise SystemExit(f"--mermaid: no such file: {path}")
+        return path
+    for candidate in CANDIDATES:
+        if candidate.is_file():
+            return candidate
+    raise SystemExit(
+        "mermaid.min.js not found. Run `npm install mermaid@"
+        f"{MERMAID_VERSION}` and pass --mermaid <path to "
+        "node_modules/mermaid/dist/mermaid.min.js>; see this script's docstring."
+    )
 
 
-def build() -> None:
+def build(mermaid_path: Path) -> None:
     source: str = SOURCE.read_text(encoding="utf-8")
     blocks: list[str] = BLOCK.findall(source)
     if not blocks:
         raise SystemExit(
             f"{SOURCE.name} has no mermaid blocks -- did its format change?"
         )
-    TARGET.write_text(HEAD + source + RUNTIME, encoding="utf-8")
-    size_kb: float = TARGET.stat().st_size / 1024
-    print(f"{TARGET.name}: {len(blocks)} diagram(s), {size_kb:.0f} KB")
+
+    library: str = mermaid_path.read_text(encoding="utf-8")
+    # A literal </script> anywhere in the bundle would end the tag early. The
+    # 11.16.1 bundle has none; the guard is for whatever version comes next.
+    library = library.replace("</script", "<\\/script")
+
+    TARGET.write_text(
+        HEAD + source + "\n<script>" + library + "</script>" + RUNTIME,
+        encoding="utf-8",
+    )
+    size_mb: float = TARGET.stat().st_size / 1024 / 1024
+    print(
+        f"{TARGET.name}: {len(blocks)} diagram(s), mermaid from "
+        f"{mermaid_path}, {size_mb:.1f} MB"
+    )
 
 
 if __name__ == "__main__":
-    build()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--mermaid",
+        default=None,
+        help="path to mermaid.min.js (default: look for an npm install)",
+    )
+    args = parser.parse_args()
+    build(find_mermaid(args.mermaid))

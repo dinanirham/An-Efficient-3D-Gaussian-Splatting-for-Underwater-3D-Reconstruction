@@ -23,12 +23,13 @@ Listed newest first. "Source" is relative to the repository root.
    The SOURCE is what publishes, and only the artifact host can draw it:
    the host wraps it in a document and injects a mermaid runtime, so opened
    as a local file its two <pre class="mermaid"> blocks are walls of source
-   text. Open the STANDALONE copy instead -- same content, wrapped in a real
-   document, drawing the diagrams in your own browser from a pinned mermaid
-   on cdnjs. It needs network on first open, as the page already does for its
-   typefaces; with none, the diagrams stay legible as source. Figure 2 is
-   hand-written SVG and draws either way.
+   text. Open the STANDALONE copy instead: one file, ~3.4 MB because the
+   mermaid library is embedded in it, no network and nothing to install --
+   double-click it. Lays out identically to the live page (same viewBoxes,
+   867 and 1176). Figure 2 is hand-written SVG and draws either way.
    Edit the source and rebuild; never edit the standalone copy.
+   Rebuilding needs the library: npm install mermaid@11.16.1, then pass
+   --mermaid <path to node_modules/mermaid/dist/mermaid.min.js>.
 
 --------------------------------------------------------------------------
 2. Three Mechanisms, 120 Runs
