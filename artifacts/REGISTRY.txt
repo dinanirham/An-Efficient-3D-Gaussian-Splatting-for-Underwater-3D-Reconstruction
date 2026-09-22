@@ -1,0 +1,93 @@
+ARTIFACT REGISTRY
+An Efficient 3D Gaussian Splatting for Underwater 3D Reconstruction
+Compiled 2026-09-22. Artifacts are private to the owner's claude.ai account;
+the links need that account. The local .html files are the page sources and
+open in any browser offline.
+
+Listed newest first. "Source" is relative to the repository root.
+
+--------------------------------------------------------------------------
+1. Three Insertion Points
+   https://claude.ai/artifact/BqdkonmDqJsFYcVTcWJfKG
+   Updated 2026-09-22 (v6)
+   Source: new-revisited-writing/figures-methodology.html
+   Diagrams: new-revisited-writing/figure-0-highlevel.mmd
+             new-revisited-writing/figure-1-pipeline.mmd
+
+   Methodology schematics as run. Figure 0, the optimisation loop with the
+   three mechanisms as insertions; figure 1, the detailed pipeline by phase;
+   figure 2, the training schedule with the medium-only bursts and the
+   depth-range sweeps, captioned with the campaign's numbers.
+   Needs the host's mermaid runtime to draw figures 0 and 1: opened as a
+   local file the two <pre class="mermaid"> blocks show as source text.
+   Figure 2 is hand-written SVG and draws anywhere.
+
+--------------------------------------------------------------------------
+2. Three Mechanisms, 120 Runs
+   https://claude.ai/artifact/RjJZsWg1CXVpg1oMmfCedj
+   Updated 2026-09-21 (v3)
+   Source: analysis/campaign-2026-09/FINDINGS.html
+   Derivations: analysis/campaign-2026-09/FINDINGS.md (all 14 sections)
+                analysis/campaign-2026-09/PLAN.md (pre-registered)
+
+   Results of the completed campaign. Baseline equivalence to vanilla
+   SeaSplat, main effects, interactions, the medium-model collapse, and the
+   registered test that failed. Section markers are FINDINGS.md's section
+   numbers. Self-contained; no runtime needed.
+   Replaced a 48-run version of the same page at the same URL.
+
+--------------------------------------------------------------------------
+3. The Ultimate Prompt Framework
+   https://claude.ai/artifact/RQsyDCUGvvoVDzFnXqYPdE
+   Updated 2026-09-20
+   Source: NOT SAVEABLE AS HTML — see below.
+
+   A Slides-type artifact, not a static page. Its HTML is the shared Slides
+   runtime published by that type; the deck's own content (slides, notes,
+   order) lives in the artifact's live store and is not in any file this
+   repository can hold. Saving the HTML would save the runtime and none of
+   the deck. Export it from the artifact's own menu if a local copy is
+   wanted. Unrelated to the thesis campaign.
+
+--------------------------------------------------------------------------
+4. A0 vs vanilla SeaSplat — investigation log
+   https://claude.ai/artifact/KpAVRsh5i8WWDKfhzuCYod
+   Updated 2026-09-02
+   Source: artifacts/a0-vs-vanilla-investigation.html
+
+   Why A0 built a sixth of vanilla's model: four hypotheses, three refuted,
+   and the per-event densification comparison that localised the cause to
+   the fraction of primitives clearing densify_grad_threshold. Led to CD-23,
+   the separate alpha probe. Self-contained.
+
+   SUPERSEDED IN ITS CONCLUSION. Written while CD-23 was unmeasured. The
+   fix was measured, and the 2026-09 campaign's reference control settles
+   the question the page leaves open: A0 is equivalent to vanilla SeaSplat
+   to within the pre-registered margin on all four scenes (FINDINGS.md §1).
+   Kept as the record of the investigation, not as a current statement.
+
+--------------------------------------------------------------------------
+5. seasplat-architecture
+   https://claude.ai/artifact/J8ytUL6DMGkrqV6JSy7d1b
+   Updated 2026-07-14
+   Source: artifacts/seasplat-architecture.html
+
+   How SeaSplat extends INRIA 3DGS with the DeepSeeColor image formation
+   model, colour-coded by what is inherited, modified, added, or a new loss.
+   The earliest artifact here and the reading that the methodology figures
+   grew out of. Needs the host's mermaid runtime for its pipeline diagram.
+
+--------------------------------------------------------------------------
+NOTES
+
+Updating an artifact: edit its source file and republish to the SAME url,
+or the publish creates a separate artifact and the link above goes stale.
+
+Mermaid: the host serves mermaid 11.16 with securityLevel 'strict', which
+strips HTML from node labels. Labels in items 1 and 5 use mermaid markdown
+strings ("`**bold**`") for that reason. Item 5 predates the change and its
+labels still carry <br/> and <b> — it renders, but its labels lose their
+formatting under the current runtime; it has not been republished since.
+
+The .html files here carry no platform wrapper and no injected runtime:
+they are the authored page only, which is what a republish expects.

@@ -1,0 +1,224 @@
+<title>SeaSplat Architecture</title>
+<style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style></head><body>
+<style>
+  :root {
+    --ground: #eef3f6;
+    --surface: #ffffff;
+    --ink: #0f2430;
+    --ink-soft: #52646f;
+    --accent: #0e7490;
+    --rule: #d5e0e6;
+    --diagram-bg: #ffffff;
+
+    --c-vanilla: #2563eb;  --c-vanilla-bg: #dbeafe;
+    --c-modified: #16a34a; --c-modified-bg: #dcfce7;
+    --c-added: #ea580c;    --c-added-bg: #ffedd5;
+    --c-newloss: #9333ea;  --c-newloss-bg: #f3e8ff;
+
+    --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    --sans: system-ui, "Segoe UI", Roboto, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #081a24;
+      --surface: #0e2731;
+      --ink: #e7eff3;
+      --ink-soft: #9db2bd;
+      --accent: #38c2d8;
+      --rule: #1b3641;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #eef3f6; --surface: #ffffff; --ink: #0f2430;
+    --ink-soft: #52646f; --accent: #0e7490; --rule: #d5e0e6;
+  }
+  :root[data-theme="dark"] {
+    --ground: #081a24; --surface: #0e2731; --ink: #e7eff3;
+    --ink-soft: #9db2bd; --accent: #38c2d8; --rule: #1b3641;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.1rem, 4vw, 2rem) 4rem;
+  }
+
+  header { border-bottom: 1px solid var(--rule); padding-bottom: 1.8rem; margin-bottom: 2.4rem; }
+  .eyebrow {
+    font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+    font-weight: 600; color: var(--accent); margin: 0 0 0.9rem;
+  }
+  h1 {
+    font-size: clamp(1.9rem, 5vw, 2.9rem); line-height: 1.08; margin: 0 0 0.7rem;
+    font-weight: 800; letter-spacing: -0.02em; text-wrap: balance;
+  }
+  .lede { font-size: 1.05rem; color: var(--ink-soft); margin: 0; max-width: 62ch; }
+
+  h2 {
+    font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em;
+    margin: 3rem 0 1.1rem; display: flex; align-items: baseline; gap: 0.6rem;
+  }
+  h2 .num {
+    font-family: var(--mono); font-size: 0.85rem; color: var(--accent);
+    font-weight: 600;
+  }
+
+  .diagram {
+    background: var(--diagram-bg);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 1.2rem;
+    overflow-x: auto;
+    box-shadow: 0 1px 3px rgba(8, 26, 36, 0.06);
+  }
+  .diagram pre.mermaid { margin: 0; text-align: center; min-width: 640px; }
+
+  .legend {
+    list-style: none; padding: 0; margin: 1.4rem 0 0;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.7rem;
+  }
+  .legend li {
+    display: flex; gap: 0.7rem; align-items: flex-start;
+    padding: 0.75rem 0.85rem; border: 1px solid var(--rule); border-radius: 9px;
+    background: var(--surface); font-size: 0.9rem;
+  }
+  .swatch { width: 16px; height: 16px; border-radius: 4px; flex: none; margin-top: 0.2rem; border: 1.5px solid; }
+  .legend b { display: block; font-weight: 650; }
+  .legend span { color: var(--ink-soft); font-size: 0.84rem; }
+
+  ol.mods { list-style: none; counter-reset: m; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
+  ol.mods li {
+    counter-increment: m; position: relative;
+    background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+    border-radius: 9px; padding: 0.95rem 1.1rem 0.95rem 3rem; font-size: 0.94rem;
+  }
+  ol.mods li::before {
+    content: counter(m); position: absolute; left: 0.95rem; top: 0.95rem;
+    font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 0.95rem;
+  }
+  ol.mods b { font-weight: 700; }
+  code {
+    font-family: var(--mono); font-size: 0.86em;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    padding: 0.1em 0.4em; border-radius: 4px; color: var(--ink);
+  }
+  .eq { font-family: var(--mono); font-size: 0.88em; color: var(--accent); white-space: nowrap; }
+
+  .files { width: 100%; border-collapse: collapse; margin-top: 0.6rem; font-size: 0.9rem; }
+  .files th, .files td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  .files th { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+  .files td:first-child { font-family: var(--mono); font-size: 0.82rem; color: var(--accent); white-space: nowrap; }
+  .files-scroll { overflow-x: auto; }
+
+  footer { margin-top: 3rem; padding-top: 1.4rem; border-top: 1px solid var(--rule); color: var(--ink-soft); font-size: 0.82rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">3D Gaussian Splatting · Underwater Rendering</p>
+    <h1>SeaSplat Architecture</h1>
+    <p class="lede">How SeaSplat extends the INRIA 3DGS framework with a physically grounded underwater image formation model (DeepSeeColor). Colors mark what is inherited, changed, or new.</p>
+  </header>
+
+  <h2><span class="num">01</span> Pipeline</h2>
+  <div class="diagram">
+<pre class="mermaid">
+flowchart TD
+    classDef vanilla  fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef modified fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef added    fill:#ffedd5,stroke:#ea580c,color:#7c2d12
+    classDef newloss  fill:#f3e8ff,stroke:#9333ea,color:#581c87
+
+    subgraph IN["1 - Input &amp; Initialization"]
+      A["COLMAP SfM<br/>images/ (undistorted) + sparse/0/"]:::vanilla
+      B["GaussianModel from point cloud<br/>xyz, opacity, scale, rot, SH color<br/>sh_degree = 0 (not 3)"]:::modified
+      A --> B
+    end
+
+    subgraph RENDER["2 - Per-iteration Rendering"]
+      B --> C["render()<br/>CUDA rasterizer &rarr; RGB + alpha"]:::vanilla
+      B --> D["render_depth()<br/>same rasterizer, color := camera-space Z<br/>&rarr; depth map"]:::added
+      C --> E["Learned background<br/>image = render + sigmoid(bg)&middot;(1-alpha)"]:::added
+    end
+
+    subgraph SEATHRU["3 - DeepSeeColor Underwater Model (after seathru_from_iter)"]
+      D --> AT["AttenuateNetV3<br/>attenuation = exp(-beta_d &middot; z)"]:::added
+      D --> BS["BackscatterNetV2<br/>B = sigmoid(B_inf)&middot;(1 - exp(-beta_b &middot; z))"]:::added
+      E --> MUL["direct = image &middot; attenuation<br/>(optional z-score filter)"]:::added
+      AT --> MUL
+      MUL --> UW["underwater = clamp(direct + backscatter, 0, 1)"]:::added
+      BS --> UW
+    end
+
+    subgraph LOSS["4 - Losses"]
+      UW --> L1["L1 + D-SSIM<br/>vs GT (uses underwater img after seathru)"]:::vanilla
+      E  --> L1
+      UW --> DCP["Dark Channel Prior"]:::newloss
+      E  --> GW["Gray World Prior"]:::newloss
+      D  --> DS["Depth / Alpha smoothness"]:::newloss
+      E  --> AB["Alpha-background loss"]:::newloss
+      UW --> SAT["RGB saturation / spatial-variation"]:::newloss
+      BS --> BINF["B_inf &amp; DSC attenuation losses"]:::newloss
+    end
+
+    subgraph OPT["5 - Optimization"]
+      L1 --> TOT["Total weighted loss"]:::vanilla
+      DCP --> TOT
+      GW --> TOT
+      DS --> TOT
+      AB --> TOT
+      SAT --> TOT
+      BINF --> TOT
+      TOT --> BW["loss.backward()"]:::vanilla
+      BW --> O1["Adam &mdash; Gaussians<br/>densify / prune / opacity reset"]:::vanilla
+      BW --> O2["Adam &mdash; backscatter + attenuate nets<br/>(alternating update schedule)"]:::added
+      BW --> O3["Adam &mdash; learned background"]:::added
+      O2 -.->|"freeze/unfreeze GS<br/>around seathru transition"| B
+    end
+</pre>
+  </div>
+
+  <ul class="legend">
+    <li><span class="swatch" style="background:var(--c-vanilla-bg);border-color:var(--c-vanilla)"></span><div><b>Vanilla</b><span>Unchanged INRIA 3DGS — rasterization, L1+D-SSIM, densify/prune, Adam on Gaussians</span></div></li>
+    <li><span class="swatch" style="background:var(--c-modified-bg);border-color:var(--c-modified)"></span><div><b>Modified</b><span>3DGS component with changed defaults or behavior — <code>sh_degree=0</code>, GS freeze/unfreeze</span></div></li>
+    <li><span class="swatch" style="background:var(--c-added-bg);border-color:var(--c-added)"></span><div><b>Added</b><span>New SeaSplat machinery — depth render, learned bg, DeepSeeColor model &amp; its optimizers</span></div></li>
+    <li><span class="swatch" style="background:var(--c-newloss-bg);border-color:var(--c-newloss)"></span><div><b>New loss</b><span>Underwater priors — dark channel, gray-world, saturation, alpha-bg, B_inf/attenuation</span></div></li>
+  </ul>
+
+  <h2><span class="num">02</span> Key modifications vs. vanilla 3DGS</h2>
+  <ol class="mods">
+    <li><b>Depth from the same rasterizer.</b> <code>render_depth()</code> reuses the RGB rasterizer but overrides Gaussian colors with camera-space Z, giving a differentiable depth map with no extra CUDA code. <em>(gaussian_renderer/__init__.py:109)</em></li>
+    <li><b>Physically grounded image formation.</b> The render is treated as clear scene radiance <em>J</em>, then degraded: <span class="eq">underwater = J·exp(-&beta;_d·z) + B_inf·(1-exp(-&beta;_b·z))</span>. Reconstruction loss compares this re-degraded image to the ground-truth photo, so the Gaussians learn the <b>clean</b> scene. <em>(deepseecolor/models.py)</em></li>
+    <li><b>Two-phase training gated by <code>seathru_from_iter</code>.</b> Plain 3DGS first; then the underwater nets switch on, GS params briefly freeze/unfreeze, and GS colors are re-adjusted for color correction. <em>(train.py:180-192, 456-463)</em></li>
+    <li><b>Three separate optimizers.</b> Gaussians, the backscatter+attenuation nets (alternating schedule via <code>update_bs_at_interval</code>), and the learned background — which hands off to <code>B_inf</code> once Sea-Thru activates (<code>bg_from_bs</code>).</li>
+    <li><b>Restoration priors.</b> The single reconstruction objective is joined by a stack of underwater-specific losses: dark-channel, gray-world, saturation, and alpha-background.</li>
+  </ol>
+
+  <h2><span class="num">03</span> Source file map</h2>
+  <div class="files-scroll">
+    <table class="files">
+      <thead><tr><th>File</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td>train.py</td><td>Full training loop, phase gate, compositing, losses, 3 optimizers</td></tr>
+        <tr><td>deepseecolor/models.py</td><td><code>BackscatterNetV2</code>, <code>AttenuateNetV3</code> — the physics</td></tr>
+        <tr><td>deepseecolor/losses.py</td><td>Restoration priors (DCP, gray-world, saturation, alpha-bg)</td></tr>
+        <tr><td>deepseecolor/depth_losses.py</td><td>Depth / alpha smoothness loss</td></tr>
+        <tr><td>gaussian_renderer/__init__.py</td><td><code>render()</code> (RGB+alpha) and <code>render_depth()</code> (Z-as-color)</td></tr>
+        <tr><td>arguments/__init__.py</td><td>All hyperparameters and flags</td></tr>
+        <tr><td>scene/gaussian_model.py</td><td><code>GaussianModel</code>, <code>freeze_parameters()</code>, densify/prune</td></tr>
+        <tr><td>render_uw.py</td><td>Post-training render with the underwater model</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>Generated from a read of the SeaSplat codebase — train.py, deepseecolor/, and gaussian_renderer/.</footer>
+</div>

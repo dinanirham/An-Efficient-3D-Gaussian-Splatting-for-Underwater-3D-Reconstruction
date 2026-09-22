@@ -1,0 +1,266 @@
+<title>A0 vs vanilla SeaSplat — investigation log</title>
+<style>
+  :root {
+    --paper:#f2f6f6; --surface:#ffffff; --sunk:#e7eeee;
+    --ink:#0e1c20; --ink-2:#35494e; --muted:#63797e;
+    --rule:#cfdcdc; --rule-soft:#e2eaea;
+    --defect:#b4400f; --defect-bg:#fdefe8;
+    --ok:#0f6b62; --ok-bg:#e4f1ef;
+    --warn:#8a6410; --warn-bg:#f8f0dc;
+    --code-bg:#eef4f4;
+    --serif:"Iowan Old Style","Charter","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","Consolas",monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:#0b1618; --surface:#102024; --sunk:#16292e;
+      --ink:#e4eeee; --ink-2:#b6c8ca; --muted:#8299a0;
+      --rule:#264046; --rule-soft:#1b3238;
+      --defect:#ff8a55; --defect-bg:#2c1509;
+      --ok:#5fc4b4; --ok-bg:#0d2724;
+      --warn:#dcac47; --warn-bg:#2a2109;
+      --code-bg:#16292e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:#0b1618; --surface:#102024; --sunk:#16292e;
+    --ink:#e4eeee; --ink-2:#b6c8ca; --muted:#8299a0;
+    --rule:#264046; --rule-soft:#1b3238;
+    --defect:#ff8a55; --defect-bg:#2c1509;
+    --ok:#5fc4b4; --ok-bg:#0d2724;
+    --warn:#dcac47; --warn-bg:#2a2109;
+    --code-bg:#16292e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper); color: var(--ink-2);
+    font-family: var(--sans); font-size: 16.5px; line-height: 1.62;
+    margin: 0; padding: 0 5vw 6rem; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.masthead { padding: 4rem 0 2rem; border-bottom: 2px solid var(--ink); margin-bottom: 2.5rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: .7rem; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 1rem;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 600;
+    font-size: clamp(2rem, 5vw, 3.05rem); line-height: 1.08;
+    letter-spacing: -.018em; color: var(--ink); text-wrap: balance; margin: 0 0 1rem;
+  }
+  .standfirst {
+    font-family: var(--serif); font-size: 1.16rem; line-height: 1.55;
+    color: var(--ink-2); max-width: 38rem; margin: 0;
+  }
+  h2 {
+    font-family: var(--serif); font-weight: 600; font-size: 1.62rem;
+    letter-spacing: -.012em; color: var(--ink); text-wrap: balance;
+    margin: 3.4rem 0 .4rem; padding-top: 1.4rem; border-top: 1px solid var(--rule);
+  }
+  h3 { font-weight: 650; font-size: 1rem; color: var(--ink); margin: 2rem 0 .5rem; }
+  p { margin: 0 0 1rem; max-width: 37rem; }
+  ul, ol { max-width: 37rem; padding-left: 1.15rem; margin: 0 0 1rem; }
+  li { margin-bottom: .42rem; }
+  strong { color: var(--ink); font-weight: 640; }
+  code {
+    font-family: var(--mono); font-size: .855em; background: var(--code-bg);
+    padding: .1em .36em; border-radius: 3px;
+  }
+  pre {
+    font-family: var(--mono); font-size: .8rem; line-height: 1.55;
+    background: var(--code-bg); border: 1px solid var(--rule-soft);
+    border-radius: 5px; padding: .95rem 1.1rem; overflow-x: auto; margin: 0 0 1rem;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .verdict {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-left: 4px solid var(--defect); border-radius: 5px;
+    padding: 1.5rem 1.7rem; margin-bottom: 1.5rem;
+  }
+  .verdict h2 { margin: 0 0 .6rem; border: 0; padding: 0; font-size: 1.3rem; }
+  .verdict p:last-child { margin-bottom: 0; }
+  .chip {
+    display: inline-block; font-family: var(--mono); font-size: .66rem;
+    letter-spacing: .09em; text-transform: uppercase; padding: .2em .55em;
+    border-radius: 3px; white-space: nowrap; font-weight: 600;
+  }
+  .chip.defect { background: var(--defect-bg); color: var(--defect); }
+  .chip.ok { background: var(--ok-bg); color: var(--ok); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn); }
+  .scroll { overflow-x: auto; margin: 0 0 1.4rem; border: 1px solid var(--rule-soft); border-radius: 5px; }
+  table { border-collapse: collapse; width: 100%; font-size: .87rem; background: var(--surface); }
+  th, td { padding: .62rem .85rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--rule-soft); }
+  thead th {
+    font-family: var(--mono); font-size: .68rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600;
+    background: var(--sunk); border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  td.key { font-family: var(--mono); font-size: .8rem; color: var(--ink); }
+  tr.flag td { background: var(--defect-bg); }
+  tr.flag td.num, tr.flag td.key { color: var(--defect); font-weight: 600; }
+  .callout { background: var(--sunk); border-radius: 5px; padding: 1rem 1.25rem; margin: 0 0 1.4rem; max-width: 39rem; }
+  .callout p:last-child { margin-bottom: 0; }
+  footer { margin-top: 4rem; padding-top: 1.3rem; border-top: 1px solid var(--rule); font-size: .82rem; color: var(--muted); max-width: 37rem; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Investigation log · Curasao · updated after the event-stream comparison</p>
+  <h1>Why A0 builds a sixth of the model</h1>
+  <p class="standfirst">A0 converges to ~635k primitives where vanilla SeaSplat reaches 4,462,668 on the same scene. Four hypotheses, three of them wrong, and the measurement that finally localised the cause to a single quantity.</p>
+</header>
+
+<div class="verdict">
+  <h2>Current state</h2>
+  <p>Every component that can be compared statically is <strong>identical</strong> — rasterizer forward and backward, densification constants, upstream commit, and the resolved configuration (111 of 113 shared keys equal). The runs still diverge sixfold.</p>
+  <p>The event-by-event comparison localised it to <strong>one quantity that diverges before any other</strong>: the fraction of primitives clearing <code>densify_grad_threshold</code>. Ours decays to 0.2%; the reference holds 3–5%. Three variants bracket the cause, and the current fix (CD-23) is <strong>implemented but not yet measured</strong>.</p>
+</div>
+
+<h2>Investigation log</h2>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>#</th><th>Hypothesis</th><th>How it was tested</th><th>Outcome</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="num">1</td>
+      <td><strong>Alpha's gradient never reaches density control.</strong> Upstream reads alpha from the colour pass; our probe pass had its own gradient buffer.</td>
+      <td>Source diff against the pinned baseline; fix (CD-22) threading one buffer through both passes; one 30k run.</td>
+      <td><span class="chip defect">Refuted</span> The divergence was real and worth fixing, but the result moved to 635k, not 4.46M.</td>
+    </tr>
+    <tr>
+      <td class="num">2</td>
+      <td><strong>The <code>_ms</code> fork computes a different densification signal.</strong> Mini-Splatting exists to replace 3DGS densification, so a modified backward was plausible.</td>
+      <td><code>compare_rasterizers</code>: both forks, byte-identical Gaussians, camera and loss; 4000 primitives spanning two orders of magnitude in scale.</td>
+      <td><span class="chip ok">Exonerated</span> Forward <code>max|diff| = 0.000e+00</code>; gradient means agree to seven significant figures; the same <strong>94.60%</strong> clear the grad threshold and <strong>17.00%</strong> the size threshold.</td>
+    </tr>
+    <tr>
+      <td class="num">3</td>
+      <td><strong>Upstream drift.</strong> The reference run cloned <code>dxyang/seasplat</code> at HEAD; our tree is pinned at <code>ddc6259</code>. A changed default would leave both internally consistent and still disagree.</td>
+      <td><code>git log</code> on a fresh clone, plus the constants.</td>
+      <td><span class="chip ok">Refuted</span> HEAD <em>is</em> <code>ddc6259</code>, dated 2024-11-27. Same commit, same constants.</td>
+    </tr>
+    <tr class="flag">
+      <td class="num">4</td>
+      <td><strong>The depth-loss gradient cancels the alpha term.</strong> Our probe emits depth and alpha from one rasterization, so sharing its buffer adds a term upstream never had.</td>
+      <td>Per-event instrumentation on both sides, 144 aligned events; three-variant bracket. Fix is CD-23, a separate alpha-only probe.</td>
+      <td><span class="chip warn">Open</span> Implemented, not yet run.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>The measurement that localised it</h2>
+
+<p>Both trees now print a per-event breakdown; the streams align one to one. The first quantity to diverge names the mechanism, and it is unambiguous — <code>over_grad</code>, the fraction clearing <code>densify_grad_threshold = 0.0002</code>:</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>Iteration</th><th>ours</th><th>reference</th><th>ours primitives</th><th>ref primitives</th><th>ratio</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="key">600</td><td class="num">13.1%</td><td class="num">13.0%</td><td class="num">29,172</td><td class="num">29,155</td><td class="num">1.001</td></tr>
+    <tr><td class="key">2,600</td><td class="num">5.1%</td><td class="num">5.4%</td><td class="num">424,846</td><td class="num">424,030</td><td class="num">1.002</td></tr>
+    <tr><td class="key">3,600</td><td class="num">5.2%</td><td class="num">5.6%</td><td class="num">414,445</td><td class="num">411,973</td><td class="num">1.006</td></tr>
+    <tr class="flag"><td class="key">4,600</td><td class="num">2.3%</td><td class="num">4.9%</td><td class="num">575,135</td><td class="num">643,246</td><td class="num">0.894</td></tr>
+    <tr><td class="key">8,000</td><td class="num">0.6%</td><td class="num">5.3%</td><td class="num">680,992</td><td class="num">1,542,863</td><td class="num">0.441</td></tr>
+    <tr><td class="key">14,900</td><td class="num">0.2%</td><td class="num">3.0%</td><td class="num">636,859</td><td class="num">4,788,960</td><td class="num">0.133</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>The reference holds 3–5% for the whole run. Ours decays monotonically.</strong> Cumulatively over 144 events: clone <strong>0.109×</strong>, split <strong>0.083×</strong>, prune <strong>0.090×</strong> — we do less of everything, in proportion, because fewer primitives ever clear the threshold.</p>
+
+<div class="callout">
+  <p><strong>Why no endpoint comparison could have found this.</strong> Vanilla grows 6.7× between iterations 5000 and 15000, which across 100 densification events is only ~1.9% growth apiece. A deficit that small is invisible on a trajectory plot and says nothing about which of clone, split or prune differs. It only becomes legible when the events are counted separately and aligned.</p>
+</div>
+
+<h2>The bracket</h2>
+
+<p>Three variants, same scene, same seed, same data:</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>Densification buffer receives</th><th>Where</th><th>Final primitives</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>image losses only</td><td>ours, before CD-22</td><td class="num">743,457</td></tr>
+    <tr class="flag"><td>image + alpha <strong>+ depth</strong></td><td>ours, after CD-22</td><td class="num">635,038</td></tr>
+    <tr><td>image + alpha</td><td>upstream</td><td class="num">4,788,960</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>CD-22 made it worse</strong>, and that is the informative part. Adding alpha <em>and</em> depth together produced fewer primitives than image alone, so the depth term is not neutral in that buffer — it cancels. Upstream never has it there: its depth pass allocates its own gradient buffer.</p>
+
+<p>CD-23 gives alpha its own probe, <code>[0,1,0]</code> — channel 1 accumulates <code>1 − Π(1−aᵢ)</code> exactly as before, channel 0 carries no depth, so only alpha reaches the shared buffer. Three rasterizations per iteration instead of two. That cost is real and lands in the wall clock this study reports, which is why it sits behind <code>separate_alpha_probe</code> and is recorded in every manifest rather than compiled in.</p>
+
+<h2>Eliminated by direct comparison</h2>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>Component</th><th>Method</th><th>Result</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Rasterizer forward + backward</td><td>identical inputs, both forks</td><td><span class="chip ok">identical</span> to 7 s.f.</td></tr>
+    <tr><td><code>radii</code> / size-prune</td><td>same</td><td><span class="chip ok">identical</span> 17.00% both</td></tr>
+    <tr><td>Densification constants</td><td>diff vs <code>ddc6259</code></td><td><span class="chip ok">zero changed lines</span></td></tr>
+    <tr><td>Upstream commit</td><td><code>git log</code></td><td><span class="chip ok">HEAD is ddc6259</span></td></tr>
+    <tr><td>Resolved configuration</td><td>startup dumps, both runs</td><td><span class="chip ok">111/113 equal</span>; only <code>exp</code>, <code>model_path</code></td></tr>
+    <tr><td>Loss computation</td><td>diff</td><td><span class="chip ok">one logging line</span></td></tr>
+    <tr><td>Scene loading</td><td>25,837 init on both</td><td><span class="chip ok">identical</span></td></tr>
+    <tr><td>Medium model</td><td>B∞ within 3%, β ordered R&gt;G&gt;B</td><td><span class="chip ok">same solution</span></td></tr>
+    <tr><td>Image resolution</td><td>same staged data in the diagnostic</td><td><span class="chip ok">controlled out</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Why it matters</h2>
+
+<p>The factorial stays internally consistent — all eight cells share one renderer — but three things break while A0 is not the baseline:</p>
+
+<ol>
+  <li><strong><code>n_bud</code> would be derived from the wrong number.</strong> From 635k the budget lands near 400k; a faithful SeaSplat converges past 4.4M.</li>
+  <li><strong>Two cells could collapse.</strong> A budget that fails to bind makes <strong>A4 ≡ A1</strong> and <strong>A7 ≡ A5</strong>, and a null interaction measured in that state looks exactly like a finding.</li>
+  <li><strong>No external comparison holds</strong> against SeaSplat's published table.</li>
+</ol>
+
+<div class="callout">
+  <p><strong>The quality result, which is not yet a result.</strong> At 6× fewer primitives our A0 scored <strong>30.268 dB</strong> test PSNR against the reference's <strong>30.375</strong> — a tenth of a dB. If that survives proper measurement it is a larger, simpler efficiency lever than anything M1–M3 offers. But it rests on one seed, one scene and a three-image test set whose mean is dragged by a single 24.5 dB frame. It is a promising observation, not a finding.</p>
+</div>
+
+<h2>Open items</h2>
+
+<ul>
+  <li><strong>CD-23 is unmeasured.</strong> Target at iteration 14900: <code>over_grad</code> near 3% and primitives in the millions. This is the fourth hypothesis; the first three were wrong, and the difference is that this one comes from a measured bracket rather than from reading code.</li>
+  <li><strong>If it still decays</strong>, something else feeds that buffer differently, and the next step is logging per-loss-group gradient contributions directly instead of inferring them.</li>
+  <li><strong>A 4.6% accounting gap.</strong> <code>diagnostics.csv</code> reported 743,457 at iteration 30000 where the 48.2 MB PLY implies ~709k and the 39 MB compressed artifact ~696k. The two artifacts agree with each other and disagree with the log.</li>
+  <li><strong>Cost is re-derived and lower than feared.</strong> Vanilla ran 30,000 iterations at 4.46M primitives in ~51 minutes wall clock. An earlier version of this document warned the corrected campaign would be far more expensive; that was wrong. Storage rises, not time.</li>
+</ul>
+
+<h2>What the instrumentation is worth keeping for</h2>
+
+<p>Three checks now exist that would have caught this class of defect immediately, and none of them existed when the merge was written:</p>
+
+<ul>
+  <li><strong>T7</strong> — asserts the gradient's <em>destination</em>, in both directions: non-zero with a shared buffer, untouched without one.</li>
+  <li><strong>T8</strong> — asserts the alpha-only probe matches the combined probe's alpha to 1e-6 and that its depth channel is identically zero.</li>
+  <li><strong>The per-event breakdown</strong> — clone, split and each prune reason counted separately, on both implementations, aligned event by event.</li>
+</ul>
+
+<p>Every acceptance check written before this investigation inspected a returned tensor. Alpha's <em>value</em> was correct throughout; what was wrong was where its gradient went. That is the lesson worth carrying into the write-up.</p>
+
+<footer>
+  <p>Evidence: <code>compare_rasterizers</code> and <code>compare_densification</code> output; 144 aligned densification events per side; startup configuration dumps from both runs; <code>diagnostics.csv</code> and <code>eval_metrics.json</code> from A0/Curasao; three vanilla point clouds and the vanilla TensorBoard log.</p>
+</footer>
+
+</div>
