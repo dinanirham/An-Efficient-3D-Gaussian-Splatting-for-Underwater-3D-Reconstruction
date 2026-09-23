@@ -54,7 +54,7 @@ everything else is load-bearing.
 | No. | Title | § | Content | Source | Status |
 |---|---|---|---|---|---|
 | 4.1 | Resolvable effect size against observed effect size | 4.1.3 | Per scene, the 2 SE threshold for main, two-way and three-way contrasts, with the observed main effects overlaid. Shows graphically why PSNR interactions are undetermined | `_noise_floor.json`, §0 | PLOT |
-| 4.2 | Baseline reconstruction against ground truth | 4.2.3 | Four scenes × (ground truth, A0 render), with one far-field and one near-field crop per scene | checkpoints | RENDER |
+| 4.2 | Baseline and reference against ground truth | 4.2.1, 4.2.3 | Four scenes × (ground truth, SS render, A0 render), with one far-field and one near-field crop per scene. The reference panel is what makes the equivalence claim visible rather than tabular | checkpoints | RENDER |
 | 4.3 | **Learned attenuation spectra, per scene** | 4.2.4 | β_att by channel for each scene, A0 and SS side by side; physical ordering marked; the inverted scene highlighted | `results_runs.csv` | **DERIVE + PLOT** |
 | 4.4 | Medium decomposition of a held-out view | 4.2.5 | One view per scene: composed image Î, restored image Ĵ, attenuation map, backscatter map | checkpoints | RENDER |
 | 4.5 | The invisible population | 4.2.6 | Point cloud coloured by visibility, one scene; and the same view rendered with sub-threshold primitives removed, showing no visible difference | checkpoints | RENDER |

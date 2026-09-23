@@ -83,7 +83,10 @@ CROPS: dict[str, tuple[tuple[int, int, int, int], tuple[int, int, int, int]]] = 
     "Panama": ((540, 190, 360, 270), (130, 520, 360, 270)),
 }
 
-RENDER_CELLS: tuple[str, ...] = ("A0", "A1", "A2", "A3", "A4")
+# SS is rendered alongside the baseline because the equivalence claim in the
+# chapter is otherwise numbers only: a reader should be able to see that the
+# unmodified reference and this baseline reconstruct the same scene.
+RENDER_CELLS: tuple[str, ...] = ("SS", "A0", "A1", "A2", "A3", "A4")
 
 # The backbone the campaign evaluated with; recorded so the per-view table
 # and the aggregates it explains are the same measurement.
