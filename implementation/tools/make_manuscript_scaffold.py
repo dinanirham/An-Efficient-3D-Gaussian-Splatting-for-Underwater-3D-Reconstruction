@@ -159,6 +159,43 @@ never overwrites a file that exists.
 """
 
 
+UNTOUCHED_MARKER: str = "[TODO] Not yet drafted."
+
+
+def is_untouched_stub(path: Path) -> bool:
+    """True only for a stub still exactly as generated.
+
+    Pruning must never remove drafted prose, so the test is positive: the file
+    must still carry the generator's own marker and its initial status.
+    """
+    text = path.read_text(encoding="utf-8")
+    return UNTOUCHED_MARKER in text and "status: draft" in text
+
+
+def prune_orphans(entries: list[Entry], out_root: Path) -> tuple[list[str], list[str]]:
+    """Remove stubs no longer in the structure. Returns (removed, kept).
+
+    A subsection that is renamed leaves its old file behind. Removing it is
+    safe only while it is untouched; once drafted it is reported and kept, for
+    a person to move by hand.
+    """
+    expected = {
+        out_root / CHAPTER_SLUG[e.chapter] / f"{e.number.replace('.', '-')}-{slug(e.title)}.md"
+        for e in entries if e.is_subsection
+    }
+    removed: list[str] = []
+    kept: list[str] = []
+    for path in sorted(out_root.rglob("*.md")):
+        if path.name == "README.md" or path in expected:
+            continue
+        if is_untouched_stub(path):
+            path.unlink()
+            removed.append(path.name)
+        else:
+            kept.append(path.name)
+    return removed, kept
+
+
 def write_scaffold(entries: list[Entry], out_root: Path) -> tuple[int, int]:
     created = skipped = 0
     by_chapter: dict[int, list[Entry]] = {}
@@ -189,6 +226,8 @@ def write_scaffold(entries: list[Entry], out_root: Path) -> tuple[int, int]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--prune", action="store_true",
+                    help="remove untouched stubs that the structure no longer lists")
     args = ap.parse_args()
 
     entries = parse_structure(STRUCTURE)
@@ -202,6 +241,11 @@ def main() -> int:
 
     created, skipped = write_scaffold(entries, OUT)
     print(f"wrote {created} file(s), left {skipped} existing file(s) untouched")
+    if args.prune:
+        removed, kept = prune_orphans(entries, OUT)
+        print(f"pruned {len(removed)} orphaned stub(s)")
+        for name in kept:
+            print(f"  KEPT (has been drafted, move it by hand): {name}")
     print(f"into {OUT.relative_to(ROOT)}")
     return 0
 

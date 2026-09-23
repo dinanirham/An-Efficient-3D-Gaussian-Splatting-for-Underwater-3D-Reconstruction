@@ -1646,7 +1646,9 @@ Deliverables in `manuscript/ch3-methodology/`.
 
 # CHAPTER IV — RESULTS AND DISCUSSION  ·  60 pp (from 63)
 
-Deliverables in `manuscript/ch4-results/`.
+Deliverables in `manuscript/ch4-results/`. Structure per
+`new-revisited-writing/chapter-04-specification.md` Revision 3, which is
+authoritative for this chapter's content.
 
 | § | Title | Action | Evidence | RQ | Deliverable |
 |---|---|---|---|---|---|
@@ -1655,52 +1657,70 @@ Deliverables in `manuscript/ch4-results/`.
 | 4.1.2 | Evaluation Criteria and Reporting Conventions | Add | §0 | — | `4-1-2-evaluation-criteria-and-reporting-conventions.md` |
 | 4.1.3 | Repeat Dispersion as the Measurement Baseline | Add | §0 | — | `4-1-3-repeat-dispersion-as-the-measurement-baseline.md` |
 | 4.1.4 | Provenance and Experimental Integrity | Add | §0 | — | `4-1-4-provenance-and-experimental-integrity.md` |
-| **4.2** | **Baseline Validation** | Reframe | — | validation | *(section)* |
+| **4.2** | **Baseline Characterisation and Validation** | Reframe | §1 | validation | *(section)* |
 | 4.2.1 | Equivalence to the Unmodified Reference | Add | §1 | validation | `4-2-1-equivalence-to-the-unmodified-reference.md` |
-| 4.2.2 | Baseline Reconstruction and Efficiency per Scene | Retain, de-aggregate | §2 | validation | `4-2-2-baseline-reconstruction-and-efficiency-per-scene.md` |
-| 4.2.3 | Baseline Representation Characteristics | Rewrite | §9 | validation | `4-2-3-baseline-representation-characteristics.md` |
-| 4.2.4 | Baseline Medium Stability | Add | §5a | validation | `4-2-4-baseline-medium-stability.md` |
-| **4.3** | **Component 1: Deterministic Initialisation** | Rewrite | — | RQ1 | *(section)* |
-| 4.3.1 | Quantitative Comparison per Scene | Rewrite | §2 | RQ1 | `4-3-1-quantitative-comparison-per-scene.md` |
-| 4.3.2 | Representation Size and Training Cost | Rewrite | §2, §12 | RQ1 | `4-3-2-representation-size-and-training-cost.md` |
-| 4.3.3 | Effect on Medium Stability | Add | §5c | RQ1 | `4-3-3-effect-on-medium-stability.md` |
-| 4.3.4 | Geometry After Initialisation | Refine | §9 | RQ1 | `4-3-4-geometry-after-initialisation.md` |
+| 4.2.2 | Reconstruction Fidelity and Efficiency per Scene | Rewrite | §2 | validation | `4-2-2-reconstruction-fidelity-and-efficiency-per-scene.md` |
+| 4.2.3 | Qualitative Reconstruction Characteristics | Add | renders | validation | `4-2-3-qualitative-reconstruction-characteristics.md` |
+| 4.2.4 | The Learned Medium Model | Add | §2b | validation | `4-2-4-the-learned-medium-model.md` |
+| 4.2.5 | Medium Decomposition, Qualitatively | Add | renders | validation | `4-2-5-medium-decomposition-qualitatively.md` |
+| 4.2.6 | Representation Characteristics and the Invisible Population | Rewrite | §9 | validation | `4-2-6-representation-characteristics-and-the-invisible-population.md` |
+| 4.2.7 | Baseline Medium Stability | Add | §5a | validation | `4-2-7-baseline-medium-stability.md` |
+| **4.3** | **Component 1 — Deterministic Initialisation (M1)** | Rewrite | §2 | RQ1 | *(section)* |
+| 4.3.1 | Reconstruction Fidelity per Scene | Rewrite | §2 | RQ1 | `4-3-1-reconstruction-fidelity-per-scene.md` |
+| 4.3.2 | Efficiency Outcome | Rewrite | §2, §12 | RQ1 | `4-3-2-efficiency-outcome.md` |
+| 4.3.3 | Effect on the Medium Model | Add | §5c | RQ3 | `4-3-3-effect-on-the-medium-model.md` |
+| 4.3.4 | Qualitative and Geometric Behaviour | Refine | §9 | RQ1 | `4-3-4-qualitative-and-geometric-behaviour.md` |
 | 4.3.5 | Discussion | Refine | — | RQ1 | `4-3-5-discussion.md` |
-| **4.4** | **Component 2: Spatial Reorganisation** | Rewrite | — | RQ1 | *(section)* |
-| 4.4.1 | Quantitative Comparison per Scene | Rewrite | §2 | RQ1 | `4-4-1-quantitative-comparison-per-scene.md` |
-| 4.4.2 | Rendering Throughput and Representation Size | Rewrite | §2, §12 | RQ1 | `4-4-2-rendering-throughput-and-representation-size.md` |
-| 4.4.3 | Effect on Medium Stability | Add | §5a | RQ1 | `4-4-3-effect-on-medium-stability.md` |
-| 4.4.4 | Discussion | Refine | — | RQ1 | `4-4-4-discussion.md` |
-| **4.5** | **Component 3: Attribute-Level Quantisation** | Rewrite | — | RQ1 | *(section)* |
-| 4.5.1 | Quantitative Comparison per Scene | Rewrite | §2 | RQ1 | `4-5-1-quantitative-comparison-per-scene.md` |
-| 4.5.2 | Storage–Fidelity Relationship | Refine | §2 | RQ1 | `4-5-2-storage-fidelity-relationship.md` |
-| 4.5.3 | Effect on the Restored Image | Add | §10 | RQ1 | `4-5-3-effect-on-the-restored-image.md` |
-| 4.5.4 | Discussion | Refine | — | RQ1 | `4-5-4-discussion.md` |
-| **4.6** | **Combined Configurations and Interactions** | Add | — | RQ2 | *(section)* |
-| 4.6.1 | Two-Way Interactions | Add | §3 | RQ2 | `4-6-1-two-way-interactions.md` |
-| 4.6.2 | Three-Way Interaction | Add | §4 | RQ2 | `4-6-2-three-way-interaction.md` |
-| 4.6.3 | Composition on Representation Size: the Budget Bound | Add | §3 | RQ2 | `4-6-3-composition-on-representation-size-the-budget-bound.md` |
-| 4.6.4 | Operating Points Across Configurations | Add | §7 | RQ2 | `4-6-4-operating-points-across-configurations.md` |
-| **4.7** | **Coupling Between Simplification and the Medium Model** | Add | — | RQ3 | *(section)* |
-| 4.7.1 | Collapse Rates and Boundary Alignment | Add | §5a | RQ3 | `4-7-1-collapse-rates-and-boundary-alignment.md` |
-| 4.7.2 | Size Versus Discontinuity | Add | §5d | RQ3 | `4-7-2-size-versus-discontinuity.md` |
+| 4.3.6 | Boundary | Add | §14 | RQ1 | `4-3-6-boundary.md` |
+| **4.4** | **Component 2 — Spatial Reorganisation (M2)** | Rewrite | §2 | RQ1 | *(section)* |
+| 4.4.1 | Reconstruction Fidelity per Scene | Rewrite | §2 | RQ1 | `4-4-1-reconstruction-fidelity-per-scene.md` |
+| 4.4.2 | Efficiency Outcome | Rewrite | §2, §12 | RQ1 | `4-4-2-efficiency-outcome.md` |
+| 4.4.3 | Effect on the Medium Model | Add | §5a | RQ3 | `4-4-3-effect-on-the-medium-model.md` |
+| 4.4.4 | Qualitative and Geometric Behaviour | Refine | renders | RQ1 | `4-4-4-qualitative-and-geometric-behaviour.md` |
+| 4.4.5 | Discussion | Refine | — | RQ1 | `4-4-5-discussion.md` |
+| 4.4.6 | Boundary | Add | §14 | RQ1 | `4-4-6-boundary.md` |
+| **4.5** | **Component 3 — Attribute-Level Quantisation (M3)** | Rewrite | §2 | RQ1 | *(section)* |
+| 4.5.1 | Reconstruction Fidelity per Scene | Rewrite | §2 | RQ1 | `4-5-1-reconstruction-fidelity-per-scene.md` |
+| 4.5.2 | Efficiency Outcome | Refine | §2, §12 | RQ1 | `4-5-2-efficiency-outcome.md` |
+| 4.5.3 | Effect on the Medium Model | Add | §5a | RQ3 | `4-5-3-effect-on-the-medium-model.md` |
+| 4.5.4 | Qualitative and Geometric Behaviour | Refine | renders | RQ1 | `4-5-4-qualitative-and-geometric-behaviour.md` |
+| 4.5.5 | Discussion | Refine | — | RQ1 | `4-5-5-discussion.md` |
+| 4.5.6 | Boundary | Add | §14 | RQ1 | `4-5-6-boundary.md` |
+| 4.5.7 | Effect on the Restored Image | Add | §10 | RQ1 | `4-5-7-effect-on-the-restored-image.md` |
+| **4.6** | **Combined Configurations and Interactions** | Add | §3, §4 | RQ2 | *(section)* |
+| 4.6.1 | Estimating Interactions in This Design | Add | §0, §3 | RQ2 | `4-6-1-estimating-interactions-in-this-design.md` |
+| 4.6.2 | Initialisation × Simplification | Add | §3 | RQ2 | `4-6-2-initialisation-simplification.md` |
+| 4.6.3 | Simplification × Quantisation | Add | §3 | RQ2 | `4-6-3-simplification-quantisation.md` |
+| 4.6.4 | Initialisation × Quantisation | Add | §3 | RQ2 | `4-6-4-initialisation-quantisation.md` |
+| 4.6.5 | Three-Way Interaction | Add | §4 | RQ2 | `4-6-5-three-way-interaction.md` |
+| 4.6.6 | Operating Points Across Configurations | Add | §7 | RQ2 | `4-6-6-operating-points-across-configurations.md` |
+| **4.7** | **Coupling Between Simplification and the Medium Model** | Add | §5 | RQ3 | *(section)* |
+| 4.7.1 | Incidence and Boundary Alignment | Add | §5a | RQ3 | `4-7-1-incidence-and-boundary-alignment.md` |
+| 4.7.2 | Final Size Is Not the Cause | Add | §5d | RQ3 | `4-7-2-final-size-is-not-the-cause.md` |
 | 4.7.3 | The Registered Explanation and Its Refutation | Add | §5b | RQ3 | `4-7-3-the-registered-explanation-and-its-refutation.md` |
-| 4.7.4 | Post-Hoc Characterisation of the Coupling | Add | §5 | RQ3 | `4-7-4-post-hoc-characterisation-of-the-coupling.md` |
+| 4.7.4 | What the Diagnostics Show Instead | Add | §5 | RQ3 | `4-7-4-what-the-diagnostics-show-instead.md` |
 | 4.7.5 | The Re-Identification Burst | Add | §5e | RQ3 | `4-7-5-the-re-identification-burst.md` |
-| **4.8** | **Detecting Failure: the Limits of Fidelity Metrics** | Add | — | RQ4 | *(section)* |
+| 4.7.6 | Physical Consequence | Add | §5a | RQ3 | `4-7-6-physical-consequence.md` |
+| **4.8** | **Detecting Failure: the Limits of Fidelity Metrics** | Add | §8, §10 | RQ4 | *(section)* |
 | 4.8.1 | Collapsed Versus Intact Strata | Add | §8 | RQ4 | `4-8-1-collapsed-versus-intact-strata.md` |
-| 4.8.2 | Restored-Image Consistency | Add | §10 | RQ4 | `4-8-2-restored-image-consistency.md` |
-| **4.9** | **Supplementary Contrast: Gradient Detachment** | Add | — | supplementary | *(section)* |
-| 4.9.1 | Quantitative Comparison Against the Baseline | Add | §6 | supplementary | `4-9-1-quantitative-comparison-against-the-baseline.md` |
-| 4.9.2 | Discussion | Add | §6 | supplementary | `4-9-2-discussion.md` |
+| 4.8.2 | Restoration Consistency Under Quantisation | Add | §10 | RQ4 | `4-8-2-restoration-consistency-under-quantisation.md` |
+| 4.8.3 | Implication for Evaluation Practice | Add | §8, §10 | RQ4 | `4-8-3-implication-for-evaluation-practice.md` |
+| **4.9** | **Supplementary Contrast: Gradient Detachment** | Add | §6 | supplementary | *(section)* |
+| 4.9.1 | Rationale and Why It Is Not a Fourth Factor | Add | §6 | supplementary | `4-9-1-rationale-and-why-it-is-not-a-fourth-factor.md` |
+| 4.9.2 | Quantitative Comparison Against the Baseline | Add | §6 | supplementary | `4-9-2-quantitative-comparison-against-the-baseline.md` |
+| 4.9.3 | Discussion | Add | §6 | supplementary | `4-9-3-discussion.md` |
 | **4.10** | **Replication Against the Archived Campaign** | Add | §11 | replication | *(section)* |
-| **4.11** | **Synthesis** | Rewrite | — | all | *(section)* |
-| 4.11.1 | Alignment with Research Objectives | Retain from old 4.6.4 | all | all | `4-11-1-alignment-with-research-objectives.md` |
-| 4.11.2 | What the Campaign Establishes and What Remains Open | Add | all | all | `4-11-2-what-the-campaign-establishes-and-what-remains-open.md` |
-| **4.12** | **Limitations of the Study** | Retain, expand | — | — | *(section)* |
+| 4.10.1 | Replication Outcome per Comparison | Add | §11 | replication | `4-10-1-replication-outcome-per-comparison.md` |
+| 4.10.2 | What the Provenance Limit Prevents | Add | §0, §11 | replication | `4-10-2-what-the-provenance-limit-prevents.md` |
+| **4.11** | **Synthesis** | Rewrite | all | all | *(section)* |
+| 4.11.1 | Alignment with the Research Questions | Rewrite | all | all | `4-11-1-alignment-with-the-research-questions.md` |
+| 4.11.2 | What the Campaign Establishes | Add | all | all | `4-11-2-what-the-campaign-establishes.md` |
+| 4.11.3 | What Remains Open | Add | all | all | `4-11-3-what-remains-open.md` |
+| **4.12** | **Limitations of the Study** | Retain, expand | §14 | — | *(section)* |
 | 4.12.1 | Experimental Limitations | Refine | §14 | — | `4-12-1-experimental-limitations.md` |
 | 4.12.2 | Methodological Limitations | Refine | §14 | — | `4-12-2-methodological-limitations.md` |
 | 4.12.3 | Unresolved and Undetermined by Design | Add | §0, §14 | — | `4-12-3-unresolved-and-undetermined-by-design.md` |
+| 4.12.4 | Threats to External Validity | Add | §14 | — | `4-12-4-threats-to-external-validity.md` |
 
 ---
 

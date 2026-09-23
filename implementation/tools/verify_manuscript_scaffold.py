@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from make_manuscript_scaffold import (  # noqa: E402
     Entry,
+    prune_orphans,
     parse_structure,
     render_stub,
     slug,
@@ -46,11 +47,27 @@ def t1_slug() -> None:
           slug("Storage–Fidelity Relationship"))
 
 
-def t2_parses_every_row() -> None:
+def t2_structure_invariants() -> None:
+    """Row counts move whenever the structure is revised, so assert the
+    invariants that must hold at any size rather than a snapshot total."""
     entries = parse_structure(STRUCTURE)
-    check("T2 every numbered row is parsed", len(entries) == 164, f"got {len(entries)}")
+    check("T2 the structure is populated", len(entries) > 150, f"got {len(entries)}")
     chapters = sorted({e.chapter for e in entries})
     check("T2 all five chapters present", chapters == [1, 2, 3, 4, 5], str(chapters))
+
+    numbers = [e.number for e in entries]
+    dupes = {n for n in numbers if numbers.count(n) > 1}
+    check("T2 no section number appears twice", not dupes, str(sorted(dupes)))
+
+    # A subsection whose parent section is missing would generate a file the
+    # thesis has nowhere to put.
+    sections = {e.number for e in entries if not e.is_subsection}
+    orphans = {e.number for e in entries if e.is_subsection
+               and e.number.rsplit(".", 1)[0] not in sections}
+    check("T2 every subsection has its parent section", not orphans, str(sorted(orphans)))
+
+    untitled = [e.number for e in entries if not e.title.strip()]
+    check("T2 every row carries a title", not untitled, str(untitled))
 
 
 def t3_four_and_five_column_tables() -> None:
@@ -115,11 +132,40 @@ def t6_sections_become_directories_not_files() -> None:
               not any(f.name.startswith("4-2-baseline") for f in files))
 
 
+def t7_prune_spares_drafted_prose() -> None:
+    """A renamed subsection leaves its old file behind; pruning may remove it
+    only while it is still exactly as generated."""
+    old = Entry(chapter=4, number="4.2.2", title="Old Title Since Renamed",
+                action="Add", evidence="§2", content="")
+    new = Entry(chapter=4, number="4.2.2", title="Reconstruction Fidelity per Scene",
+                action="Add", evidence="§2", content="")
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        write_scaffold([old], out)
+        write_scaffold([new], out)
+        removed, kept = prune_orphans([new], out)
+        check("T7 an untouched orphan is removed", removed == ["4-2-2-old-title-since-renamed.md"],
+              str(removed))
+        check("T7 nothing else is touched", kept == [], str(kept))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        write_scaffold([old], out)
+        orphan = next(out.rglob("4-2-2-old-title*.md"))
+        orphan.write_text("---\nstatus: refined\n---\n\nReal prose.\n", encoding="utf-8")
+        write_scaffold([new], out)
+        removed, kept = prune_orphans([new], out)
+        check("T7 a drafted orphan is never removed", removed == [], str(removed))
+        check("T7 a drafted orphan is reported for a human", len(kept) == 1, str(kept))
+        check("T7 the drafted orphan still exists", orphan.exists())
+
+
 def main() -> int:
     print("manuscript scaffold")
-    for fn in (t1_slug, t2_parses_every_row, t3_four_and_five_column_tables,
+    for fn in (t1_slug, t2_structure_invariants, t3_four_and_five_column_tables,
                t4_never_clobbers_drafted_prose, t5_stub_carries_its_metadata,
-               t6_sections_become_directories_not_files):
+               t6_sections_become_directories_not_files,
+               t7_prune_spares_drafted_prose):
         fn()
     print()
     if FAILURES:
