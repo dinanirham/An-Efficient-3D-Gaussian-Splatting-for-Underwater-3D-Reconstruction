@@ -462,29 +462,66 @@ def figure_4_12() -> None:
 
 
 
-# ── 4.13  main effects, with the resolution threshold ────────────────────
+# ── 4.15  main effects, with the resolution threshold ────────────────────
 
-def figure_4_13() -> None:
-    """R1. Which effects clear two standard errors, at a glance."""
+# What each anchor means, and what it therefore cannot be used for.
+#
+#   A0  the factorial contrast. A1 differs from A0 by exactly M1, so the
+#       difference *is* the mechanism effect. This is the pre-registered
+#       comparison and the one the main-effects tables report.
+#   SS  the published reference. A1 - SS is not a mechanism effect: it
+#       confounds M1 with everything separating the two implementations,
+#       and A0 - SS is itself non-zero. It answers the other question a
+#       reader has — where does each configuration stand against SeaSplat.
+ANCHORS: dict[str, tuple[str, list[tuple[str, str]], str]] = {
+    "A0": ("figure-4-15-main-effects-forest",
+           [("A1", "M1 initialisation"), ("A2", "M2 simplification"),
+            ("A3", "M3 quantisation"), ("SS", "reference (SS)")],
+           "Main effects against the baseline, with two-standard-error intervals"),
+    "SS": ("figure-4-15b-configurations-vs-reference",
+           [("A0", "A0 no mechanism"), ("A1", "A1  M1"), ("A2", "A2  M2"),
+            ("A3", "A3  M3"), ("A7", "A7  all three")],
+           "Each configuration against the published reference (SS)"),
+}
+
+
+NULL_NOTE: dict[str, str] = {
+    "A0": "Zero is A0 on that same row's scene, never a pooled or absolute zero: "
+          "each scene is compared with A0 of that scene. The count panel is a "
+          "ratio on a log axis, so its null is 1. The SS group is SS - A0, which "
+          "is the equivalence claim of 4.2.1 drawn rather than tabulated.",
+    "SS": "Zero is SS on that same row's scene. These are not mechanism effects: "
+          "A0 already differs from SS, so a row here carries that difference plus "
+          "whatever the mechanism does. For the effect of a mechanism alone, read "
+          "Figure 4.15, where the null is A0. The count panel is a ratio, null 1.",
+}
+
+
+def figure_4_15(null_cell: str = "A0") -> None:
+    """R1. Which effects clear two standard errors, at a glance.
+
+    `null_cell` chooses what the zero line means — see ANCHORS above. It
+    changes the question the figure answers, not merely its presentation.
+    """
+    name, mechs, title = ANCHORS[null_cell]
     rows = by_scene()
     metrics = [("psnr_pooled", "PSNR (dB)", False),
                ("lpips", "LPIPS", False),
                ("n_primitives_final", "primitive count (ratio)", True)]
-    mechs = [("A1", "M1 initialisation"), ("A2", "M2 simplification"),
-             ("A3", "M3 quantisation"), ("SS", "reference (SS)")]
 
-    # Four groups of four scenes: the panel has to be tall enough for the
-    # rotated group labels to sit beside their own rows without colliding.
-    fig, axes = plt.subplots(1, 3, figsize=(9.6, 5.4))
+    # One group of four scenes per row-block: the panel has to be tall enough
+    # for the rotated group labels to sit beside their own rows without
+    # colliding.
+    fig, axes = plt.subplots(1, 3, figsize=(9.6, 1.25 * len(mechs) + 0.4))
     for ax, (metric, label, as_ratio) in zip(axes, metrics):
         y = 0.0
         ticks: list[float] = []
         names: list[str] = []
         for cell, mech in mechs:
             for key, scene in SCENES.items():
-                base = mean_of(rows, "A0", key, metric)
+                base = mean_of(rows, null_cell, key, metric)
                 val = mean_of(rows, cell, key, metric)
-                sd_b = sd_of(rows, "A0", key, metric)
+                sd_b = sd_of(rows, null_cell, key, metric)
                 sd_v = sd_of(rows, cell, key, metric)
                 if None in (base, val, sd_b, sd_v) or not base:
                     y -= 1.0
@@ -533,15 +570,17 @@ def figure_4_13() -> None:
         Line2D([], [], marker="o", ls="-", color=NEUTRAL, label="resolved (2 SE excludes the null)"),
         Line2D([], [], marker="x", ls="-", color=NEUTRAL, alpha=0.4, label="unresolved at three repeats"),
     ], loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.06), fontsize=8)
-    fig.suptitle("Main effects against the baseline, with two-standard-error intervals", y=1.02)
+    fig.suptitle(title, y=1.02)
+    fig.text(0.5, -0.085, NULL_NOTE[null_cell], ha="center", va="center",
+             fontsize=7.5, color=NEUTRAL, wrap=True)
     fig.tight_layout()
     fig.subplots_adjust(left=0.18)
-    save(fig, "figure-4-15-main-effects-forest")
+    save(fig, name)
 
 
-# ── 4.14  interaction plots ──────────────────────────────────────────────
+# ── 4.16  interaction plots ──────────────────────────────────────────────
 
-def figure_4_14() -> None:
+def figure_4_16() -> None:
     """R2. The canonical factorial figure: parallel means additive."""
     rows = by_scene()
     pairs = [(("A0", "A1", "A2", "A4"), "M1", "M2"),
@@ -576,9 +615,9 @@ def figure_4_14() -> None:
     save(fig, "figure-4-16-interaction-plots")
 
 
-# ── 4.15  population through training ────────────────────────────────────
+# ── 4.17  population through training ────────────────────────────────────
 
-def figure_4_15() -> None:
+def figure_4_17() -> None:
     """R3. When each mechanism acts, and the budget that binds."""
     rs = runs()
     anchors = [("n_prim_init", 0), ("n_prim_at_10000", 10000),
@@ -622,9 +661,9 @@ def figure_4_15() -> None:
     save(fig, "figure-4-17-population-trajectory")
 
 
-# ── 4.16  frame rate against population ──────────────────────────────────
+# ── 4.18  frame rate against population ──────────────────────────────────
 
-def figure_4_16() -> None:
+def figure_4_18() -> None:
     """R4. Sub-linear, with a scene-dependent exponent."""
     rows = by_scene()
     fig, ax = plt.subplots(figsize=(6.4, 4.0))
@@ -665,9 +704,9 @@ def figure_4_16() -> None:
     save(fig, "figure-4-18-fps-vs-count")
 
 
-# ── 4.17  restoration gap against in-medium loss ─────────────────────────
+# ── 4.19  restoration gap against in-medium loss ─────────────────────────
 
-def figure_4_17() -> None:
+def figure_4_19() -> None:
     """R5. The two are uncorrelated, which is what refutes drift."""
     j = json.loads((DATA / "j_consistency.json").read_text(encoding="utf-8"))
     xs, ys, labels = [], [], []
@@ -698,9 +737,9 @@ def figure_4_17() -> None:
     save(fig, "figure-4-19-restoration-vs-drift")
 
 
-# ── 4.18  collapse onset ─────────────────────────────────────────────────
+# ── 4.20  collapse onset ─────────────────────────────────────────────────
 
-def figure_4_18() -> None:
+def figure_4_20() -> None:
     """R6. Boundary alignment, shown rather than asserted."""
     mc = collapse()
     onsets: list[tuple[int, str, str]] = []
@@ -874,12 +913,13 @@ def main() -> None:
     figure_4_10()
     figure_4_11()
     figure_4_12()
-    figure_4_13()
-    figure_4_14()
-    figure_4_15()
+    figure_4_15("A0")
+    figure_4_15("SS")
     figure_4_16()
     figure_4_17()
     figure_4_18()
+    figure_4_19()
+    figure_4_20()
     figure_c1_per_view()
     figure_c4_depth_ranges()
     figure_c5_medium_convergence()

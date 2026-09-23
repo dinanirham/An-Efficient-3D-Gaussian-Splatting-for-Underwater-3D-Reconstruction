@@ -84,6 +84,7 @@ checkpoints.
 | 4.17 | Primitive population through training | 4.1.1, 4.6.3 | Nothing showed *when* each mechanism acts, or the budget binding | PLOT |
 | 4.18 | Frame rate against population, log–log | 4.4.2, 4.5.2 | The sub-linear claim with a scene-dependent exponent had no visual support. Fitted slopes −0.11 to −0.28 against −1 for inverse proportionality | PLOT |
 | 4.19 | Restoration gap against in-medium loss | 4.8.2 | The two are uncorrelated (ρ = −0.14), which is what refutes the drift reading; a table states it, a scatter shows it | PLOT |
+| 4.15b | Each configuration against the published reference (SS) | 4.2.1, 4.9 | The forest plot's null is A0, so the reference appears as a deviation rather than an anchor. A thesis claiming efficiency over SeaSplat also needs the distance from SeaSplat read directly. Same construction, null SS; not mechanism effects, and the caption says so | PLOT |
 | 4.20 | Onset of medium collapse | 4.7.1 | Boundary alignment was asserted in prose. Six onsets at 15 001, one at 20 001, two at 22 500 | PLOT |
 
 File names carry the chapter number, so `figure-4-15-main-effects-forest` is
@@ -92,6 +93,24 @@ these six from 4.13, which collided with the two rendered figures that hold
 4.13 and 4.14 — two different images under one number is how a draft ends up
 citing the wrong one, so the generator was renumbered rather than the collision
 documented.
+
+### The two anchors
+
+Figure 4.15 and Figure 4.15b are the same construction with different nulls,
+and they answer different questions:
+
+* **4.15, null A0.** A1 differs from A0 by exactly M1, so the difference *is*
+  the mechanism effect. This is the pre-registered contrast and the one the
+  main-effects tables of 4.3–4.5 report. The reference appears here as a
+  fourth group, SS − A0, which is the equivalence claim of 4.2.1 drawn.
+* **4.15b, null SS.** Not mechanism effects: A0 already differs from SS, so a
+  row carries that difference plus whatever the mechanism does. It answers
+  where each configuration stands against the published method, which is the
+  claim of the thesis rather than of the factorial.
+
+Neither null is an absolute zero, and no scene is ever compared with another
+scene's anchor: every row is against the null cell *on that same scene*. The
+count panel is a ratio on a log axis, so its null is 1, not 0.
 
 ### The reference implementation in the figures
 
