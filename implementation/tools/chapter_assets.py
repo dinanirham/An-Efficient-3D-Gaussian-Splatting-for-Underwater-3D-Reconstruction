@@ -83,10 +83,11 @@ CROPS: dict[str, tuple[tuple[int, int, int, int], tuple[int, int, int, int]]] = 
     "Panama": ((540, 190, 360, 270), (130, 520, 360, 270)),
 }
 
-# SS is rendered alongside the baseline because the equivalence claim in the
-# chapter is otherwise numbers only: a reader should be able to see that the
-# unmodified reference and this baseline reconstruct the same scene.
-RENDER_CELLS: tuple[str, ...] = ("SS", "A0", "A1", "A2", "A3", "A4")
+# Every configuration is rendered. The qualitative figures put ground truth,
+# the reference and the baseline beside each mechanism, so a mechanism with no
+# render has no figure -- and the four that were missing are the interaction
+# cells, which are the ones a reader is least able to reason about from numbers.
+RENDER_CELLS: tuple[str, ...] = CELLS
 
 # The backbone the campaign evaluated with; recorded so the per-view table
 # and the aggregates it explains are the same measurement.

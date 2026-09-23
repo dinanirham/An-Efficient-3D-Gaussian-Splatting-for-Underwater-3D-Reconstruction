@@ -125,6 +125,28 @@ different cameras or crops is not a comparison, and nine tests in
 `verify_chapter_assets.py` hold that contract — including that clamping a crop
 moves it and never resizes it.
 
+### Qualitative family — `qualitative-figure-spec.md`
+
+Built by `figures/make_chapter4_renders.py` to the comparison rule: every
+qualitative figure carries **ground truth, the reference, the baseline, and the
+configuration under test**, in that order. Per-panel PSNR and LPIPS are for the
+view shown, not the scene mean, so a reader can connect what they see to the
+tables — and can see the cases where the eye and the metric disagree.
+
+| Figure | Content |
+|---|---|
+| `figure-q1-<cell>-<label>` | One per mechanism: A0D, A1–A7, four columns × four scenes |
+| `figure-q2-all-configurations` | All ten configurations on one scene, one crop |
+| `figure-q3-error-maps` | Absolute error against ground truth, identically scaled |
+
+Highlighting is restricted to what the analysis establishes: an accent border
+marks a run that lost an attenuation channel (§5a). Nothing is highlighted for
+being unresolved, invisible, or merely this study's own mechanism.
+
+**Collection requirement.** Four configurations — A0D, A5, A6, A7 — are not yet
+rendered, and their figures currently show explicit "not collected" panels. The
+collector now renders all ten; a re-run fills them.
+
 ### Considered and not supportable
 
 * **Storage composition by attribute** — would show where the 2.72× comes
