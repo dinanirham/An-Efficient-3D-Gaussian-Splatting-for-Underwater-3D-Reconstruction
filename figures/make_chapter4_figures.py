@@ -32,6 +32,7 @@ import csv
 import json
 import math
 import statistics as st
+import time
 from pathlib import Path
 from typing import Any
 
@@ -91,9 +92,23 @@ def style() -> None:
 
 
 def save(fig: plt.Figure, name: str) -> None:
+    """Write both formats, retrying briefly.
+
+    On Windows a just-written file is occasionally still held when the next
+    write lands on it, and the save fails with EINVAL. Retrying clears it; the
+    alternative is a run that dies two figures from the end.
+    """
     OUT.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png"):
-        fig.savefig(OUT / f"{name}.{ext}")
+        target = OUT / f"{name}.{ext}"
+        for attempt in range(5):
+            try:
+                fig.savefig(target)
+                break
+            except OSError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.4)
     plt.close(fig)
     print(f"  {name}.pdf / .png")
 
@@ -120,6 +135,12 @@ def mean_of(rows: list[dict[str, str]], cell: str, scene: str, metric: str) -> f
     hit = [r for r in rows if r["cell"] == cell and r["scene"] == scene
            and r["metric"] == metric]
     return float(hit[0]["mean"]) if hit else None
+
+
+def sd_of(rows: list[dict[str, str]], cell: str, scene: str, metric: str) -> float | None:
+    hit = [r for r in rows if r["cell"] == cell and r["scene"] == scene
+           and r["metric"] == metric]
+    return float(hit[0]["sd"]) if hit else None
 
 
 def diagnostics(cell: str, scene: str, seed: int) -> list[dict[str, str]]:
@@ -415,6 +436,275 @@ def figure_4_12() -> None:
     save(fig, "figure-4-12-removal-vs-loss")
 
 
+
+# ── 4.13  main effects, with the resolution threshold ────────────────────
+
+def figure_4_13() -> None:
+    """R1. Which effects clear two standard errors, at a glance."""
+    rows = by_scene()
+    metrics = [("psnr_pooled", "PSNR (dB)", False),
+               ("lpips", "LPIPS", False),
+               ("n_primitives_final", "primitive count (ratio)", True)]
+    mechs = [("A1", "M1 initialisation"), ("A2", "M2 simplification"),
+             ("A3", "M3 quantisation")]
+
+    fig, axes = plt.subplots(1, 3, figsize=(9.6, 3.8))
+    for ax, (metric, label, as_ratio) in zip(axes, metrics):
+        y = 0.0
+        ticks: list[float] = []
+        names: list[str] = []
+        for cell, mech in mechs:
+            for key, scene in SCENES.items():
+                base = mean_of(rows, "A0", key, metric)
+                val = mean_of(rows, cell, key, metric)
+                sd_b = sd_of(rows, "A0", key, metric)
+                sd_v = sd_of(rows, cell, key, metric)
+                if None in (base, val, sd_b, sd_v) or not base:
+                    y -= 1.0
+                    continue
+                se = math.sqrt((sd_b ** 2 + sd_v ** 2) / 3)
+                if as_ratio:
+                    # A ratio's interval belongs in log space; an additive one
+                    # can reach zero and disappears off a logarithmic axis.
+                    eff = val / base
+                    se_log = math.sqrt((sd_b / base) ** 2
+                                       + (sd_v / val) ** 2) / math.sqrt(3)
+                    lo, hi = eff * math.exp(-2 * se_log), eff * math.exp(2 * se_log)
+                    null = 1.0
+                else:
+                    eff = val - base
+                    lo, hi = eff - 2 * se, eff + 2 * se
+                    null = 0.0
+                resolved = (lo > null) or (hi < null)
+                ax.plot([lo, hi], [y, y], color=SCENE_COLOR[key],
+                        lw=1.6, alpha=0.9 if resolved else 0.35,
+                        solid_capstyle="butt")
+                ax.scatter([eff], [y], s=26, zorder=3, color=SCENE_COLOR[key],
+                           alpha=1.0 if resolved else 0.4,
+                           marker="o" if resolved else "x")
+                ticks.append(y)
+                names.append(scene)
+                y -= 1.0
+            y -= 0.7
+        ax.axvline(1.0 if as_ratio else 0.0, color=NEUTRAL, lw=0.9, ls="--")
+        if as_ratio:
+            ax.set_xscale("log")
+        ax.set_yticks(ticks)
+        ax.set_yticklabels(names, fontsize=7.5)
+        ax.set_xlabel(label)
+        ax.grid(axis="y", visible=False)
+
+    # Group labels in data coordinates, so they track the rows they name.
+    n_scenes = len(SCENES)
+    for i, (_, mech) in enumerate(mechs):
+        centre = -(i * (n_scenes + 0.7) + (n_scenes - 1) / 2)
+        axes[0].annotate(mech, xy=(-0.70, centre),
+                         xycoords=("axes fraction", "data"),
+                         rotation=90, ha="center", va="center",
+                         fontsize=8.5, fontweight="bold", color="#10201F")
+    fig.legend(handles=[
+        Line2D([], [], marker="o", ls="-", color=NEUTRAL, label="resolved (2 SE excludes the null)"),
+        Line2D([], [], marker="x", ls="-", color=NEUTRAL, alpha=0.4, label="unresolved at three repeats"),
+    ], loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.06), fontsize=8)
+    fig.suptitle("Main effects against the baseline, with two-standard-error intervals", y=1.02)
+    fig.tight_layout()
+    fig.subplots_adjust(left=0.18)
+    save(fig, "figure-4-13-main-effects-forest")
+
+
+# ── 4.14  interaction plots ──────────────────────────────────────────────
+
+def figure_4_14() -> None:
+    """R2. The canonical factorial figure: parallel means additive."""
+    rows = by_scene()
+    pairs = [(("A0", "A1", "A2", "A4"), "M1", "M2"),
+             (("A0", "A2", "A3", "A6"), "M2", "M3"),
+             (("A0", "A1", "A3", "A5"), "M1", "M3")]
+    fig, axes = plt.subplots(1, 3, figsize=(9.6, 3.4), sharey=False)
+
+    for ax, (cells, fa, fb) in zip(axes, pairs):
+        off, a_on, b_on, both = cells
+        for key, scene in SCENES.items():
+            pts = {c: mean_of(rows, c, key, "lpips") for c in cells}
+            if any(v is None for v in pts.values()):
+                continue
+            # x = factor A off/on; one line per level of factor B
+            ax.plot([0, 1], [pts[off], pts[a_on]], color=SCENE_COLOR[key],
+                    lw=1.4, marker="o", ms=4, ls="-", alpha=0.9)
+            ax.plot([0, 1], [pts[b_on], pts[both]], color=SCENE_COLOR[key],
+                    lw=1.4, marker="s", ms=4, ls="--", alpha=0.9)
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels([f"{fa} off", f"{fa} on"])
+        ax.set_title(f"{fa} x {fb}")
+        ax.set_xlim(-0.25, 1.25)
+    axes[0].set_ylabel("LPIPS  (lower is better)")
+    fig.legend(handles=[
+        Line2D([], [], color=NEUTRAL, marker="o", ls="-", label="second factor off"),
+        Line2D([], [], color=NEUTRAL, marker="s", ls="--", label="second factor on"),
+    ] + [Line2D([], [], color=c, lw=2, label=SCENES[k])
+         for k, c in SCENE_COLOR.items()],
+        loc="lower center", ncol=6, bbox_to_anchor=(0.5, -0.10), fontsize=8)
+    fig.suptitle("Interaction plots — parallel lines would mean the mechanisms add", y=1.03)
+    fig.tight_layout()
+    save(fig, "figure-4-14-interaction-plots")
+
+
+# ── 4.15  population through training ────────────────────────────────────
+
+def figure_4_15() -> None:
+    """R3. When each mechanism acts, and the budget that binds."""
+    rs = runs()
+    anchors = [("n_prim_init", 0), ("n_prim_at_10000", 10000),
+               ("n_prim_at_15000", 15000), ("n_primitives_final", 30000)]
+    show = [("A0", "-", "baseline"), ("A1", "-", "M1"), ("A2", "-", "M2"),
+            ("A3", "-", "M3"), ("A4", "--", "M1+M2"), ("A7", ":", "M1+M2+M3")]
+    cmap = {"A0": NEUTRAL, "A1": "#1F6FB4", "A2": ACCENT, "A3": "#7A5CA8",
+            "A4": "#1F7A66", "A7": "#9C6A1E"}
+
+    fig, axes = plt.subplots(1, 4, figsize=(10.2, 3.1), sharey=True)
+    for ax, (key, scene) in zip(axes, SCENES.items()):
+        for cell, ls, label in show:
+            sub = [r for r in rs if r["cell"] == cell and r["scene"] == key]
+            if not sub:
+                continue
+            ys = []
+            for col, _ in anchors:
+                vals = [float(r[col]) for r in sub if r.get(col)]
+                ys.append(st.mean(vals) if vals else float("nan"))
+            ax.plot([it for _, it in anchors], ys, ls, color=cmap[cell],
+                    lw=1.5, marker="o", ms=3.2, label=label)
+        ax.axhline(200000, color=ACCENT, lw=0.9, ls=":")
+        for boundary in (15000, 20000):
+            ax.axvline(boundary, color=GRID, lw=1.0)
+        ax.set_yscale("log")
+        ax.set_title(scene)
+        ax.set_xlabel("iteration")
+        ax.set_xticks([0, 10000, 20000, 30000])
+        ax.set_xticklabels(["0", "10k", "20k", "30k"], fontsize=8)
+    axes[0].set_ylabel("primitives (log scale)")
+    axes[-1].text(30500, 205000, "budget", fontsize=7, color=ACCENT,
+                  va="bottom", ha="right")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=6,
+               bbox_to_anchor=(0.5, -0.09), fontsize=8)
+    fig.suptitle("Primitive population through training; anchors at the schedule's inflection points", y=1.04)
+    fig.tight_layout()
+    save(fig, "figure-4-15-population-trajectory")
+
+
+# ── 4.16  frame rate against population ──────────────────────────────────
+
+def figure_4_16() -> None:
+    """R4. Sub-linear, with a scene-dependent exponent."""
+    rows = by_scene()
+    fig, ax = plt.subplots(figsize=(6.4, 4.0))
+    for key, scene in SCENES.items():
+        xs, ys = [], []
+        for cell in CELLS:
+            n = mean_of(rows, cell, key, "n_primitives_final")
+            f = mean_of(rows, cell, key, "render_fps")
+            if n and f:
+                xs.append(n)
+                ys.append(f)
+        ax.scatter(xs, ys, s=30, color=SCENE_COLOR[key], alpha=0.85,
+                   zorder=3, label=scene)
+        lx = [math.log10(v) for v in xs]
+        ly = [math.log10(v) for v in ys]
+        n_pts = len(lx)
+        mx, my = st.mean(lx), st.mean(ly)
+        denom = sum((v - mx) ** 2 for v in lx)
+        slope = sum((lx[i] - mx) * (ly[i] - my) for i in range(n_pts)) / denom
+        lo, hi = min(lx), max(lx)
+        ax.plot([10 ** lo, 10 ** hi],
+                [10 ** (my + slope * (lo - mx)), 10 ** (my + slope * (hi - mx))],
+                color=SCENE_COLOR[key], lw=1.1, ls="--", alpha=0.7)
+        ax.annotate(f"{scene}: slope {slope:.2f}",
+                    (10 ** lo, 10 ** (my + slope * (lo - mx))),
+                    textcoords="offset points", xytext=(-6, 4),
+                    ha="right", fontsize=7, color=SCENE_COLOR[key])
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("primitives")
+    ax.set_ylabel("render rate (fps)")
+    ax.set_title("Frame rate against population, all ten configurations")
+    ax.legend(fontsize=8, loc="lower left")
+    ax.text(0.99, 0.97, "inverse proportionality would give slope " + chr(8722) + "1",
+            transform=ax.transAxes, ha="right", va="top",
+            fontsize=7.5, color=NEUTRAL)
+    ax.set_xlim(left=9e4)
+    save(fig, "figure-4-16-fps-vs-count")
+
+
+# ── 4.17  restoration gap against in-medium loss ─────────────────────────
+
+def figure_4_17() -> None:
+    """R5. The two are uncorrelated, which is what refutes drift."""
+    j = json.loads((DATA / "j_consistency.json").read_text(encoding="utf-8"))
+    xs, ys, labels = [], [], []
+    for key, rec in j.items():
+        if "verdict" not in rec:
+            continue
+        cell, scene, _ = key.split("/")
+        xs.append(rec["truth_psnr_codebook"] - rec["truth_psnr_continuous"])
+        ys.append(rec["psnr_mean"])
+        labels.append((cell, scene))
+
+    fig, ax = plt.subplots(figsize=(6.2, 3.8))
+    for x, y, (cell, scene) in zip(xs, ys, labels):
+        ax.scatter([x], [y], s=34, zorder=3, color=SCENE_COLOR[scene], alpha=0.85)
+        ax.annotate(cell, (x, y), textcoords="offset points", xytext=(4, 3),
+                    fontsize=7, color=NEUTRAL)
+    rk = lambda v: [sorted(v).index(e) + 1 for e in v]
+    rx, ry = rk(xs), rk(ys)
+    n = len(xs)
+    rho = 1 - 6 * sum((a - b) ** 2 for a, b in zip(rx, ry)) / (n * (n * n - 1))
+    ax.set_xlabel("in-medium loss of the continuous state (dB)")
+    ax.set_ylabel("restored-image gap between\nthe two attribute states (dB)")
+    ax.set_title("If drift explained the gap, these would rise together")
+    ax.text(0.98, 0.94, f"Spearman rho = {rho:.2f}  (n = {n})", transform=ax.transAxes,
+            ha="right", fontsize=8.5, color=ACCENT)
+    ax.legend(handles=[Line2D([], [], marker="o", ls="", color=c, label=SCENES[k])
+                       for k, c in SCENE_COLOR.items()], fontsize=7.5, loc="lower right")
+    save(fig, "figure-4-17-restoration-vs-drift")
+
+
+# ── 4.18  collapse onset ─────────────────────────────────────────────────
+
+def figure_4_18() -> None:
+    """R6. Boundary alignment, shown rather than asserted."""
+    mc = collapse()
+    onsets: list[tuple[int, str, str]] = []
+    for key, rec in mc.items():
+        cell, scene, seed = key.split("/")
+        firsts = [v for v in rec["first_negative"].values() if v is not None]
+        if firsts:
+            onsets.append((min(firsts), cell, scene))
+
+    fig, ax = plt.subplots(figsize=(7.0, 2.6))
+    for boundary, name in ((15000, "first simplification"), (20000, "second simplification")):
+        ax.axvspan(boundary, boundary + 200, color=ACCENT, alpha=0.12)
+        ax.axvline(boundary, color=NEUTRAL, lw=1.0, ls="--")
+        ax.text(boundary, 1.28, name, fontsize=7.5, color=NEUTRAL,
+                ha="center", va="bottom")
+    seen: dict[int, int] = {}
+    for it, cell, scene in sorted(onsets):
+        k = seen.get(it, 0)
+        seen[it] = k + 1
+        ax.scatter([it], [1.0 - k * 0.11], s=40, zorder=3,
+                   color=SCENE_COLOR[scene], alpha=0.9)
+        ax.annotate(cell, (it, 1.0 - k * 0.11), textcoords="offset points",
+                    xytext=(6, -2), fontsize=7, color=NEUTRAL)
+    ax.set_xlim(9000, 31000)
+    ax.set_ylim(0.18, 1.45)
+    ax.set_yticks([])
+    ax.set_xlabel("iteration at which a channel first goes negative")
+    ax.set_title("Onset of medium collapse, nine runs")
+    ax.text(9400, 0.26, "medium model active from iteration 10 000",
+            fontsize=7.5, color=NEUTRAL, ha="left", va="center")
+    ax.grid(axis="y", visible=False)
+    save(fig, "figure-4-18-collapse-onset")
+
+
 def main() -> None:
     style()
     print(f"writing to {OUT.relative_to(ROOT)}")
@@ -424,6 +714,12 @@ def main() -> None:
     figure_4_10()
     figure_4_11()
     figure_4_12()
+    figure_4_13()
+    figure_4_14()
+    figure_4_15()
+    figure_4_16()
+    figure_4_17()
+    figure_4_18()
 
 
 if __name__ == "__main__":
