@@ -310,3 +310,77 @@ simplification budget and event schedule; the medium-only burst; effective
 optimizer steps; the depth-range sweep; the restored-image consistency check;
 the storage policy that leaves geometry and restored-image results at one
 repeat per scene.
+
+---
+
+# Revision 2 — reconciliation with the existing Chapter IV
+
+## R2.1 What exists
+
+`previous-writings/draft-thesis-to-be-revisited/…AoL Research Writing I.pdf`
+carries an approved Chapter IV at pages 70–132 and Chapter V at 133–139:
+
+| Existing section | Subsections | Verdict against the 2026-09 campaign |
+|---|---|---|
+| 4.1 Experimental Overview | scope, criteria, reporting strategy | **Retain, rewrite.** The skeleton is right; the content describes a smaller campaign. |
+| 4.2 Baseline Performance Analysis | quantitative, qualitative, underwater behaviour, limitations | **Retain, reframe.** Must now open with equivalence to the unmodified reference, which did not exist when it was written. |
+| 4.3 Component 1: Deterministic Initialization | A0 vs A1, A1v2 sensitivity, qualitative, stability | **Retain, rewrite.** Remove the A1v2 density sensitivity: that cell is not in this campaign. |
+| 4.4 Component 2: Spatial Reorganization | A0 vs A2, distribution, degradation regions, efficiency | **Retain, rewrite.** Gains the medium-stability result, which is the campaign's centre. |
+| 4.5 Component 3: Attribute-Level Quantization | A0 vs A3, tradeoff, artifacts, robustness | **Retain, rewrite.** Gains the restored-image result. |
+| 4.6 Cross-Component Comparative Discussion | tradeoffs, efficiency-fidelity, geometry-optics, objective alignment | **Replace.** Its successor is the interaction analysis, which the earlier campaign could not run. |
+| 4.7 Limitation of the Study | experimental, methodological, future integration | **Retain, expand.** "Future integration opportunities" moves to Chapter 5. |
+
+Three structural defects in the existing chapter, each now prohibited:
+
+1. **Aggregate fidelity tables.** Tables 4.3, 4.5, 4.8 and 4.10 report metrics
+   averaged across scenes. Scene difficulty spans about 7 dB, so a
+   scene-averaged fidelity figure describes no scene in the corpus.
+2. **No reference control, no interactions, no medium-collapse results.** The
+   campaign those tables report could not produce them.
+3. **Ranking from one operating point.** Chapter V's 5.1.2 concludes that one
+   mechanism "provides the most balanced efficiency-fidelity tradeoff". One
+   budget and one codebook size cannot support a ranking.
+
+## R2.2 Revised architecture
+
+The author's component-wise organisation is preserved. Sections 4.6 to 4.10
+are new because the evidence is new.
+
+| § | Title | Source | Action |
+|---|---|---|---|
+| 4.1 | Experimental Overview | §0, ledger | Rewrite |
+| 4.1.1 | Scope of the Completed Campaign | §0 | Rewrite |
+| 4.1.2 | Evaluation Criteria and Reporting Conventions | §0 | **Add** — per scene, two standard errors, undetermined-by-construction, registered versus post-hoc |
+| 4.1.3 | Repeat Dispersion as the Measurement Baseline | §0 | **Add** |
+| 4.1.4 | Provenance and Experimental Integrity | §0 | **Add** |
+| 4.2 | Baseline Validation | §1, §2, §9, §5a | Reframe |
+| 4.2.1 | Equivalence to the Unmodified Reference | §1 | **Add** |
+| 4.2.2 | Baseline Reconstruction and Efficiency per Scene | §2 | Retain, de-aggregate |
+| 4.2.3 | Baseline Representation Characteristics | §9 | Rewrite |
+| 4.2.4 | Baseline Medium Stability | §5a | **Add** |
+| 4.3 | Component 1: Deterministic Initialization | §2, §12, §5c | Rewrite |
+| 4.4 | Component 2: Spatial Reorganization | §2, §12, §5a | Rewrite |
+| 4.5 | Component 3: Attribute-Level Quantization | §2, §10 | Rewrite |
+| 4.6 | Combined Configurations and Interactions | §3, §4, §7 | **Add** |
+| 4.7 | Coupling Between Simplification and the Medium Model | §5 | **Add** — the chapter's centre |
+| 4.8 | Detecting Failure: the Limits of Fidelity Metrics | §8, §10 | **Add** |
+| 4.9 | Supplementary Contrast: Gradient Detachment | §6 | **Add** |
+| 4.10 | Replication Against the Archived Campaign | §11 | **Add** |
+| 4.11 | Synthesis and Alignment with Research Objectives | all | Retain from old 4.6.4, rewrite |
+| 4.12 | Limitations of the Study | §14 | Retain, expand |
+
+The fifteen analysis sections map onto these without loss; the mapping is in
+the draft's section headers.
+
+## R2.3 Consequences for Chapter V
+
+The existing Chapter V concludes per component and ranks them. Three of its six
+conclusion subsections do not survive:
+
+* 5.1.2, ranking one mechanism as the most balanced tradeoff — prohibited from
+  one operating point.
+* 5.1.4, on a compactness-stability boundary — derived against a baseline later
+  shown defective.
+* 5.1.5, cross-mechanism interpretation — predates the interaction evidence.
+
+Chapter V is rebuilt under `THESIS.md` §17 once Chapter IV is stable.
