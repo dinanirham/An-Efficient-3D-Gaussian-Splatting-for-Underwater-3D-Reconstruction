@@ -1125,17 +1125,18 @@ Runs against the finished campaign. It trains nothing and writes nothing into
 Expect roughly 20–35 minutes on an A100, most of it LPIPS over held-out views.
 """),
 
-    md("## 1. Mount Drive and set the campaign root"),
-    code("""from google.colab import drive
-drive.mount('/content/drive')
+    md("""## 1. Mount Drive and set the campaign root
 
-DRIVE_ROOT = '/content/drive/MyDrive/e3dgsuw'
-ASSETS = '/content/ch4_assets'
+The same header every other notebook uses: it defines `DRIVE_ROOT` and the
+repository constants the clone cell below needs."""),
+    code(DRIVE_HEADER),
+    code("""ASSETS = '/content/ch4_assets'
 
 import os
-assert os.path.isdir(DRIVE_ROOT + '/runs'), DRIVE_ROOT + '/runs not found'
+assert os.path.isdir(f'{DRIVE_ROOT}/runs'), f'{DRIVE_ROOT}/runs not found'
 print('campaign root:', DRIVE_ROOT)
-print('cells present:', sorted(os.listdir(DRIVE_ROOT + '/runs')))"""),
+print('cells present:', sorted(os.listdir(f'{DRIVE_ROOT}/runs')))
+print('assets will be written to:', ASSETS)"""),
 
     md("""## 2. Clone and build
 
