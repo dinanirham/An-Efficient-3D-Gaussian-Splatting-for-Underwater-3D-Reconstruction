@@ -1440,3 +1440,300 @@ It must report:
 11. Questions or blockers requiring approval.
 
 Do not conceal contradictory evidence for narrative convenience.
+
+---
+
+# 22. Manuscript Composition — Structure, Protocol and Deliverables
+
+Merged into this document on 2026-09-24. This section is **authoritative for
+the thesis structure**: `implementation/tools/make_manuscript_scaffold.py`
+reads the tables below to generate the deliverable files, so the structure and
+the files on disk cannot drift apart. `new-revisited-writing/thesis-structure-detailed.md`
+is superseded and retained only as the record of how the structure was derived.
+
+## 22.1 The unit of work
+
+**One subsection = one Markdown file = one deliverable.** 123 subsections
+across five chapters, under `manuscript/`. Each file is continuous prose of
+300–900 words — paragraphs, not bullets — carrying its own front matter,
+figure and table placeholders, and review log.
+
+Regenerating the scaffold never overwrites a file that exists, so the structure
+may be revised at any time while drafting is under way.
+
+## 22.2 The composition loop
+
+Every subsection passes through four passes, which are not merged: **draft**
+(argument through, start to finish, no polishing), **reflect** (the draft
+against its evidence — every number, every claim's strength against its
+resolution status), **review** (the three personas of §22.3, in order),
+**refine** (apply the findings; record any rejected finding and why).
+
+## 22.3 The three standing reviewers
+
+Applied to every subsection, read in order, each leaving written findings in
+the deliverable's review log.
+
+| | Persona | Reads for |
+|---|---|---|
+| 1 | **Domain Researcher** — publishes and referees in 3DGS, novel view synthesis, 3D reconstruction and underwater image formation | Scientific correctness; whether the mechanism is described as it behaves rather than as its source paper advertises; whether medium parameters are interpreted within what a renormalised depth permits; whether the novelty claim is the right size |
+| 2 | **Supervisor** — reads for argument and prose, and takes the devil's advocate position deliberately | Whether the subsection opens by stating what it establishes; whether there is one argument or three; where the weakest sentence is; what a hostile examiner attacks first; whether an inconvenient result is being softened by word choice |
+| 3 | **Journal Reviewer** — reviews for a Q1 venue | Statistics reported with quantity, uncertainty, n and test; every figure and table called out and captioned to stand alone; APA 7th throughout; consistent tense; reproducibility from text plus repository |
+
+Full definitions, the review-log format and the definition of done are in
+`new-revisited-writing/writing-protocol.md`.
+
+## 22.4 Citation discipline
+
+The controlled register is the twelve-entry APA reference list in
+`new-revisited-writing/chapter-3-methodology.md`, which already carries the
+warning that author names and venues require verification against the PDFs.
+
+**Cite only from the register.** Anything else is marked `[CITE-NEEDED: claim]`
+— visible, greppable, and blocking `final` status. Never invent a reference,
+and never infer an author, year, venue or DOI that has not been seen. Chapter II
+§2.6.1 remains blocked because the source reading is not in the repository, and
+that block stays visible until the reading is done.
+
+## 22.5 Figures and tables
+
+Every figure gets a placeholder at first mention naming its **real path** when
+the asset exists — `figures/chapter4/` holds 34 built figures — and its final
+caption. An asset that does not exist is marked `[DATA-NEEDED]` with one line
+saying what would have to be collected, and is never described as though built.
+Captions stand alone.
+
+## 22.6 Reporting conventions
+
+Inherited from the campaign and not negotiable during writing: evaluation is
+anchored on **SS** with stored size the stated exception; an effect is
+**resolved** when its 2 SE interval excludes the null at n = 3, and
+`UNRESOLVED` never means zero; **PSNR interactions are `UNDETERMINED` by
+construction**; β magnitudes are dimensionless against a per-frame renormalised
+depth; every fidelity metric describes Î alone; negative results appear in the
+body where they bear on the claim.
+
+## 22.7 Order of work
+
+**IV → III → V → I → II.** Chapter IV first: it has approved research
+questions, a complete evidence base and its figures built. Chapter III next as
+the most wrong. Chapter V follows from IV directly. I and II last, because an
+introduction should be written once the thing it introduces exists.
+
+## 22.8 The structure
+
+# CHAPTER I — INTRODUCTION  ·  10 pp (from 8)
+
+Deliverables in `manuscript/ch1-introduction/`.
+
+| § | Title | Action | Evidence | RQ | Deliverable |
+|---|---|---|---|---|---|
+| **1.1** | **Background** | Refine | — | — | *(section)* |
+| 1.1.1 | Underwater 3D Reconstruction and Its Applications | Retain | LIT | — | `1-1-1-underwater-3d-reconstruction-and-its-applications.md` |
+| 1.1.2 | Radiance Fields and the Shift to Explicit Primitives | Retain | LIT | — | `1-1-2-radiance-fields-and-the-shift-to-explicit-primitives.md` |
+| 1.1.3 | Physically Grounded Underwater Reconstruction | Refine | LIT | — | `1-1-3-physically-grounded-underwater-reconstruction.md` |
+| 1.1.4 | The Representation Cost of Explicit Primitives | Add | §9 | — | `1-1-4-the-representation-cost-of-explicit-primitives.md` |
+| **1.2** | **Problem Statement** | Refine | — | — | *(section)* |
+| 1.2.1 | Efficiency Mechanisms Are Validated in Isolation | Refine | LIT | — | `1-2-1-efficiency-mechanisms-are-validated-in-isolation.md` |
+| 1.2.2 | Composition Is Unmeasured on a Physically Grounded Estimator | Add | §3, §4 | — | `1-2-2-composition-is-unmeasured-on-a-physically-grounded-estimator.md` |
+| 1.2.3 | Reductions Are Claimed Without Establishing the Baseline | Add | §1 | — | `1-2-3-reductions-are-claimed-without-establishing-the-baseline.md` |
+| 1.2.4 | Fidelity Metrics May Not Detect Physical Failure | Add | §8 | — | `1-2-4-fidelity-metrics-may-not-detect-physical-failure.md` |
+| **1.3** | **Research Questions and Hypotheses** | Add | — | — | *(section)* |
+| 1.3.1 | Research Questions | Add | PLAN | — | `1-3-1-research-questions.md` |
+| 1.3.2 | Hypotheses and Pre-Registration | Add | PLAN | — | `1-3-2-hypotheses-and-pre-registration.md` |
+| **1.4** | **Research Objectives** | Refine | PLAN | — | *(section)* |
+| **1.5** | **Research Benefits** | Refine | — | — | *(section)* |
+| 1.5.1 | Practical Benefits | Refine | §2, §7 | — | `1-5-1-practical-benefits.md` |
+| 1.5.2 | Methodological Benefits | Add | §1, §0 | — | `1-5-2-methodological-benefits.md` |
+| **1.6** | **Contributions** | Add | all | — | *(section)* |
+| **1.7** | **Scope and Limitations** | Replace | — | — | *(section)* |
+| 1.7.1 | Scope of the Experimental Campaign | Replace | §0 | — | `1-7-1-scope-of-the-experimental-campaign.md` |
+| 1.7.2 | Delimitations | Replace | §14 | — | `1-7-2-delimitations.md` |
+| 1.7.3 | What This Thesis Does Not Claim | Add | §14 | — | `1-7-3-what-this-thesis-does-not-claim.md` |
+| **1.8** | **Thesis Organisation** | Retain | — | — | *(section)* |
+
+---
+
+# CHAPTER II — LITERATURE REVIEW  ·  38 pp (from 34)
+
+Deliverables in `manuscript/ch2-literature-review/`.
+
+| § | Title | Action | Evidence | RQ | Deliverable |
+|---|---|---|---|---|---|
+| **2.1** | **Fundamentals of 3D Reconstruction and Scene Representation** | Retain | — | — | *(section)* |
+| 2.1.1 | Structure from Motion and Multi-View Geometry | Retain | LIT | — | `2-1-1-structure-from-motion-and-multi-view-geometry.md` |
+| 2.1.2 | Explicit and Implicit Scene Representations | Retain | LIT | — | `2-1-2-explicit-and-implicit-scene-representations.md` |
+| **2.2** | **Neural Radiance Fields and Differentiable Rendering** | Retain | — | — | *(section)* |
+| 2.2.1 | Volume Rendering Formulation | Retain | LIT | — | `2-2-1-volume-rendering-formulation.md` |
+| 2.2.2 | Acceleration Strategies and Their Limits | Retain | LIT | — | `2-2-2-acceleration-strategies-and-their-limits.md` |
+| **2.3** | **Explicit Radiance Fields and 3D Gaussian Splatting** | Refine | — | — | *(section)* |
+| 2.3.1 | Primitive Parameterisation and Rasterisation | Retain | LIT | — | `2-3-1-primitive-parameterisation-and-rasterisation.md` |
+| 2.3.2 | Adaptive Density Control | Add | LIT | — | `2-3-2-adaptive-density-control.md` |
+| 2.3.3 | Known Failure Modes of the Representation | Add | LIT, §9 | — | `2-3-3-known-failure-modes-of-the-representation.md` |
+| **2.4** | **Physical Image Formation in Underwater Environments** | Refine | — | — | *(section)* |
+| 2.4.1 | Attenuation and Backscatter | Retain | LIT | — | `2-4-1-attenuation-and-backscatter.md` |
+| 2.4.2 | Physics-Aware Neural Rendering | Retain | LIT | — | `2-4-2-physics-aware-neural-rendering.md` |
+| 2.4.3 | Physics-Aware Gaussian Splatting | Refine | LIT | — | `2-4-3-physics-aware-gaussian-splatting.md` |
+| 2.4.4 | Identifiability of the Medium Parameters | Add | LIT | — | `2-4-4-identifiability-of-the-medium-parameters.md` |
+| **2.5** | **Efficiency Mechanisms in Radiance-Field Modelling** | Reorganize | — | — | *(section)* |
+| 2.5.1 | Initialisation and Densification Control | Add | LIT | — | `2-5-1-initialisation-and-densification-control.md` |
+| 2.5.2 | Spatial Simplification and Pruning | Add | LIT | — | `2-5-2-spatial-simplification-and-pruning.md` |
+| 2.5.3 | Attribute Quantisation and Storage Compression | Add | LIT | — | `2-5-3-attribute-quantisation-and-storage-compression.md` |
+| 2.5.4 | Domain-Transfer Risk | Add | LIT | — | `2-5-4-domain-transfer-risk.md` |
+| **2.6** | **Methodological Foundations** | Add | — | — | *(section)* |
+| 2.6.1 | Factorial Design and Interaction Estimation | Add | LIT | — | `2-6-1-factorial-design-and-interaction-estimation.md` |
+| 2.6.2 | Repeated-Run Uncertainty in Stochastic Optimisation | Add | LIT, §0 | — | `2-6-2-repeated-run-uncertainty-in-stochastic-optimisation.md` |
+| 2.6.3 | Equivalence Testing Against a Margin | Add | LIT | — | `2-6-3-equivalence-testing-against-a-margin.md` |
+| 2.6.4 | Pre-Registration and Falsifiability | Add | LIT | — | `2-6-4-pre-registration-and-falsifiability.md` |
+| 2.6.5 | Rate–Distortion and Pareto Evaluation | Add | LIT, §7 | — | `2-6-5-rate-distortion-and-pareto-evaluation.md` |
+| **2.7** | **Literature Review** | Replace | — | — | *(section)* |
+| 2.7.1 | Review Protocol | Add | LIT | — | `2-7-1-review-protocol.md` |
+| 2.7.2 | Per-Paper Analysis | Add — BLOCKED | LIT | — | `2-7-2-per-paper-analysis.md` |
+| 2.7.3 | Synthesis Table | Retain | LIT | — | `2-7-3-synthesis-table.md` |
+| 2.7.4 | Trends and Unresolved Limitations | Refine | LIT | — | `2-7-4-trends-and-unresolved-limitations.md` |
+| **2.8** | **Research Gap** | Replace | LIT | — | *(section)* |
+
+---
+
+# CHAPTER III — RESEARCH METHODOLOGY  ·  42 pp (from 27)
+
+Deliverables in `manuscript/ch3-methodology/`.
+
+| § | Title | Action | Evidence | RQ | Deliverable |
+|---|---|---|---|---|---|
+| **3.1** | **Conceptual Framework** | Refine | — | — | *(section)* |
+| 3.1.1 | The Baseline Estimator and Its Coupled Medium Model | Refine | CD | — | `3-1-1-the-baseline-estimator-and-its-coupled-medium-model.md` |
+| 3.1.2 | Insertion Points of the Efficiency Mechanisms | Add | Figure 0 | — | `3-1-2-insertion-points-of-the-efficiency-mechanisms.md` |
+| 3.1.3 | Framework Diagram | Refine | Figure 0 | — | `3-1-3-framework-diagram.md` |
+| **3.2** | **Research Stages** | Refine | §0 | — | *(section)* |
+| **3.3** | **SeaThru-NeRF Dataset** | Retain | — | — | *(section)* |
+| 3.3.1 | Acquisition and Provenance | Retain | LIT | — | `3-3-1-acquisition-and-provenance.md` |
+| 3.3.2 | Scene Composition and Characteristics | Refine | CD | — | `3-3-2-scene-composition-and-characteristics.md` |
+| 3.3.3 | Data Structure and Input–Output Definition | Retain | CD | — | `3-3-3-data-structure-and-input-output-definition.md` |
+| **3.4** | **Data Preprocessing** | Refine | — | — | *(section)* |
+| 3.4.1 | Image Preparation and Undistortion | Refine | CD | — | `3-4-1-image-preparation-and-undistortion.md` |
+| 3.4.2 | Camera Parameter Handling | Retain | CD | — | `3-4-2-camera-parameter-handling.md` |
+| 3.4.3 | Scene Normalisation and Coordinate Consistency | Retain | CD | — | `3-4-3-scene-normalisation-and-coordinate-consistency.md` |
+| 3.4.4 | Data Partitioning | Refine | CD | — | `3-4-4-data-partitioning.md` |
+| 3.4.5 | Output of the Preprocessing Stage | Retain | CD | — | `3-4-5-output-of-the-preprocessing-stage.md` |
+| **3.5** | **Efficiency Mechanisms Under Test** | Reorganize | — | — | *(section)* |
+| 3.5.1 | Overview and Insertion Points | Refine | Figure 1 | — | `3-5-1-overview-and-insertion-points.md` |
+| 3.5.2 | M1 — Deterministic Initialisation | Refine | CD | — | `3-5-2-m1-deterministic-initialisation.md` |
+| 3.5.3 | M2 — Spatial Reorganisation | Refine | CD | — | `3-5-3-m2-spatial-reorganisation.md` |
+| 3.5.4 | M3 — Attribute-Level Quantisation | Refine | CD | — | `3-5-4-m3-attribute-level-quantisation.md` |
+| 3.5.5 | Mechanism D — Gradient Detachment | Add | CD | — | `3-5-5-mechanism-d-gradient-detachment.md` |
+| 3.5.6 | Implementation-Delta Register | Add | CD | — | `3-5-6-implementation-delta-register.md` |
+| **3.6** | **Experimental Design** | Replace | — | — | *(section)* |
+| 3.6.1 | Factorial Structure and Cell Definition | Add | PLAN | — | `3-6-1-factorial-structure-and-cell-definition.md` |
+| 3.6.2 | Reference Control and Equivalence Margin | Add | §1, PLAN | — | `3-6-2-reference-control-and-equivalence-margin.md` |
+| 3.6.3 | Scene Blocking and Repeats | Add | §0 | — | `3-6-3-scene-blocking-and-repeats.md` |
+| 3.6.4 | Pre-Registration of the Analysis Plan | Add | PLAN | — | `3-6-4-pre-registration-of-the-analysis-plan.md` |
+| 3.6.5 | Resolution Rule and Claim Vocabulary | Add | PLAN | — | `3-6-5-resolution-rule-and-claim-vocabulary.md` |
+| 3.6.6 | Training Procedure and Intervention Schedule | Refine | §0, CD | — | `3-6-6-training-procedure-and-intervention-schedule.md` |
+| 3.6.7 | Execution Environment, Provenance and Reproducibility | Add | §0 | — | `3-6-7-execution-environment-provenance-and-reproducibility.md` |
+| **3.7** | **Evaluation Metrics** | Reorganize | — | — | *(section)* |
+| 3.7.1 | Reconstruction Fidelity | Refine | CD | — | `3-7-1-reconstruction-fidelity.md` |
+| 3.7.2 | Representation and Computational Cost | Refine | CD | — | `3-7-2-representation-and-computational-cost.md` |
+| 3.7.3 | Medium-Model Diagnostics | Add | CD | — | `3-7-3-medium-model-diagnostics.md` |
+| 3.7.4 | Geometric and Restoration Diagnostics | Add | CD | — | `3-7-4-geometric-and-restoration-diagnostics.md` |
+| 3.7.5 | Scope and Repeat Coverage of Each Metric | Add | §0 | — | `3-7-5-scope-and-repeat-coverage-of-each-metric.md` |
+| **3.8** | **Analysis Procedure** | Add | — | — | *(section)* |
+| 3.8.1 | Contrast Equations | Add | PLAN | — | `3-8-1-contrast-equations.md` |
+| 3.8.2 | Uncertainty Estimation | Add | §0 | — | `3-8-2-uncertainty-estimation.md` |
+| 3.8.3 | Treatment of Unresolved and Undetermined Effects | Add | §0 | — | `3-8-3-treatment-of-unresolved-and-undetermined-effects.md` |
+
+---
+
+# CHAPTER IV — RESULTS AND DISCUSSION  ·  60 pp (from 63)
+
+Deliverables in `manuscript/ch4-results/`.
+
+| § | Title | Action | Evidence | RQ | Deliverable |
+|---|---|---|---|---|---|
+| **4.1** | **Experimental Overview** | Rewrite | §0 | — | *(section)* |
+| 4.1.1 | Scope of the Completed Campaign | Rewrite | §0 | — | `4-1-1-scope-of-the-completed-campaign.md` |
+| 4.1.2 | Evaluation Criteria and Reporting Conventions | Add | §0 | — | `4-1-2-evaluation-criteria-and-reporting-conventions.md` |
+| 4.1.3 | Repeat Dispersion as the Measurement Baseline | Add | §0 | — | `4-1-3-repeat-dispersion-as-the-measurement-baseline.md` |
+| 4.1.4 | Provenance and Experimental Integrity | Add | §0 | — | `4-1-4-provenance-and-experimental-integrity.md` |
+| **4.2** | **Baseline Validation** | Reframe | — | validation | *(section)* |
+| 4.2.1 | Equivalence to the Unmodified Reference | Add | §1 | validation | `4-2-1-equivalence-to-the-unmodified-reference.md` |
+| 4.2.2 | Baseline Reconstruction and Efficiency per Scene | Retain, de-aggregate | §2 | validation | `4-2-2-baseline-reconstruction-and-efficiency-per-scene.md` |
+| 4.2.3 | Baseline Representation Characteristics | Rewrite | §9 | validation | `4-2-3-baseline-representation-characteristics.md` |
+| 4.2.4 | Baseline Medium Stability | Add | §5a | validation | `4-2-4-baseline-medium-stability.md` |
+| **4.3** | **Component 1: Deterministic Initialisation** | Rewrite | — | RQ1 | *(section)* |
+| 4.3.1 | Quantitative Comparison per Scene | Rewrite | §2 | RQ1 | `4-3-1-quantitative-comparison-per-scene.md` |
+| 4.3.2 | Representation Size and Training Cost | Rewrite | §2, §12 | RQ1 | `4-3-2-representation-size-and-training-cost.md` |
+| 4.3.3 | Effect on Medium Stability | Add | §5c | RQ1 | `4-3-3-effect-on-medium-stability.md` |
+| 4.3.4 | Geometry After Initialisation | Refine | §9 | RQ1 | `4-3-4-geometry-after-initialisation.md` |
+| 4.3.5 | Discussion | Refine | — | RQ1 | `4-3-5-discussion.md` |
+| **4.4** | **Component 2: Spatial Reorganisation** | Rewrite | — | RQ1 | *(section)* |
+| 4.4.1 | Quantitative Comparison per Scene | Rewrite | §2 | RQ1 | `4-4-1-quantitative-comparison-per-scene.md` |
+| 4.4.2 | Rendering Throughput and Representation Size | Rewrite | §2, §12 | RQ1 | `4-4-2-rendering-throughput-and-representation-size.md` |
+| 4.4.3 | Effect on Medium Stability | Add | §5a | RQ1 | `4-4-3-effect-on-medium-stability.md` |
+| 4.4.4 | Discussion | Refine | — | RQ1 | `4-4-4-discussion.md` |
+| **4.5** | **Component 3: Attribute-Level Quantisation** | Rewrite | — | RQ1 | *(section)* |
+| 4.5.1 | Quantitative Comparison per Scene | Rewrite | §2 | RQ1 | `4-5-1-quantitative-comparison-per-scene.md` |
+| 4.5.2 | Storage–Fidelity Relationship | Refine | §2 | RQ1 | `4-5-2-storage-fidelity-relationship.md` |
+| 4.5.3 | Effect on the Restored Image | Add | §10 | RQ1 | `4-5-3-effect-on-the-restored-image.md` |
+| 4.5.4 | Discussion | Refine | — | RQ1 | `4-5-4-discussion.md` |
+| **4.6** | **Combined Configurations and Interactions** | Add | — | RQ2 | *(section)* |
+| 4.6.1 | Two-Way Interactions | Add | §3 | RQ2 | `4-6-1-two-way-interactions.md` |
+| 4.6.2 | Three-Way Interaction | Add | §4 | RQ2 | `4-6-2-three-way-interaction.md` |
+| 4.6.3 | Composition on Representation Size: the Budget Bound | Add | §3 | RQ2 | `4-6-3-composition-on-representation-size-the-budget-bound.md` |
+| 4.6.4 | Operating Points Across Configurations | Add | §7 | RQ2 | `4-6-4-operating-points-across-configurations.md` |
+| **4.7** | **Coupling Between Simplification and the Medium Model** | Add | — | RQ3 | *(section)* |
+| 4.7.1 | Collapse Rates and Boundary Alignment | Add | §5a | RQ3 | `4-7-1-collapse-rates-and-boundary-alignment.md` |
+| 4.7.2 | Size Versus Discontinuity | Add | §5d | RQ3 | `4-7-2-size-versus-discontinuity.md` |
+| 4.7.3 | The Registered Explanation and Its Refutation | Add | §5b | RQ3 | `4-7-3-the-registered-explanation-and-its-refutation.md` |
+| 4.7.4 | Post-Hoc Characterisation of the Coupling | Add | §5 | RQ3 | `4-7-4-post-hoc-characterisation-of-the-coupling.md` |
+| 4.7.5 | The Re-Identification Burst | Add | §5e | RQ3 | `4-7-5-the-re-identification-burst.md` |
+| **4.8** | **Detecting Failure: the Limits of Fidelity Metrics** | Add | — | RQ4 | *(section)* |
+| 4.8.1 | Collapsed Versus Intact Strata | Add | §8 | RQ4 | `4-8-1-collapsed-versus-intact-strata.md` |
+| 4.8.2 | Restored-Image Consistency | Add | §10 | RQ4 | `4-8-2-restored-image-consistency.md` |
+| **4.9** | **Supplementary Contrast: Gradient Detachment** | Add | — | supplementary | *(section)* |
+| 4.9.1 | Quantitative Comparison Against the Baseline | Add | §6 | supplementary | `4-9-1-quantitative-comparison-against-the-baseline.md` |
+| 4.9.2 | Discussion | Add | §6 | supplementary | `4-9-2-discussion.md` |
+| **4.10** | **Replication Against the Archived Campaign** | Add | §11 | replication | *(section)* |
+| **4.11** | **Synthesis** | Rewrite | — | all | *(section)* |
+| 4.11.1 | Alignment with Research Objectives | Retain from old 4.6.4 | all | all | `4-11-1-alignment-with-research-objectives.md` |
+| 4.11.2 | What the Campaign Establishes and What Remains Open | Add | all | all | `4-11-2-what-the-campaign-establishes-and-what-remains-open.md` |
+| **4.12** | **Limitations of the Study** | Retain, expand | — | — | *(section)* |
+| 4.12.1 | Experimental Limitations | Refine | §14 | — | `4-12-1-experimental-limitations.md` |
+| 4.12.2 | Methodological Limitations | Refine | §14 | — | `4-12-2-methodological-limitations.md` |
+| 4.12.3 | Unresolved and Undetermined by Design | Add | §0, §14 | — | `4-12-3-unresolved-and-undetermined-by-design.md` |
+
+---
+
+# CHAPTER V — CONCLUSIONS AND RECOMMENDATIONS  ·  11 pp (from 7)
+
+Deliverables in `manuscript/ch5-conclusions/`.
+
+| § | Title | Action | Evidence | RQ | Deliverable |
+|---|---|---|---|---|---|
+| **5.1** | **Conclusions** | Replace | — | — | *(section)* |
+| 5.1.1 | The Mechanisms Transfer, at Scene-Specific Cost | Replace | §2 | — | `5-1-1-the-mechanisms-transfer-at-scene-specific-cost.md` |
+| 5.1.2 | The Mechanisms Do Not Compose Additively | Replace | §3, §4 | — | `5-1-2-the-mechanisms-do-not-compose-additively.md` |
+| 5.1.3 | Population Reduction Perturbs Medium Identifiability | Add | §5a | — | `5-1-3-population-reduction-perturbs-medium-identifiability.md` |
+| 5.1.4 | The Mechanism of That Coupling Remains Open | Add | §5b | — | `5-1-4-the-mechanism-of-that-coupling-remains-open.md` |
+| 5.1.5 | Composed-Image Metrics Cannot Detect the Failure | Add | §8, §10 | — | `5-1-5-composed-image-metrics-cannot-detect-the-failure.md` |
+| 5.1.6 | Integration Properties of the Composition | Refine | CD | — | `5-1-6-integration-properties-of-the-composition.md` |
+| 5.1.7 | Overall Conclusion | Refine | all | — | `5-1-7-overall-conclusion.md` |
+| **5.2** | **Research Contributions** | Replace | all | — | *(section)* |
+| **5.3** | **Limitations** | Add as its own section | §14 | — | *(section)* |
+| **5.4** | **Recommendations for Future Work** | Replace | — | — | *(section)* |
+| 5.4.1 | Deconfounding the Size of the Cut | Add | §5 | — | `5-4-1-deconfounding-the-size-of-the-cut.md` |
+| 5.4.2 | Testing the Re-Identification Burst | Add | §5e | — | `5-4-2-testing-the-re-identification-burst.md` |
+| 5.4.3 | Locating the Restoration Difference | Add | §10 | — | `5-4-3-locating-the-restoration-difference.md` |
+| 5.4.4 | Constraining the Quantiser | Add | §10 | — | `5-4-4-constraining-the-quantiser.md` |
+| 5.4.5 | Multiple Operating Points per Mechanism | Add | §7 | — | `5-4-5-multiple-operating-points-per-mechanism.md` |
+| 5.4.6 | Repeat Count Required to Resolve Interactions | Add | §0 | — | `5-4-6-repeat-count-required-to-resolve-interactions.md` |
+| **5.5** | **Closing Remarks** | Add | — | — | *(section)* |
+
+## 22.9 Gate 7: Manuscript Composition
+
+A chapter passes when every subsection is `final` under the definition in
+`writing-protocol.md` §9: four passes complete with all three personas logged;
+no `[CITE-NEEDED]`, `[DATA-NEEDED]` or `[TODO]` markers; every number traced to
+a named artefact and every figure path resolving; claim strength matching
+resolution status throughout; and one end-to-end reading for flow, logged at
+chapter level by the Supervisor persona.

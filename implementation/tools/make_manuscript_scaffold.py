@@ -1,0 +1,210 @@
+"""Turn the thesis structure into one Markdown deliverable per subsection.
+
+    python tools/make_manuscript_scaffold.py
+    python tools/make_manuscript_scaffold.py --dry-run
+
+`THESIS.md` §22.8 holds the hierarchy as a table per chapter. This reads it and writes `manuscript/chN-slug/N-x-y-slug.md`,
+one file per subsection, each carrying the front matter and review log that
+`writing-protocol.md` requires.
+
+**It never overwrites.** The structure moves while drafting is under way, so a
+regeneration must be safe to run at any time: a file that already exists is
+left exactly as it is and counted as skipped.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+import unicodedata
+from dataclasses import dataclass
+from pathlib import Path
+
+ROOT: Path = Path(__file__).resolve().parent.parent.parent
+# THESIS.md §22 is authoritative for the structure, so the scaffold and the
+# plan cannot drift apart. The older detailed-structure document is superseded.
+STRUCTURE: Path = ROOT / "THESIS.md"
+OUT: Path = ROOT / "manuscript"
+
+ROMAN: dict[str, int] = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5}
+
+CHAPTER_SLUG: dict[int, str] = {
+    1: "ch1-introduction", 2: "ch2-literature-review", 3: "ch3-methodology",
+    4: "ch4-results", 5: "ch5-conclusions",
+}
+
+
+@dataclass(frozen=True)
+class Entry:
+    chapter: int
+    number: str
+    title: str
+    action: str
+    evidence: str
+    content: str
+
+    @property
+    def is_subsection(self) -> bool:
+        return self.number.count(".") >= 2
+
+
+def slug(title: str) -> str:
+    """A file-safe stem: emphasis stripped, dashes normalised, runs collapsed."""
+    text = title.replace("**", "").replace("*", "")
+    # En and em dashes are separators here, not characters to transliterate away.
+    text = text.replace("–", "-").replace("—", "-")
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-").lower()
+    return re.sub(r"-{2,}", "-", text)
+
+
+def parse_structure(path: Path) -> list[Entry]:
+    """Read every numbered row of every chapter table.
+
+    Column layouts differ: Chapter IV's table omits `Content`, so the header
+    row is what decides where evidence lives rather than a fixed index.
+    """
+    entries: list[Entry] = []
+    chapter: int | None = None
+    columns: list[str] = []
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        heading = re.match(r"^#\s+CHAPTER\s+([IVX]+)\b", line.strip())
+        if heading:
+            chapter = ROMAN.get(heading.group(1))
+            columns = []
+            continue
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if cells and cells[0] in ("§", "No.", "#"):
+            columns = [c.lower() for c in cells]
+            continue
+        if chapter is None or not columns:
+            continue
+        # Section rows carry the number in bold; subsection rows do not.
+        cells[0] = cells[0].replace("**", "")
+        if not re.match(r"^\d+\.\d", cells[0]):
+            continue
+
+        def col(name: str) -> str:
+            return cells[columns.index(name)] if name in columns and \
+                columns.index(name) < len(cells) else ""
+
+        entries.append(Entry(
+            chapter=chapter,
+            number=cells[0],
+            title=col("title").replace("**", ""),
+            action=col("action").replace("**", ""),
+            evidence=col("evidence"),
+            content=col("content"),
+        ))
+    return entries
+
+
+def render_stub(entry: Entry) -> str:
+    evidence = f'["{entry.evidence}"]' if entry.evidence else "[]"
+    hint = f"\n> Planned content: {entry.content}\n" if entry.content else ""
+    return f"""---
+section: "{entry.number}"
+title: "{entry.title}"
+chapter: {entry.chapter}
+action: {entry.action or "Add"}
+evidence: {evidence}
+figures: []
+tables: []
+citations: []
+status: draft
+word_count: 0
+---
+
+# {entry.number} {entry.title}
+{hint}
+[TODO] Not yet drafted. Compose per `new-revisited-writing/writing-protocol.md`:
+draft, reflect against the evidence, review through the three personas, refine.
+Continuous prose, 300-900 words, every number traced to a named artefact.
+
+---
+
+## Review log
+
+**Domain Researcher** — not yet run.
+
+**Supervisor** — not yet run.
+
+**Journal Reviewer** — not yet run.
+"""
+
+
+def render_index(chapter: int, entries: list[Entry]) -> str:
+    rows = []
+    for e in entries:
+        if e.is_subsection:
+            link = f"[{e.number}]({e.number.replace('.', '-')}-{slug(e.title)}.md)"
+            rows.append(f"| {link} | {e.title} | {e.action} | {e.evidence} |")
+        else:
+            rows.append(f"| **{e.number}** | **{e.title}** | {e.action} | {e.evidence} |")
+    body = "\n".join(rows)
+    return f"""# Chapter {chapter} — deliverables
+
+One file per subsection, per `new-revisited-writing/writing-protocol.md`.
+Generated by `implementation/tools/make_manuscript_scaffold.py`; regenerating
+never overwrites a file that exists.
+
+| § | Title | Action | Evidence |
+|---|---|---|---|
+{body}
+"""
+
+
+def write_scaffold(entries: list[Entry], out_root: Path) -> tuple[int, int]:
+    created = skipped = 0
+    by_chapter: dict[int, list[Entry]] = {}
+    for e in entries:
+        by_chapter.setdefault(e.chapter, []).append(e)
+
+    for chapter, group in sorted(by_chapter.items()):
+        folder = out_root / CHAPTER_SLUG.get(chapter, f"ch{chapter}")
+        folder.mkdir(parents=True, exist_ok=True)
+        index = folder / "README.md"
+        if not index.exists():
+            index.write_text(render_index(chapter, group), encoding="utf-8")
+            created += 1
+        else:
+            skipped += 1
+        for e in group:
+            if not e.is_subsection:
+                continue
+            target = folder / f"{e.number.replace('.', '-')}-{slug(e.title)}.md"
+            if target.exists():
+                skipped += 1
+                continue
+            target.write_text(render_stub(e), encoding="utf-8")
+            created += 1
+    return created, skipped
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    entries = parse_structure(STRUCTURE)
+    subs = [e for e in entries if e.is_subsection]
+    print(f"parsed {len(entries)} rows, {len(subs)} subsections")
+    if args.dry_run:
+        for e in subs[:10]:
+            print(f"  {e.number:9}{slug(e.title)}")
+        print("  ...")
+        return 0
+
+    created, skipped = write_scaffold(entries, OUT)
+    print(f"wrote {created} file(s), left {skipped} existing file(s) untouched")
+    print(f"into {OUT.relative_to(ROOT)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

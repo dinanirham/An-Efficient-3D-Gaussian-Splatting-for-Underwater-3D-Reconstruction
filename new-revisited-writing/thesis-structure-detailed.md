@@ -1,5 +1,10 @@
 # Detailed thesis structure — sections and subsections, all five chapters
 
+> **Superseded on 2026-09-24.** The structure now lives in `THESIS.md` §22.8,
+> which the scaffold generator reads directly. This document is retained as the
+> record of how the structure was derived, not as a source of truth. Edit
+> `THESIS.md`, not this file.
+
 Companion to `thesis-outline-revised.md`, which gives the diagnosis and the
 per-chapter actions. This document is the hierarchy itself, at the level of
 detail a table of contents requires, so that drafting can begin section by

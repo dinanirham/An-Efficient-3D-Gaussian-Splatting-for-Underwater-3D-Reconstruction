@@ -1,0 +1,30 @@
+---
+section: "1.5.1"
+title: "Practical Benefits"
+chapter: 1
+action: Refine
+evidence: ["§2, §7"]
+figures: []
+tables: []
+citations: []
+status: draft
+word_count: 0
+---
+
+# 1.5.1 Practical Benefits
+
+> Planned content: Mechanism selection under a stated budget
+
+[TODO] Not yet drafted. Compose per `new-revisited-writing/writing-protocol.md`:
+draft, reflect against the evidence, review through the three personas, refine.
+Continuous prose, 300-900 words, every number traced to a named artefact.
+
+---
+
+## Review log
+
+**Domain Researcher** — not yet run.
+
+**Supervisor** — not yet run.
+
+**Journal Reviewer** — not yet run.
