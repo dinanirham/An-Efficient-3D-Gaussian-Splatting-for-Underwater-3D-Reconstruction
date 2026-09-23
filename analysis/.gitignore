@@ -4,6 +4,11 @@ campaign-*/*.json
 campaign-*/*.txt
 campaign-*/*.md
 campaign-*/diagnostics/
+# Collected on Colab by 03_figures and reproducible from Drive; the
+# renders it carries are large, and the figures built from it are
+# committed under figures/chapter4/ instead.
+campaign-*/ch4_assets/
+*.tar.gz
 !campaign-*/README.md
 !campaign-*/PLAN.md
 !campaign-*/FINDINGS.md
