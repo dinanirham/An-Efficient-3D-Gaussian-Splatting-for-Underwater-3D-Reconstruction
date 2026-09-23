@@ -92,6 +92,10 @@ RENDER_CELLS: tuple[str, ...] = ("SS", "A0", "A1", "A2", "A3", "A4")
 # and the aggregates it explains are the same measurement.
 LPIPS_NET: str = "vgg"
 
+# The visibility threshold spatial_extent uses, so "invisible" means the same
+# thing in the geometry table and in the figure that illustrates it.
+VISIBLE_ALPHA: float = 0.05
+
 
 # ── pure helpers, covered by verify_chapter_assets ───────────────────────
 
@@ -497,6 +501,102 @@ def collect_per_view_and_renders(root: Path, out: Path, source_root: Path,
     return len(rows), n_images
 
 
+def invisible_mask(opacity: Any, threshold: float = VISIBLE_ALPHA) -> Any:
+    """Primitives that contribute nothing to a render.
+
+    The same threshold `spatial_extent` counts with. Returned as a mask over
+    primitives so the caller can silence them rather than delete them: a
+    deletion would renumber everything and the two renders would no longer be
+    the same model minus a subset.
+    """
+    flat = opacity.reshape(-1)
+    return flat < threshold
+
+
+def collect_extra_renders(root: Path, out: Path, source_root: Path) -> int:
+    """Two passes the main collection cannot produce.
+
+    **The invisible population** (figure 4.5). The baseline is rendered twice:
+    once as it stands, once with every primitive below the visibility threshold
+    silenced. If those primitives contribute nothing, the two images agree, and
+    the count reduction the mechanisms achieve should be read against the
+    visible population rather than the total.
+
+    **Both attribute states** (figure 4.14). A quantised run is rendered twice
+    from one model: with its codebook installed, and with the continuous
+    parameters the point cloud stores. This is the comparison figure 4.8 cannot
+    make, because that one contrasts two separately trained runs and so mixes
+    quantisation with trajectory divergence.
+    """
+    import torch
+    import torchvision
+    from gaussian_renderer import render, render_depth
+    from utils.depth_stats import normalise_depth
+
+    img_dir = out / "renders"
+    img_dir.mkdir(parents=True, exist_ok=True)
+    quant = _quant_index(root)
+    written = 0
+
+    for cell, scene, seed, d in _runs(root, ["A0", "A3"]):
+        if seed != 0:
+            continue
+        loaded = _load_run(d, source_root / scene)
+        if loaded is None:
+            continue
+        gaussians, sc, pipe, at, bs, _ = loaded
+        views = sc.getTestCameras() or sc.getTrainCameras()
+        if not views:
+            continue
+        cam = views[pick_view_index(scene, len(views))]
+        bg = torch.zeros(3, device="cuda")
+        stem = f"{scene}_{cell}"
+        save = torchvision.utils.save_image
+
+        def compose(j):
+            if at is None:
+                return j
+            probe = render_depth(cam, gaussians, pipe, bg)
+            depth, _, _ = normalise_depth(probe["depth"], probe["alpha"],
+                                          1.0, True, True, nan_label=None)
+            dd = depth.unsqueeze(0)
+            return (j.unsqueeze(0) * at(dd) + bs(dd)).clamp(0, 1).squeeze(0)
+
+        with torch.no_grad():
+            if cell == "A0":
+                # Silence the sub-threshold primitives, render, restore.
+                raw = gaussians._opacity.data.clone()
+                mask = invisible_mask(gaussians.get_opacity)
+                gaussians._opacity.data[mask] = -20.0     # sigmoid -> ~0
+                j = render(cam, gaussians, pipe, bg)["render"].clamp(0, 1)
+                save(compose(j), img_dir / f"{stem}_composed_visibleonly.png")
+                gaussians._opacity.data = raw
+                full = compose(render(cam, gaussians, pipe, bg)["render"].clamp(0, 1))
+                save((compose(j) - full).abs().clamp(0, 1) * 4,
+                     img_dir / f"{stem}_composed_visiblediff.png")
+                frac = float(mask.float().mean())
+                print(f"  {cell}/{scene}: silenced {100 * frac:.1f}% of primitives")
+                written += 2
+
+            stored = quant.get((cell, scene, seed))
+            if stored is not None:
+                # The same model in both attribute states.
+                gaussians.clear_quant_override()
+                save(render(cam, gaussians, pipe, bg)["render"].clamp(0, 1),
+                     img_dir / f"{stem}_restored_continuous.png")
+                for attr, tensor in _overrides_from(stored).items():
+                    gaussians.set_quant_override(attr, tensor)
+                save(render(cam, gaussians, pipe, bg)["render"].clamp(0, 1),
+                     img_dir / f"{stem}_restored_codebook.png")
+                gaussians.clear_quant_override()
+                print(f"  {cell}/{scene}: both attribute states written")
+                written += 2
+
+        del gaussians, sc
+        torch.cuda.empty_cache()
+    return written
+
+
 EXPECTED: dict[str, str] = {
     "per_view_metrics.csv": "C1 per-image fidelity, seed 0 only",
     "depth_range_sweeps.csv": "C4 per-frame depth-range distributions",
@@ -513,7 +613,7 @@ def main() -> int:
                     help="dataset root holding <scene>/; defaults to "
                          "<output_root>/dataset/undistorted")
     ap.add_argument("--only", default="all",
-                    help="comma-separated subset of: renders,C1,C4,C5,C6")
+                    help="comma-separated subset of: renders,C1,C4,C5,C6,extras")
     ap.add_argument("--cells", default=None,
                     help="comma-separated cells to process, e.g. A3,A5,A6,A7. "
                          "Applies to C1 and the renders; used to redo part of a "
@@ -527,7 +627,7 @@ def main() -> int:
         root / "dataset" / "undistorted"
 
     want = {w.strip() for w in args.only.split(",")} if args.only != "all" else \
-        {"renders", "C1", "C4", "C5", "C6"}
+        {"renders", "C1", "C4", "C5", "C6", "extras"}
 
     if "C5" in want:
         print("C5 medium trajectories, all runs")
@@ -546,6 +646,10 @@ def main() -> int:
         rows, imgs = collect_per_view_and_renders(
             root, out, source_root, do_renders="renders" in want, only_cells=cells)
         print(f"  {rows} rows over {imgs} images")
+
+    if "extras" in want:
+        print("extras: the invisible population, and both attribute states")
+        print(f"  {collect_extra_renders(root, out, source_root)} image(s)")
 
     write_manifest(out, EXPECTED)
     if args.cells:

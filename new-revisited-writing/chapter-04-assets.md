@@ -178,11 +178,20 @@ the full frames stay available. Crops are fractions of the image, not pixel
 boxes: the scenes were captured at four different resolutions and a fixed pixel
 box would cover a different share of each.
 
-Still outstanding: 4.5 (the
+**Figure 4.13 needed no new collection** — the collapsed run and an intact one
+on the same scene were already rendered. It is assembled.
+
+Still outstanding, and now collectable with `--only extras`: 4.5 (the
 invisible population needs a render with sub-threshold primitives removed),
-4.13 (a collapsed and an intact repeat of the same cell and scene) and 4.14
-(both attribute states of one quantised run) — each needs a rendering pass the
-collector does not yet make.
+4.14 (both attribute states of one quantised run). Both are produced by
+`--only extras`, which silences the sub-threshold primitives and re-renders for
+4.5, and renders one quantised model from each of its two attribute states for
+4.14.
+
+**A limitation figure 4.13 carries in its caption.** Full point clouds are kept
+for seed 0 only, and no cell has both a collapsed and an intact repeat at that
+seed, so the collapsed run is shown against the baseline on the same scene and
+view. The two differ in configuration as well as in outcome.
 
 **Rendering is deterministic.** Independently collected runs of the same
 configuration produced byte-identical images, verified by SHA-256 across three

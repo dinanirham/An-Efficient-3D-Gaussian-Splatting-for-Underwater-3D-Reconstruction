@@ -27,6 +27,7 @@ from tools.chapter_assets import (  # noqa: E402
     clamp_crop,
     per_view_rows,
     pick_view_index,
+    invisible_mask,
     selfcheck_verdict,
     radius_histogram,
     write_manifest,
@@ -156,6 +157,16 @@ def t11_store_schema_is_read_in_one_place_only():
                         if not leaked else f"schema leaked back in: {leaked}")
 
 
+def t12_invisible_mask_uses_the_geometry_threshold():
+    """The figure and the geometry table must mean the same thing by 'invisible'."""
+    import numpy as np
+    from tools.chapter_assets import VISIBLE_ALPHA
+    opacity = np.array([[0.0], [0.049], [0.05], [0.9]])
+    mask = invisible_mask(opacity)
+    ok = list(mask) == [True, True, False, False] and VISIBLE_ALPHA == 0.05
+    return ok, f"threshold {VISIBLE_ALPHA}; boundary value counts as visible"
+
+
 def main() -> int:
     print("=" * 68)
     print("Chapter IV asset collector")
@@ -175,6 +186,8 @@ def main() -> int:
           t10_selfcheck_catches_the_wrong_model_state)
     check("T11 the store has one reader  <-- decisive",
           t11_store_schema_is_read_in_one_place_only)
+    check("T12 invisible mask uses the geometry threshold",
+          t12_invisible_mask_uses_the_geometry_threshold)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

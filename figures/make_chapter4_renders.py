@@ -127,6 +127,10 @@ def grid(name: str, columns: list[tuple[str, str, str]], region: Optional[str],
     fig.text(0.5, -0.012, note, ha="center", fontsize=7.5, color=NEUTRAL, wrap=True)
     fig.tight_layout(h_pad=0.4, w_pad=0.25)
 
+    _save(fig, name, missing)
+
+
+def _save(fig: "plt.Figure", name: str, missing: Optional[list] = None) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for ext in ("pdf", "png"):
         target = OUT / f"{name}.{ext}"
@@ -139,7 +143,8 @@ def grid(name: str, columns: list[tuple[str, str, str]], region: Optional[str],
                     raise
                 time.sleep(0.4)
     plt.close(fig)
-    print(f"  {name}.pdf / .png" + (f"   [{len(missing)} panel(s) missing]" if missing else ""))
+    tail = f"   [{len(missing)} panel(s) missing]" if missing else ""
+    print(f"  {name}.pdf / .png{tail}")
 
 
 def main() -> int:
@@ -201,7 +206,80 @@ def main() -> int:
          "confounds quantisation with trajectory divergence between runs, so it "
          "illustrates rather than measures. The within-model comparison, one model "
          "in both attribute states, is Figure 4.14 and is not yet rendered.")
+    # 4.13 needs no new collection: the collapsed run and an intact one on the
+    # same scene are both already rendered.
+    collapsed_pair()
+    extras()
     return 0
+
+
+def collapsed_pair() -> None:
+    """Figure 4.13 — what a lost channel looks like.
+
+    The honest pairing available. Full point clouds are kept for seed 0 only,
+    and no cell has both a collapsed and an intact repeat at that seed, so the
+    collapsed run is shown against the baseline on the same scene and view
+    rather than against another repeat of its own cell. The two therefore
+    differ in configuration as well as in outcome, and the caption says so.
+    """
+    scene = "JapaneseGradens-RedSea"
+    panels = [("A0", "attenuation", "baseline — attenuation"),
+              ("A2", "attenuation", "collapsed — attenuation"),
+              ("A0", "restored", "baseline — restored  Ĵ"),
+              ("A2", "restored", "collapsed — restored  Ĵ")]
+    fig, axes = plt.subplots(1, 4, figsize=(9.4, 2.1))
+    for ax, (cell, kind, label) in zip(axes, panels):
+        ax.set_xticks([]); ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#C9D4D3"); spine.set_linewidth(0.6)
+        im = load(scene, cell, kind)
+        if im is None:
+            ax.text(0.5, 0.5, "not collected", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=7, color=NEUTRAL)
+            continue
+        ax.imshow(im)
+        ax.set_title(label, fontsize=8.5, pad=4)
+    fig.suptitle("A lost attenuation channel — " + SCENES[scene], y=1.04, fontsize=10.5)
+    fig.text(0.5, -0.06,
+             "The simplification run lost its blue channel; the baseline did not. "
+             "Their composed images score within 0.8 of a baseline standard deviation "
+             "of each other. No cell has both a collapsed and an intact repeat at the "
+             "one seed whose point cloud is retained, so these differ in configuration "
+             "as well as in outcome.",
+             ha="center", fontsize=7.5, color=NEUTRAL, wrap=True)
+    fig.tight_layout(w_pad=0.25)
+    _save(fig, "figure-4-13-collapsed-medium")
+
+
+def extras() -> None:
+    """Figures 4.5 and 4.14, once the extra render pass has been collected."""
+    have = lambda scene, cell, kind: (RENDERS / f"{scene}_{cell}_{kind}.png").is_file()
+    if have("Curasao", "A0", "composed_visibleonly"):
+        grid("figure-4-05-invisible-population",
+             [("A0", "composed", "all primitives"),
+              ("A0", "composed_visibleonly", "visible primitives only"),
+              ("A0", "composed_visiblediff", "difference, ×4")],
+             None,
+             "The population that never reaches a render",
+             "Between 59 and 73 per cent of the baseline's primitives fall below the "
+             "visibility threshold. Silencing them changes the image by almost "
+             "nothing, which is why a count reduction should be read against the "
+             "visible population rather than the total.")
+    else:
+        print("  figure 4.5: run the collector with --only extras first")
+
+    if have("Curasao", "A3", "restored_continuous"):
+        grid("figure-4-14-attribute-states",
+             [("A3", "restored_continuous", "continuous state"),
+              ("A3", "restored_codebook", "codebook state")],
+             "far",
+             "One model, both attribute states, restored image",
+             "The comparison Figure 4.8 cannot make: the same trained model rendered "
+             "from its continuous parameters and from its codebook. Nothing else "
+             "differs, so the difference is quantisation and not trajectory "
+             "divergence. Consistency, not accuracy.")
+    else:
+        print("  figure 4.14: run the collector with --only extras first")
 
 
 if __name__ == "__main__":
