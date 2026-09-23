@@ -89,6 +89,28 @@ checkpoints.
 File names carry the generator's own numbering (`figure-4-13` … `figure-4-18`);
 the chapter numbering above is the placement order.
 
+### Collected on Colab — `03_figures.ipynb`
+
+Six products that need the run directories or a GPU, and so cannot come from
+the analysis bundle. Collected by `tools/chapter_assets.py`; the four data
+products are plotted locally by `figures/make_chapter4_figures.py`, which skips
+them with a note until the bundle is unpacked.
+
+| Tag | Product | Answers | Bound |
+|---|---|---|---|
+| C1 | `per_view_metrics.csv` | Whether a scene mean rests on one bad view — the held-out set is 13 frames | **Seed 0 only.** Full point clouds are kept for one repeat, so this cannot show per-view variation *between* repeats |
+| C2 | depth renders | The medium reads depth and the coupling acts through it, yet no figure showed depth | Fixed view per scene |
+| C3 | restoration renders | Ĵ is the method's scientific output and appeared only inside the decomposition figure | Fixed view per scene |
+| C4 | `depth_range_sweeps.csv` | Makes the refuted explanation tangible: the distribution moves, the outcome does not follow | All runs with sweeps |
+| C5 | `medium_trajectories.csv` | The baseline's medium converging and staying put — currently asserted from a collapse count | All 120 runs; the bundle carried 48 |
+| C6 | `radius_histograms.csv` | Direct evidence for the invisible-population account | Seed 0 only |
+
+The view and both crop rectangles are fixed per scene in `tools/chapter_assets.py`
+and reused by every configuration. A figure comparing configurations at
+different cameras or crops is not a comparison, and nine tests in
+`verify_chapter_assets.py` hold that contract — including that clamping a crop
+moves it and never resizes it.
+
 ### Considered and not supportable
 
 * **Storage composition by attribute** — would show where the 2.72× comes

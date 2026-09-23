@@ -34,7 +34,7 @@ import math
 import statistics as st
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import matplotlib
 
@@ -705,6 +705,128 @@ def figure_4_18() -> None:
     save(fig, "figure-4-18-collapse-onset")
 
 
+
+# ── figures over the Colab-collected assets ──────────────────────────────
+#
+# These need `ch4_assets/` unpacked beside the campaign bundle, produced by
+# 03_figures.ipynb. Each skips with a note rather than failing, so the script
+# stays runnable before that pass has been made.
+
+def _asset(name: str) -> Optional[list[dict[str, str]]]:
+    path = DATA / "ch4_assets" / name
+    if not path.is_file():
+        print(f"  skipped: {name} not collected yet (run 03_figures.ipynb)")
+        return None
+    return list(csv.DictReader(open(path, encoding="utf-8")))
+
+
+def figure_c1_per_view() -> None:
+    """C1. Does any scene mean rest on a single bad view?"""
+    rows = _asset("per_view_metrics.csv")
+    if rows is None:
+        return
+    fig, axes = plt.subplots(1, 4, figsize=(10.0, 3.4), sharey=False)
+    order = [c for c in CELLS if c != "SS"]
+    for ax, (key, scene) in zip(axes, SCENES.items()):
+        for i, cell in enumerate(order):
+            vals = [float(r["psnr_pooled"]) for r in rows
+                    if r["cell"] == cell and r["scene"] == key]
+            if not vals:
+                continue
+            for j, v in enumerate(vals):
+                ax.scatter([i + (j % 3 - 1) * 0.12], [v], s=18, zorder=3,
+                           color=SCENE_COLOR[key], alpha=0.75)
+            ax.plot([i - 0.28, i + 0.28], [st.mean(vals)] * 2,
+                    color=NEUTRAL, lw=1.8)
+        ax.set_xticks(range(len(order)))
+        ax.set_xticklabels(order, fontsize=7, rotation=90)
+        ax.set_title(scene)
+        ax.grid(axis="x", visible=False)
+    axes[0].set_ylabel("PSNR per held-out view (dB)")
+    fig.suptitle("Per-view fidelity; the bar is the scene mean the tables report", y=1.03)
+    fig.tight_layout()
+    save(fig, "figure-4-c1-per-view")
+
+
+def figure_c4_depth_ranges() -> None:
+    """C4. The distribution the registered explanation was about."""
+    rows = _asset("depth_range_sweeps.csv")
+    if rows is None:
+        return
+    cell, scene = "A2", "Curasao"
+    sel = [r for r in rows if r["cell"] == cell and r["scene"] == scene]
+    if not sel:
+        print("  skipped: no sweeps for the chosen cell and scene")
+        return
+    fig, ax = plt.subplots(figsize=(6.6, 3.4))
+    for seed in sorted({r["seed"] for r in sel}):
+        pts = sorted((int(r["iteration"]), float(r["zr_mean"]), float(r["zr_sd"]))
+                     for r in sel if r["seed"] == seed)
+        its = [p[0] for p in pts]
+        ax.errorbar(its, [p[1] for p in pts], yerr=[p[2] for p in pts],
+                    lw=1.3, capsize=2, alpha=0.85, label=f"repeat {seed}")
+    for boundary in (15000, 20000):
+        ax.axvline(boundary, color=NEUTRAL, lw=0.9, ls="--")
+    ax.set_xlabel("iteration")
+    ax.set_ylabel("per-frame depth range\n(mean over views, bars are sd)")
+    ax.set_title(f"Cross-frame depth-range distribution — {SCENES[scene]}, {cell}")
+    ax.legend(fontsize=8)
+    save(fig, "figure-4-c4-depth-ranges")
+
+
+def figure_c5_medium_convergence() -> None:
+    """C5. The baseline's medium settles; the simplification cells' does not."""
+    rows = _asset("medium_trajectories.csv")
+    if rows is None:
+        return
+    fig, axes = plt.subplots(1, 4, figsize=(10.2, 3.0), sharey=True)
+    for ax, (key, scene) in zip(axes, SCENES.items()):
+        for cell, color in (("A0", NEUTRAL), ("A2", ACCENT), ("A4", "#1F7A66")):
+            for seed in ("0", "1", "2"):
+                pts = sorted((int(r["iteration"]),
+                              st.mean([float(r[f"beta_att_{c}"]) for c in "rgb"]))
+                             for r in rows if r["cell"] == cell
+                             and r["scene"] == key and r["seed"] == seed
+                             and r.get("beta_att_r"))
+                if not pts:
+                    continue
+                ax.plot([p[0] for p in pts], [p[1] for p in pts],
+                        color=color, lw=1.0, alpha=0.7,
+                        label=cell if seed == "0" else None)
+        for boundary in (10000, 15000, 20000):
+            ax.axvline(boundary, color=GRID, lw=1.0)
+        ax.set_title(scene)
+        ax.set_xlabel("iteration")
+    axes[0].set_ylabel("mean attenuation")
+    axes[0].legend(fontsize=7.5)
+    fig.suptitle("Medium convergence from activation at iteration 10 000", y=1.04)
+    fig.tight_layout()
+    save(fig, "figure-4-c5-medium-convergence")
+
+
+def figure_c6_radius() -> None:
+    """C6. Where each configuration puts its primitives."""
+    rows = _asset("radius_histograms.csv")
+    if rows is None:
+        return
+    fig, axes = plt.subplots(1, 4, figsize=(10.2, 2.9), sharey=True)
+    for ax, (key, scene) in zip(axes, SCENES.items()):
+        for cell, color in (("A0", NEUTRAL), ("A1", "#1F6FB4"), ("A2", ACCENT)):
+            sel = sorted((float(r["bin_lo"]), float(r["fraction"]))
+                         for r in rows if r["cell"] == cell and r["scene"] == key)
+            if not sel:
+                continue
+            ax.plot([p[0] for p in sel], [100 * p[1] for p in sel],
+                    color=color, lw=1.4, label=cell)
+        ax.set_title(scene)
+        ax.set_xlabel("distance from cloud centre")
+    axes[0].set_ylabel("share of primitives (%)")
+    axes[0].legend(fontsize=7.5)
+    fig.suptitle("Spatial distribution of the representation", y=1.04)
+    fig.tight_layout()
+    save(fig, "figure-4-c6-radius")
+
+
 def main() -> None:
     style()
     print(f"writing to {OUT.relative_to(ROOT)}")
@@ -720,6 +842,10 @@ def main() -> None:
     figure_4_16()
     figure_4_17()
     figure_4_18()
+    figure_c1_per_view()
+    figure_c4_depth_ranges()
+    figure_c5_medium_convergence()
+    figure_c6_radius()
 
 
 if __name__ == "__main__":

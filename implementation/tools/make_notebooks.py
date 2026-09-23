@@ -1111,6 +1111,133 @@ measurement.
 ])
 
 
+
+FIGURES = notebook([
+    md("""# 03 — Chapter IV assets
+
+Collects everything Chapter IV needs that cannot be produced from the analysis
+bundle: per-view metrics, the render figures, and four data products that need
+the full run directories rather than the 48 diagnostics the bundle carries.
+
+Runs against the finished campaign. It trains nothing and writes nothing into
+`runs/` — it reads checkpoints and writes into a new folder you download.
+
+Expect roughly 20–35 minutes on an A100, most of it LPIPS over held-out views.
+"""),
+
+    md("## 1. Mount Drive and set the campaign root"),
+    code("""from google.colab import drive
+drive.mount('/content/drive')
+
+DRIVE_ROOT = '/content/drive/MyDrive/e3dgsuw'
+ASSETS = '/content/ch4_assets'
+
+import os
+assert os.path.isdir(DRIVE_ROOT + '/runs'), DRIVE_ROOT + '/runs not found'
+print('campaign root:', DRIVE_ROOT)
+print('cells present:', sorted(os.listdir(DRIVE_ROOT + '/runs')))"""),
+
+    md("""## 2. Refresh the checkout
+
+This notebook does not clone. `00_setup` and `01_worker` already put the
+repository and its built extensions on this runtime, and duplicating the clone
+here would duplicate the token handling with it. If the directory is missing,
+run `00_setup` first."""),
+    code("""import os, sys
+IMPL = '/content/e3dgsuw/implementation'
+if not os.path.isdir(IMPL):
+    sys.exit('No checkout at /content/e3dgsuw -- run 00_setup.ipynb first.')
+%cd /content/e3dgsuw
+!git pull -q
+%cd $IMPL
+!pip install -q plyfile
+import torch
+print('torch', torch.__version__, '| cuda', torch.cuda.is_available())"""),
+
+    md("## 3. Check the collector before spending GPU time\n\nNine tests over the "
+       "pure parts: view selection, crop arithmetic, output shapes. They take a "
+       "second and catch the errors that would otherwise surface after twenty "
+       "minutes of rendering."),
+    code("""!python tools/verify_chapter_assets.py"""),
+
+    md("""## 4. The cheap products first
+
+C4, C5 and C6 read files rather than rendering, so they finish in under a
+minute. Running them first means a disconnect during the render pass still
+leaves you with something."""),
+    code("""!python -m tools.chapter_assets \\
+    --output_root "$DRIVE_ROOT" --out "$ASSETS" --only C4,C5,C6"""),
+
+    md("""## 5. Per-view metrics and the renders
+
+This is the long cell. It loads each seed-0 checkpoint, renders every held-out
+view, and records the four metrics per image under the campaign's own
+conventions — not a second implementation of them.
+
+**Bounded by the storage policy.** Full point clouds are kept for seed 0 only,
+so per-view metrics cover one repeat per cell and scene. That answers whether a
+scene mean rests on a single bad view; it cannot show how per-view fidelity
+moves between repeats."""),
+    code("""!python -m tools.chapter_assets \\
+    --output_root "$DRIVE_ROOT" --out "$ASSETS" --only C1,renders"""),
+
+    md("## 6. What landed"),
+    code("""import json, os
+man = json.load(open(ASSETS + '/assets_manifest.json'))
+print('written:')
+for k, v in man['written'].items():
+    print(f'  {k:28} {v}')
+if man['absent']:
+    print('absent:')
+    for k, v in man['absent'].items():
+        print(f'  {k:28} {v}')
+r = ASSETS + '/renders'
+if os.path.isdir(r):
+    pngs = sorted(os.listdir(r))
+    print(f'\\nrenders: {len([p for p in pngs if p.endswith(".png")])} images')
+    for p in pngs[:12]:
+        print('  ', p)"""),
+
+    md("## 7. A first look at the per-view distribution\n\nThe question this "
+       "answers: is any scene mean resting on one bad view?"),
+    code("""import csv, statistics as st
+from collections import defaultdict
+
+rows = list(csv.DictReader(open(ASSETS + '/per_view_metrics.csv')))
+by = defaultdict(list)
+for r in rows:
+    by[(r['cell'], r['scene'])].append(float(r['psnr_pooled']))
+
+print(f"{'cell':5}{'scene':24}{'n':>3}{'mean':>8}{'min':>8}{'max':>8}{'spread':>9}")
+for (cell, scene), v in sorted(by.items()):
+    if cell not in ('A0', 'A2'):
+        continue
+    print(f'{cell:5}{scene:24}{len(v):>3}{st.mean(v):>8.2f}{min(v):>8.2f}'
+          f'{max(v):>8.2f}{max(v) - min(v):>9.2f}')
+print('\\nA spread of several dB within one run means the scene mean is a mean')
+print('over very unequal views, and per-view reporting belongs in the chapter.')"""),
+
+    md("## 8. Bundle and download"),
+    code("""%cd /content
+!tar -czf ch4_assets.tar.gz -C /content ch4_assets
+from google.colab import files
+files.download('/content/ch4_assets.tar.gz')"""),
+
+    md("""## 9. Locally
+
+Unpack beside the campaign bundle, then regenerate the figures:
+
+```
+tar -xzf ch4_assets.tar.gz -C analysis/campaign-2026-09/
+python figures/make_chapter4_figures.py
+```
+
+The render images are figures in themselves; crop rectangles per scene are in
+`tools/chapter_assets.py` under `CROPS` and are applied when the figure is
+assembled, so the full frames stay available."""),
+])
+
+
 def _check_cells_parse(name: str, nb: dict) -> None:
     """Refuse to write a notebook whose code cells do not parse as Python.
 
@@ -1155,6 +1282,7 @@ def main() -> int:
     for name, nb in (("00_setup.ipynb", SETUP),
                      ("01_worker.ipynb", WORKER),
                      ("02_analysis.ipynb", ANALYSIS),
+                     ("03_figures.ipynb", FIGURES),
                      ("04_densify_diagnostic.ipynb", DIAGNOSTIC)):
         _check_cells_parse(name, nb)
         path = NB_DIR / name
