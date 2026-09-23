@@ -980,9 +980,14 @@ The methodology chapter must describe what produced the final campaign, not the 
 
 # 16. Phase 9: Chapter 4 Construction — Results and Analysis
 
-Chapter 4 is not a surgical revision. No approved Chapter 4 exists, and the
-campaign it reports finished after the current thesis draft was written. It is
-built once, from a validated analysis, under the rules below.
+Chapter 4 is a surgical revision of an existing chapter, not a new one. The
+AoL Research Writing I submission carries an approved Chapter IV at pages
+70-132, with seven sections and thirteen tables, and a matching Chapter V. Its
+component-wise organisation is preserved; its content is rebuilt, because the
+campaign it reports is not the campaign that has now been run. Three of its
+properties are prohibited going forward: fidelity metrics aggregated across
+scenes, conclusions drawn without a reference control or interaction evidence,
+and a ranking of mechanisms taken from one operating point.
 
 ## 16.1 Preconditions
 

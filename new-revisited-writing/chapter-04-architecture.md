@@ -32,7 +32,11 @@ start with Chapter 2.
 
 ---
 
-## 1. Section architecture
+## 1. Section architecture — SUPERSEDED
+
+> Superseded by Revision 2 at the end of this file, which reconciles this
+> plan with the Chapter IV that already exists. Retained so the change is
+> visible.
 
 Fifteen sections, one per analysis section, in the analysis's own order so a
 reader can move between the two documents. "Status" is the claim-discipline
