@@ -1137,19 +1137,19 @@ assert os.path.isdir(DRIVE_ROOT + '/runs'), DRIVE_ROOT + '/runs not found'
 print('campaign root:', DRIVE_ROOT)
 print('cells present:', sorted(os.listdir(DRIVE_ROOT + '/runs')))"""),
 
-    md("""## 2. Refresh the checkout
+    md("""## 2. Clone and build
 
-This notebook does not clone. `00_setup` and `01_worker` already put the
-repository and its built extensions on this runtime, and duplicating the clone
-here would duplicate the token handling with it. If the directory is missing,
-run `00_setup` first."""),
-    code("""import os, sys
-IMPL = '/content/e3dgsuw/implementation'
-if not os.path.isdir(IMPL):
-    sys.exit('No checkout at /content/e3dgsuw -- run 00_setup.ipynb first.')
-%cd /content/e3dgsuw
-!git pull -q
-%cd $IMPL
+The same clone and build every other notebook uses. This notebook is meant to
+be run on a fresh runtime — it does not assume `00_setup` has been run here,
+because collecting assets from a finished campaign has no reason to wait on
+dataset preparation.
+
+The build is needed for section 5, which renders. Sections 4's products only
+read files."""),
+    code(CLONE),
+    code(BUILD),
+    code(BUILD_CHECK),
+    code("""%cd /content/e3dgsuw/implementation
 !pip install -q plyfile
 import torch
 print('torch', torch.__version__, '| cuda', torch.cuda.is_available())"""),
