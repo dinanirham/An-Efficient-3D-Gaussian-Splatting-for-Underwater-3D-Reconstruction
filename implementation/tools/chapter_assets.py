@@ -159,10 +159,11 @@ def _write_csv(path: Path, rows: Sequence[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
-def _runs(root: Path) -> list[tuple[str, str, int, Path]]:
+def _runs(root: Path,
+          only_cells: Optional[Sequence[str]] = None) -> list[tuple[str, str, int, Path]]:
     found: list[tuple[str, str, int, Path]] = []
     runs_dir = root / "runs"
-    for cell in CELLS:
+    for cell in (only_cells or CELLS):
         for scene in SCENES:
             for seed in (0, 1, 2):
                 d = runs_dir / cell / scene / f"s{seed}"
@@ -380,7 +381,9 @@ def _load_run(d: Path, source: Path, sh_degree: int = 0):
 
 
 def collect_per_view_and_renders(root: Path, out: Path, source_root: Path,
-                                 do_renders: bool = True) -> tuple[int, int]:
+                                 do_renders: bool = True,
+                                 only_cells: Optional[Sequence[str]] = None
+                                 ) -> tuple[int, int]:
     """C1, C2, C3 and the render figures, in one pass over seed-0 checkpoints."""
     import torch
     import torchvision
@@ -400,7 +403,7 @@ def collect_per_view_and_renders(root: Path, out: Path, source_root: Path,
     checks: list[dict[str, Any]] = []
     n_images = 0
 
-    for cell, scene, seed, d in _runs(root):
+    for cell, scene, seed, d in _runs(root, only_cells):
         if seed != 0:
             continue
         loaded = _load_run(d, source_root / scene)
@@ -507,6 +510,10 @@ def main() -> int:
                          "<output_root>/dataset/undistorted")
     ap.add_argument("--only", default="all",
                     help="comma-separated subset of: renders,C1,C4,C5,C6")
+    ap.add_argument("--cells", default=None,
+                    help="comma-separated cells to process, e.g. A3,A5,A6,A7. "
+                         "Applies to C1 and the renders; used to redo part of a "
+                         "collection without repeating the whole pass.")
     args = ap.parse_args()
 
     root = Path(args.output_root)
@@ -529,11 +536,21 @@ def main() -> int:
         print(f"  {collect_radius_histograms(root, out)} rows")
     if want & {"C1", "renders"}:
         print("C1 per-view metrics and the render figures, seed 0")
+        cells = [c.strip() for c in args.cells.split(",")] if args.cells else None
+        if cells:
+            print(f"  restricted to {cells}")
         rows, imgs = collect_per_view_and_renders(
-            root, out, source_root, do_renders="renders" in want)
+            root, out, source_root, do_renders="renders" in want, only_cells=cells)
         print(f"  {rows} rows over {imgs} images")
 
     write_manifest(out, EXPECTED)
+    if args.cells:
+        note = (
+            "Partial collection: cells " + str(args.cells)
+            + ", products " + str(sorted(want)) + "." + chr(10)
+            + "Merge into the full bundle rather than replacing it." + chr(10)
+        )
+        (out / "PARTIAL.txt").write_text(note, encoding="utf-8")
     print(f"\nwritten to {out}")
     print("Bundle this directory and unpack it beside analysis/campaign-2026-09/,")
     print("then rerun figures/make_chapter4_figures.py locally.")

@@ -1182,6 +1182,21 @@ moves between repeats."""),
     code("""!python -m tools.chapter_assets \\
     --output_root "$DRIVE_ROOT" --out "$ASSETS" --only C1,renders"""),
 
+    md("""## 5b. Correcting part of a collection
+
+Only needed if a previous pass produced rows for some cells that were wrong.
+`--cells` restricts the pass; the output carries a `PARTIAL.txt` so it is merged
+into the full bundle rather than replacing it.
+
+The September 2026 case: the collector rendered quantised cells from their
+stored point cloud, which holds the *continuous* parameters, so A3, A5, A6 and
+A7 measured a model the campaign never evaluated. The cell below redoes exactly
+those, and the self-check printed at the end compares every run with its own
+`eval_metrics.json` — watch for `MISMATCH`."""),
+    code("""!python -m tools.chapter_assets \
+    --output_root "$DRIVE_ROOT" --out /content/ch4_fix \
+    --only C1,renders --cells A3,A5,A6,A7"""),
+
     md("## 6. What landed"),
     code("""import json, os
 man = json.load(open(ASSETS + '/assets_manifest.json'))
