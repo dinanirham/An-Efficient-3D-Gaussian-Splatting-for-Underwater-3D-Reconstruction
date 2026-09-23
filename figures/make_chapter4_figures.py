@@ -66,6 +66,13 @@ GRID: str = "#D8E0DF"
 
 CELLS: list[str] = ["SS", "A0", "A0D", "A1", "A2", "A3", "A4", "A5", "A6", "A7"]
 
+# The unmodified reference is drawn hollow wherever it appears, so a reader
+# never mistakes it for a configuration under test. It has no per-iteration
+# diagnostics -- one final row per run -- and no stored-size accounting, so
+# it is absent from the three figures that need those and marked as a final
+# state where only its endpoint exists.
+REF_STYLE: dict[str, Any] = {"facecolors": "none", "linewidths": 1.4}
+
 
 def style() -> None:
     plt.rcParams.update({
@@ -179,6 +186,12 @@ def figure_4_1() -> None:
             if base is not None and val is not None:
                 ax.scatter([i], [abs(val - base)], s=26, color=SCENE_COLOR[key],
                            zorder=3, alpha=0.85)
+        # The reference against the same thresholds: its disagreement with the
+        # baseline is smaller than any effect the design can resolve.
+        ref = mean_of(rows, "SS", key, "psnr_pooled")
+        if base is not None and ref is not None:
+            ax.scatter([i], [abs(ref - base)], s=44, marker="o", zorder=4,
+                       edgecolors=SCENE_COLOR[key], **REF_STYLE)
 
     ax.set_xticks(list(xs))
     ax.set_xticklabels(SCENES.values())
@@ -189,6 +202,8 @@ def figure_4_1() -> None:
         Line2D([], [], color=NEUTRAL, lw=2, ls="--", label="resolvable two-way interaction"),
         Line2D([], [], color=NEUTRAL, lw=2, ls=":", label="resolvable three-way interaction"),
         Line2D([], [], marker="o", ls="", color=NEUTRAL, label="observed |main effect|, M1/M2/M3"),
+        Line2D([], [], marker="o", ls="", markerfacecolor="none",
+               markeredgecolor=NEUTRAL, label="|reference - baseline|"),
     ]
     ax.legend(handles=handles, loc="upper left", ncol=2)
     ax.set_ylim(bottom=0)
@@ -261,6 +276,16 @@ def figure_4_9() -> None:
                            alpha=0.9 if cell in ("A0", "A1", "A4", "A7") else 0.55)
                 ax.annotate(cell, (x, y), textcoords="offset points",
                             xytext=(4, 3), fontsize=7, color=NEUTRAL)
+            # The reference, where it can be placed. It has no stored-size
+            # accounting, so it appears on the count axis only, and it is not
+            # part of the front: it is what the front is measured against.
+            xs = mean_of(rows, "SS", key, xmetric)
+            ys = mean_of(rows, "SS", key, "lpips")
+            if xs is not None and ys is not None:
+                ax.scatter([xs], [ys], s=52, marker="o", zorder=4,
+                           edgecolors=SCENE_COLOR[key], **REF_STYLE)
+                ax.annotate("SS", (xs, ys), textcoords="offset points",
+                            xytext=(5, -9), fontsize=7, color=NEUTRAL)
             ax.set_xscale("log")
             ax.grid(which="both", axis="x")
             if row == 0:
@@ -446,9 +471,11 @@ def figure_4_13() -> None:
                ("lpips", "LPIPS", False),
                ("n_primitives_final", "primitive count (ratio)", True)]
     mechs = [("A1", "M1 initialisation"), ("A2", "M2 simplification"),
-             ("A3", "M3 quantisation")]
+             ("A3", "M3 quantisation"), ("SS", "reference (SS)")]
 
-    fig, axes = plt.subplots(1, 3, figsize=(9.6, 3.8))
+    # Four groups of four scenes: the panel has to be tall enough for the
+    # rotated group labels to sit beside their own rows without colliding.
+    fig, axes = plt.subplots(1, 3, figsize=(9.6, 5.4))
     for ax, (metric, label, as_ratio) in zip(axes, metrics):
         y = 0.0
         ticks: list[float] = []
@@ -556,10 +583,13 @@ def figure_4_15() -> None:
     rs = runs()
     anchors = [("n_prim_init", 0), ("n_prim_at_10000", 10000),
                ("n_prim_at_15000", 15000), ("n_primitives_final", 30000)]
-    show = [("A0", "-", "baseline"), ("A1", "-", "M1"), ("A2", "-", "M2"),
-            ("A3", "-", "M3"), ("A4", "--", "M1+M2"), ("A7", ":", "M1+M2+M3")]
-    cmap = {"A0": NEUTRAL, "A1": "#1F6FB4", "A2": ACCENT, "A3": "#7A5CA8",
-            "A4": "#1F7A66", "A7": "#9C6A1E"}
+    # SS carries no per-iteration diagnostics, so only its first and last
+    # anchors exist; the gap is left visible rather than interpolated.
+    show = [("SS", "-", "reference"), ("A0", "-", "baseline"), ("A1", "-", "M1"),
+            ("A2", "-", "M2"), ("A3", "-", "M3"), ("A4", "--", "M1+M2"),
+            ("A7", ":", "M1+M2+M3")]
+    cmap = {"SS": "#94A9A8", "A0": NEUTRAL, "A1": "#1F6FB4", "A2": ACCENT,
+            "A3": "#7A5CA8", "A4": "#1F7A66", "A7": "#9C6A1E"}
 
     fig, axes = plt.subplots(1, 4, figsize=(10.2, 3.1), sharey=True)
     for ax, (key, scene) in zip(axes, SCENES.items()):
@@ -726,7 +756,7 @@ def figure_c1_per_view() -> None:
     if rows is None:
         return
     fig, axes = plt.subplots(1, 4, figsize=(10.0, 3.4), sharey=False)
-    order = [c for c in CELLS if c != "SS"]
+    order = list(CELLS)
     for ax, (key, scene) in zip(axes, SCENES.items()):
         for i, cell in enumerate(order):
             vals = [float(r["psnr_pooled"]) for r in rows
@@ -793,6 +823,13 @@ def figure_c5_medium_convergence() -> None:
                 ax.plot([p[0] for p in pts], [p[1] for p in pts],
                         color=color, lw=1.0, alpha=0.7,
                         label=cell if seed == "0" else None)
+        # The reference's final medium, the only point it records.
+        ref = [st.mean([float(r[f"beta_att_{c}"]) for c in "rgb"])
+               for r in rows if r["cell"] == "SS" and r["scene"] == key
+               and r.get("beta_att_r")]
+        if ref:
+            ax.scatter([30000] * len(ref), ref, s=40, marker="o", zorder=4,
+                       edgecolors="#94A9A8", label="reference, final", **REF_STYLE)
         for boundary in (10000, 15000, 20000):
             ax.axvline(boundary, color=GRID, lw=1.0)
         ax.set_title(scene)
@@ -811,7 +848,8 @@ def figure_c6_radius() -> None:
         return
     fig, axes = plt.subplots(1, 4, figsize=(10.2, 2.9), sharey=True)
     for ax, (key, scene) in zip(axes, SCENES.items()):
-        for cell, color in (("A0", NEUTRAL), ("A1", "#1F6FB4"), ("A2", ACCENT)):
+        for cell, color in (("SS", "#94A9A8"), ("A0", NEUTRAL),
+                            ("A1", "#1F6FB4"), ("A2", ACCENT)):
             sel = sorted((float(r["bin_lo"]), float(r["fraction"]))
                          for r in rows if r["cell"] == cell and r["scene"] == key)
             if not sel:

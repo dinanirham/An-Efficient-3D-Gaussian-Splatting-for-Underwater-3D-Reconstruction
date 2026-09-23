@@ -89,6 +89,20 @@ checkpoints.
 File names carry the generator's own numbering (`figure-4-13` … `figure-4-18`);
 the chapter numbering above is the placement order.
 
+### The reference implementation in the figures
+
+SS appears in every figure whose data supports it, drawn hollow so it is never
+mistaken for a configuration under test: the resolution figure, the operating
+points (count axis only — it has no stored-size accounting), the main-effects
+forest as a fourth group, the population trajectory as its two available
+anchors, the per-view distribution, the medium convergence as a final state,
+and the radius distribution. Its row in the forest plot is the equivalence
+claim of §4.2.1 drawn rather than tabulated.
+
+It is necessarily absent from three: the dispersion strata, the cut-against-loss
+panel and the depth-range sweeps all need per-event diagnostics, and the
+reference records one final row per run rather than a trajectory.
+
 ### Collected on Colab — `03_figures.ipynb`
 
 Six products that need the run directories or a GPU, and so cannot come from
