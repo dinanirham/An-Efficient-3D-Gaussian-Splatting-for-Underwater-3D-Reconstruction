@@ -145,6 +145,92 @@ reference: 0 of 24. That is plan §5a (A0 stable, A2 collapses seed-conditioned)
 protects) held at the strongest level the design can produce. Whether the *mechanism* is the one
 registered — the depth-range dispersion — is §5b, next.
 
+## §2b. The learned medium, as fitted — ADDED after the fact, not in PLAN
+
+*Added 2026-09-23 because Chapter IV needs it and this analysis never supplied
+it. Every earlier section asks whether the medium model **survived**; none
+reports what it **was**. The estimator's scientific output is a decomposition,
+and the decomposition's parameters had gone unexamined. This section is
+descriptive and unregistered: no prediction was made about these values, and
+nothing here is a test.*
+
+**A caveat that bounds everything below.** The depth the medium model reads is
+renormalised per frame to [0, 1] before it reaches the attenuation and
+backscatter networks. The coefficients are therefore dimensionless with
+respect to a normalised depth, not attenuation in inverse metres. Two
+consequences: their magnitudes cannot be compared with published measurements
+of natural water, and they cannot be compared across scenes with different
+depth ranges. What *is* comparable is the **ordering of the three channels
+within one scene**, since all three are fitted against the same normalised
+depth.
+
+**Fitted values, mean over three repeats.**
+
+| cell | scene | β_att (r, g, b) | β_bs (r, g, b) | B∞ (r, g, b) |
+|---|---|---|---|---|
+| A0 | Curasao | 2.160, 1.766, 1.255 | 14.06, 9.23, 7.76 | 0.087, 0.101, 0.118 |
+| A0 | IUI3-RedSea | **0.956, 1.028, 1.064** | 16.48, 12.38, 5.40 | 0.144, 0.226, 0.354 |
+| A0 | JapaneseGardens | 1.985, 1.526, 1.148 | 20.47, 9.48, 7.19 | 0.158, 0.202, 0.243 |
+| A0 | Panama | 1.554, 1.264, 1.035 | 15.85, 12.28, 10.79 | 0.146, 0.163, 0.186 |
+| SS | Curasao | 2.155, 1.724, 1.222 | 16.17, 10.69, 8.97 | 0.085, 0.097, 0.113 |
+| SS | IUI3-RedSea | **0.845, 0.933, 1.026** | 18.41, 15.97, 7.11 | 0.143, 0.224, 0.339 |
+| SS | JapaneseGardens | 2.294, 1.837, 1.447 | 22.12, 10.77, 8.91 | 0.158, 0.199, 0.234 |
+| SS | Panama | 1.372, 1.285, 1.033 | 11.87, 8.51, 8.28 | 0.157, 0.185, 0.211 |
+
+**B∞ is ordered b > g > r on every scene in both implementations** — a
+blue-green veiling colour, which is what these waters look like. Nothing
+anomalous.
+
+**β_att should be ordered r > g > b**, since water attenuates long wavelengths
+fastest. Testing red minus blue against repeat dispersion:
+
+| scene | A0: β_att,r − β_att,b | z | SS | z | verdict |
+|---|---:|---:|---:|---:|---|
+| Curasao | +0.905 | +4.18 | +0.933 | +5.23 | physical, resolved in both |
+| JapaneseGardens | +0.838 | +2.57 | +0.848 | +4.86 | physical, resolved in both |
+| Panama | +0.519 | +1.66 | +0.339 | +1.68 | physical in direction, **UNRESOLVED** |
+| IUI3-RedSea | **−0.108** | −1.63 | **−0.181** | −0.81 | **inverted in direction, UNRESOLVED** |
+
+**The inversion on IUI3-RedSea does not resolve at three repeats, and is not
+claimed as a resolved finding.** What can be said is weaker and still worth
+recording:
+
+1. IUI3-RedSea is the only scene of the four whose fitted spectrum does not
+   show the physical ordering, and it fails to show it in **both** the baseline
+   and the unmodified reference. Whatever it is, it is not introduced by this
+   implementation.
+2. The direction is consistent across configurations. Taking intact runs only,
+   red is the largest coefficient on Curasao, JapaneseGardens and Panama in
+   **all ten** configurations, and on IUI3-RedSea in only one (A4). The other
+   nine order red second or third. Ten independently configured cells agreeing
+   is not a significance test, but it is not nothing either.
+3. **The two halves of the medium model disagree with each other on this scene
+   and only on this scene.** β_bs — the rate at which backscatter saturates —
+   is ordered r > g > b on IUI3-RedSea in the baseline and the reference
+   (16.48, 12.38, 5.40 and 18.41, 15.97, 7.11), the physical ordering, while
+   β_att on the same runs is ordered b > g > r. Nothing in the optimisation
+   constrains the two coefficient sets to order alike; on the other three
+   scenes they nonetheless agree. Under a single water column they describe the
+   same inherent optical properties and should agree. That they do not, on one
+   scene, is a sign that the fit on that scene is not recovering physical
+   parameters — which is a statement about identifiability, not about the water.
+
+**Where this connects.** IUI3-RedSea is already the anomalous scene of this
+campaign: every mechanism costs perceptual quality there at 20–48 SE (§2), no
+simplification run collapses there where the other three scenes collapse at a
+seed-conditioned rate (§5a), the M1×M3 LPIPS interaction takes the opposite
+sign there (§3), and M3's PSNR effect there fails to replicate across campaigns
+(§11). This section adds a fifth: it is the scene whose medium fit is least
+physically coherent. These five observations are consistent with a scene whose
+geometry-medium decomposition is poorly constrained — 25 training views taken
+consecutively along a reef wall, the worst-conditioned camera pairing in the
+corpus — but that is an association across five observations on one scene, not
+a demonstration.
+
+**Not claimed.** That the coefficients are physically accurate on any scene;
+the magnitudes are not in physical units. That the inversion is resolved. That
+poor camera conditioning causes any of it.
+
 ## §3. Two-way interactions — PRE, on LPIPS and count
 
 Additive on LPIPS; log-multiplicative on count; PSNR tabulated but `UNDETERMINED` by construction
@@ -612,7 +698,10 @@ initialisation itself, may be the operative one.
 **IUI3-RedSea.** The scene where every mechanism costs LPIPS (M1 +0.059, M2 +0.082, M3 +0.028,
 each ≥ 20 SE); where A1's LPIPS front position is lost; where no M2 run collapses in six tries;
 where H3 does not resolve; where the M1×M3 LPIPS interaction has the opposite sign to the other
-three scenes; where PSNR does not replicate across campaigns. It has the most training views
+three scenes; where PSNR does not replicate across campaigns; and where the fitted attenuation
+spectrum is inverted in direction while the backscatter spectrum is not (§2b) — the only scene
+on which the two halves of the medium model disagree. The inversion is unresolved at n=3 and is
+recorded as a direction, not a result. It has the most training views
 (25) and, per CD-26, consecutive views along a reef wall — the worst-conditioned camera pairing
 in the set. THESIS.md asks that inconsistent scenes be treated as evidence requiring
 explanation; this document has none to offer beyond that conditioning, and records IUI3 as the
