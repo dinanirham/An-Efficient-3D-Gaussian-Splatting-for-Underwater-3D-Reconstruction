@@ -536,7 +536,7 @@ def figure_4_13() -> None:
     fig.suptitle("Main effects against the baseline, with two-standard-error intervals", y=1.02)
     fig.tight_layout()
     fig.subplots_adjust(left=0.18)
-    save(fig, "figure-4-13-main-effects-forest")
+    save(fig, "figure-4-15-main-effects-forest")
 
 
 # ── 4.14  interaction plots ──────────────────────────────────────────────
@@ -573,7 +573,7 @@ def figure_4_14() -> None:
         loc="lower center", ncol=6, bbox_to_anchor=(0.5, -0.10), fontsize=8)
     fig.suptitle("Interaction plots — parallel lines would mean the mechanisms add", y=1.03)
     fig.tight_layout()
-    save(fig, "figure-4-14-interaction-plots")
+    save(fig, "figure-4-16-interaction-plots")
 
 
 # ── 4.15  population through training ────────────────────────────────────
@@ -619,7 +619,7 @@ def figure_4_15() -> None:
                bbox_to_anchor=(0.5, -0.09), fontsize=8)
     fig.suptitle("Primitive population through training; anchors at the schedule's inflection points", y=1.04)
     fig.tight_layout()
-    save(fig, "figure-4-15-population-trajectory")
+    save(fig, "figure-4-17-population-trajectory")
 
 
 # ── 4.16  frame rate against population ──────────────────────────────────
@@ -662,7 +662,7 @@ def figure_4_16() -> None:
             transform=ax.transAxes, ha="right", va="top",
             fontsize=7.5, color=NEUTRAL)
     ax.set_xlim(left=9e4)
-    save(fig, "figure-4-16-fps-vs-count")
+    save(fig, "figure-4-18-fps-vs-count")
 
 
 # ── 4.17  restoration gap against in-medium loss ─────────────────────────
@@ -695,7 +695,7 @@ def figure_4_17() -> None:
             ha="right", fontsize=8.5, color=ACCENT)
     ax.legend(handles=[Line2D([], [], marker="o", ls="", color=c, label=SCENES[k])
                        for k, c in SCENE_COLOR.items()], fontsize=7.5, loc="lower right")
-    save(fig, "figure-4-17-restoration-vs-drift")
+    save(fig, "figure-4-19-restoration-vs-drift")
 
 
 # ── 4.18  collapse onset ─────────────────────────────────────────────────
@@ -732,7 +732,7 @@ def figure_4_18() -> None:
     ax.text(9400, 0.26, "medium model active from iteration 10 000",
             fontsize=7.5, color=NEUTRAL, ha="left", va="center")
     ax.grid(axis="y", visible=False)
-    save(fig, "figure-4-18-collapse-onset")
+    save(fig, "figure-4-20-collapse-onset")
 
 
 

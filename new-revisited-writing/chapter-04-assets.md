@@ -86,8 +86,12 @@ checkpoints.
 | 4.19 | Restoration gap against in-medium loss | 4.8.2 | The two are uncorrelated (ρ = −0.14), which is what refutes the drift reading; a table states it, a scatter shows it | PLOT |
 | 4.20 | Onset of medium collapse | 4.7.1 | Boundary alignment was asserted in prose. Six onsets at 15 001, one at 20 001, two at 22 500 | PLOT |
 
-File names carry the generator's own numbering (`figure-4-13` … `figure-4-18`);
-the chapter numbering above is the placement order.
+File names carry the chapter number, so `figure-4-15-main-effects-forest` is
+Figure 4.15 and nothing else. They did not at first: the generator numbered
+these six from 4.13, which collided with the two rendered figures that hold
+4.13 and 4.14 — two different images under one number is how a draft ends up
+citing the wrong one, so the generator was renumbered rather than the collision
+documented.
 
 ### The reference implementation in the figures
 

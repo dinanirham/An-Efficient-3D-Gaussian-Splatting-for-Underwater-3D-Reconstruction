@@ -38,7 +38,8 @@ from typing import Optional
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure  # noqa: E402
 from PIL import Image  # noqa: E402
 
 ROOT: Path = Path(__file__).resolve().parent.parent
@@ -93,6 +94,17 @@ def crop(im: Image.Image, region: Optional[str]) -> Image.Image:
     return im.crop((x, y, x + w, y + h))
 
 
+def _caption_band(fig: Figure, note: str) -> float:
+    """Figure fraction to reserve below the axes for a wrapped caption.
+
+    Placing it just below zero and trusting a tight bounding box does not work:
+    tight_layout has already extended the axes to the figure edge, so the text
+    lands on the last row of images.
+    """
+    lines = max(1, round(len(note) / 110))
+    return min(0.22, (0.28 + 0.16 * lines) / fig.get_figheight())
+
+
 def grid(name: str, columns: list[tuple[str, str, str]], region: Optional[str],
          title: str, note: str) -> None:
     """One row per scene, one column per (cell, kind, label)."""
@@ -123,9 +135,11 @@ def grid(name: str, columns: list[tuple[str, str, str]], region: Optional[str],
             if c == 0:
                 ax.set_ylabel(SCENES[scene], fontsize=8.5)
 
+    band = _caption_band(fig, note)
     fig.suptitle(title, y=1.005, fontsize=10.5)
-    fig.text(0.5, -0.012, note, ha="center", fontsize=7.5, color=NEUTRAL, wrap=True)
-    fig.tight_layout(h_pad=0.4, w_pad=0.25)
+    fig.tight_layout(rect=(0, band, 1, 1), h_pad=0.4, w_pad=0.25)
+    fig.text(0.5, band * 0.42, note, ha="center", va="center",
+             fontsize=7.5, color=NEUTRAL, wrap=True)
 
     _save(fig, name, missing)
 
@@ -267,15 +281,16 @@ def comparison(cell: str, label: str, region: str) -> None:
             if c == 0:
                 ax.set_ylabel(SCENES[scene], fontsize=8.5)
 
+    band = _caption_band(fig, "x" * 260)
     fig.suptitle(f"{label.capitalize()} against the reference and the baseline",
                  y=1.004, fontsize=10.5)
-    fig.text(0.5, -0.016,
+    fig.tight_layout(rect=(0, band, 1, 1), h_pad=0.4, w_pad=0.25)
+    fig.text(0.5, band * 0.42,
              f"{region.capitalize()}-field crop of one held-out view per scene, seed 0. "
              "Each panel carries the PSNR and LPIPS of that view in that configuration, "
              "not the scene mean. An accent border marks a run that lost an attenuation "
              "channel.",
-             ha="center", fontsize=7.5, color=NEUTRAL, wrap=True)
-    fig.tight_layout(h_pad=0.4, w_pad=0.25)
+             ha="center", va="center", fontsize=7.5, color=NEUTRAL, wrap=True)
     _save(fig, f"figure-q1-{cell.lower()}-{label.split()[0]}", missing)
 
 
@@ -310,11 +325,12 @@ def overview(scene: str = "Curasao") -> None:
                     color="white", bbox={"facecolor": "#10201F", "alpha": 0.55,
                                          "edgecolor": "none", "pad": 1.4})
     fig.suptitle(f"All ten configurations — {SCENES[scene]}, near-field", y=1.01)
-    fig.text(0.5, -0.03,
+    band = _caption_band(fig, "x" * 140)
+    fig.tight_layout(rect=(0, band, 1, 1), h_pad=0.5, w_pad=0.25)
+    fig.text(0.5, band * 0.42,
              "One held-out view, one crop, seed 0. PSNR and LPIPS are for this view. "
              "An accent border marks a lost attenuation channel.",
-             ha="center", fontsize=7.5, color=NEUTRAL)
-    fig.tight_layout(h_pad=0.5, w_pad=0.25)
+             ha="center", va="center", fontsize=7.5, color=NEUTRAL)
     _save(fig, "figure-q2-all-configurations")
 
 
@@ -340,12 +356,13 @@ def error_maps(scene: str = "IUI3-RedSea") -> None:
         ax.imshow(crop(diff, "near"), vmin=0, vmax=64)
         ax.set_title(cell, fontsize=8.5, pad=3)
     fig.suptitle(f"Absolute error against ground truth — {SCENES[scene]}", y=1.02)
-    fig.text(0.5, -0.08,
+    band = _caption_band(fig, "x" * 210)
+    fig.tight_layout(rect=(0, band, 1, 1), w_pad=0.25)
+    fig.text(0.5, band * 0.42,
              "Near-field crop, identically scaled across panels and clipped at 64 of "
              "255 so differences remain visible. Error concentrates on texture, which "
              "is what the perceptual metric reacts to and the pixel metric does not.",
-             ha="center", fontsize=7.5, color=NEUTRAL, wrap=True)
-    fig.tight_layout(w_pad=0.25)
+             ha="center", va="center", fontsize=7.5, color=NEUTRAL, wrap=True)
     _save(fig, "figure-q3-error-maps")
 
 
@@ -449,14 +466,15 @@ def collapsed_pair() -> None:
         ax.imshow(im)
         ax.set_title(label, fontsize=8.5, pad=4)
     fig.suptitle("A lost attenuation channel — " + SCENES[scene], y=1.04, fontsize=10.5)
-    fig.text(0.5, -0.06,
+    band = _caption_band(fig, "x" * 330)
+    fig.tight_layout(rect=(0, band, 1, 1), w_pad=0.25)
+    fig.text(0.5, band * 0.42,
              "The simplification run lost its blue channel; the baseline did not. "
              "Their composed images score within 0.8 of a baseline standard deviation "
              "of each other. No cell has both a collapsed and an intact repeat at the "
              "one seed whose point cloud is retained, so these differ in configuration "
              "as well as in outcome.",
-             ha="center", fontsize=7.5, color=NEUTRAL, wrap=True)
-    fig.tight_layout(w_pad=0.25)
+             ha="center", va="center", fontsize=7.5, color=NEUTRAL, wrap=True)
     _save(fig, "figure-4-13-collapsed-medium")
 
 
