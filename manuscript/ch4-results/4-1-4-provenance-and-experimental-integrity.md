@@ -53,8 +53,9 @@ chapter computed from metrics or per-iteration diagnostics therefore rests on
 all three repeats, while every result requiring the trained representation —
 the representation characteristics of Section 4.2.6, the rendered comparisons of
 Sections 4.2.3 and 4.2.5, and the attribute-state consistency check of Section
-4.8.2 — rests on one repeat per configuration and scene. Where a claim depends on a single repeat this is stated
-at the claim, because a quantity measured once carries no dispersion and cannot
+4.8.2 — rests on one repeat per configuration and scene. Where a claim depends
+on a single repeat this is stated at the claim, because a quantity measured
+once carries no dispersion and cannot
 be resolved against the thresholds of Section 4.1.3.
 
 Taken together, these qualifications constrain three specific claims rather than
@@ -84,10 +85,14 @@ prominently undermine confidence in the campaign? It would if they were
 concealed and found later; stated at the front with their scope bounded, they
 do the opposite.
 
-**Journal Reviewer** — The cross-reference to Section 4.2.6 called it "per-view metrics"; under Revision 3 that subsection is Representation Characteristics and the Invisible Population. → *applied*: named correctly, and the rendered comparisons given their real section numbers instead of "throughout". Second: "107 GPU-hours" and the completeness figures were
-asserted here and also in Section 4.1.1, with no cross-reference.
+**Journal Reviewer** — The cross-reference to Section 4.2.6 called it "per-view
+metrics"; under Revision 3 that subsection is Representation Characteristics
+and the Invisible Population. → *applied*: named correctly, and the rendered
+comparisons given their real section numbers instead of "throughout". Second:
+"107 GPU-hours" and the completeness figures were asserted here and also in
+Section 4.1.1, with no cross-reference.
 → *applied*: retained here only as the integrity claim, with the scope table in
-4.1.1 carrying the accounting. Second: the subsection promised that
+4.1.1 carrying the accounting. Third: the subsection promised that
 qualifications appear "rather than in the limitations section" without saying
 whether Section 4.12 repeats them. → *applied*: phrasing now says they are
 reported here because they affect specific later claims, which is compatible
