@@ -8,6 +8,8 @@ campaign-*/diagnostics/
 # renders it carries are large, and the figures built from it are
 # committed under figures/chapter4/ instead.
 campaign-*/ch4_assets/
+campaign-*/ch4_fix/
+campaign-*/ch4_ss/
 *.tar.gz
 !campaign-*/README.md
 !campaign-*/PLAN.md

@@ -158,6 +158,31 @@ before drafting §4.2.4.
 
 ---
 
+## 3b. Collected renders — what exists
+
+144 images: six kinds × six configurations × four scenes, one fixed held-out
+view per scene.
+
+| Kind | Configurations | Feeds |
+|---|---|---|
+| `gt` ground truth | SS, A0, A1, A2, A3, A4 | 4.2, 4.6, 4.7, 4.8 |
+| `composed` in-medium render | same | 4.2, 4.6, 4.7, 4.8 |
+| `restored` medium-free Ĵ | same | 4.4, 4.5.7, 4.8 |
+| `depth` normalised depth | same | C2, and 4.7 |
+| `attenuation` map | same | 4.4, 4.13 |
+| `backscatter` map | same | 4.4 |
+
+Enough for figures 4.2, 4.4, 4.6, 4.7 and 4.8. Still outstanding: 4.5 (the
+invisible population needs a render with sub-threshold primitives removed),
+4.13 (a collapsed and an intact repeat of the same cell and scene) and 4.14
+(both attribute states of one quantised run) — each needs a rendering pass the
+collector does not yet make.
+
+**Rendering is deterministic.** Independently collected runs of the same
+configuration produced byte-identical images, verified by SHA-256 across three
+separate collections. Figures can be regenerated exactly rather than
+approximately.
+
 ## 4. Rendering plan
 
 Seven figures need renders from stored checkpoints. All are seed 0, which the
