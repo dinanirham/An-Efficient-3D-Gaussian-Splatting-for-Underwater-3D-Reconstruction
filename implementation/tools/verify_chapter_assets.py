@@ -139,6 +139,23 @@ def t10_selfcheck_catches_the_wrong_model_state():
                      if not bad else f"wrong: {bad}")
 
 
+def t11_store_schema_is_read_in_one_place_only():
+    """DECISIVE. chapter_assets must not parse the compressed store itself.
+
+    It did once: a hand-rolled reader guessed `index_bits` where the writer
+    writes `bits_per_index`, and died on the first quantised run. A guess that
+    had been plausible rather than wrong would have produced numbers instead of
+    an exception. The store has one reader, in j_consistency, and this test
+    fails if a second one reappears here.
+    """
+    src = (Path(__file__).resolve().parent / "chapter_assets.py").read_text(encoding="utf-8")
+    leaked = [k for k in ("bits_per_index", "packed_bytes", "index_bits",
+                          "indices.bin", "codebooks.npz", "num_primitives")
+              if k in src]
+    return not leaked, ("no store-schema knowledge in chapter_assets"
+                        if not leaked else f"schema leaked back in: {leaked}")
+
+
 def main() -> int:
     print("=" * 68)
     print("Chapter IV asset collector")
@@ -156,6 +173,8 @@ def main() -> int:
     check("T9 manifest records written and absent", t9_manifest_records_what_was_written)
     check("T10 self-check catches the wrong model state  <-- decisive",
           t10_selfcheck_catches_the_wrong_model_state)
+    check("T11 the store has one reader  <-- decisive",
+          t11_store_schema_is_read_in_one_place_only)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

@@ -304,40 +304,37 @@ def _selfcheck(d: Path, mine: float) -> tuple[Optional[float], Optional[float], 
     return expected, delta, verdict
 
 
-def _quant_overrides(d: Path):
-    """The codebook state for a run, or None if it was not quantised.
+def _quant_index(root: Path) -> dict[tuple[str, str, int], Any]:
+    """Every quantised run's codebook state, keyed by identity.
 
-    Mirrors what the training loop installs, and what `j_consistency` compares
-    against: the override lands on the RAW parameters, so the model's own
-    activation applies afterwards.
+    Delegates to `j_consistency.discover_quantized_runs` rather than reading
+    the store again here. The first version of this function parsed meta.json
+    itself, guessed at its field names, and died on the first run -- and had it
+    guessed plausibly instead of wrongly, it would have produced numbers rather
+    than an exception. One reader for one format.
     """
-    import torch
-    from source.storage import unpack_indices
-    from tools.j_consistency import GROUP_TO_ATTR, STORE_GLOB, reconstruct_quantized
+    from tools.j_consistency import discover_quantized_runs
 
-    stores = sorted(d.glob(f"{STORE_GLOB}/meta.json"))
-    if not stores:
-        return None
-    store = stores[-1].parent
-    meta = json.loads(stores[-1].read_text(encoding="utf-8"))
-    cb = np.load(store / "codebooks.npz")
-    packed = (store / "indices.bin").read_bytes()
+    index: dict[tuple[str, str, int], Any] = {}
+    for run in discover_quantized_runs(root):
+        if run.complete and run.groups:
+            index[(run.cell, run.scene, run.seed)] = run
+    return index
+
+
+def _overrides_from(stored: Any) -> dict[str, Any]:
+    """Codebook arrays as raw-parameter overrides, shaped as the model expects."""
+    import torch
+    from tools.j_consistency import GROUP_TO_ATTR
 
     overrides: dict[str, Any] = {}
-    n = int(meta["num_primitives"])
-    offset = 0
-    for name in sorted(meta["groups"]):
-        g = meta["groups"][name]
-        bits = int(g["index_bits"])
-        size = (n * bits + 7) // 8
-        idx = unpack_indices(packed[offset:offset + size], n, bits)
-        offset += size
-        arr = reconstruct_quantized(cb[name], idx, int(g["vec_dim"]))
+    for name, arr in stored.groups.items():
         t = torch.from_numpy(np.ascontiguousarray(arr)).float().cuda()
         if name == "dc":
             t = t.reshape(t.shape[0], 1, 3)
         overrides[GROUP_TO_ATTR[name]] = t
     return overrides
+
 
 
 def _load_run(d: Path, source: Path, sh_degree: int = 0):
@@ -402,6 +399,9 @@ def collect_per_view_and_renders(root: Path, out: Path, source_root: Path,
     rows: list[dict[str, Any]] = []
     checks: list[dict[str, Any]] = []
     n_images = 0
+    quant = _quant_index(root)
+    if quant:
+        print(f"  codebook state available for {len(quant)} quantised run(s)")
 
     for cell, scene, seed, d in _runs(root, only_cells):
         if seed != 0:
@@ -418,7 +418,8 @@ def collect_per_view_and_renders(root: Path, out: Path, source_root: Path,
         # A quantised run must be rendered in its codebook state. The stored
         # point cloud holds the continuous parameters, which the campaign never
         # evaluated and which score several dB lower.
-        overrides = _quant_overrides(d)
+        stored = quant.get((cell, scene, seed))
+        overrides = _overrides_from(stored) if stored is not None else None
         state = "continuous"
         if overrides:
             for attr, tensor in overrides.items():
