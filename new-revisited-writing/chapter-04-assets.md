@@ -193,6 +193,12 @@ collector now renders all ten; a re-run fills them.
 * **Storage composition by attribute** — would show where the 2.72× comes
   from. No `model_size.json` carries a per-attribute breakdown; it needs a
   collection change and a re-run of the size accounting.
+* **The two input point clouds** for 4.6 — the sparse structure-from-motion
+  cloud and the dense correspondence cloud, side by side. The built figure
+  carries only the renders; no point-cloud visualisation was collected. It is
+  the one `[DATA-NEEDED]` marker outstanding in the drafted text (§4.3.4), and
+  unlike the two below it is *recoverable*: the initial clouds are retained, so
+  a rendering pass on Colab would produce it.
 * **Cross-campaign replication scatter** for 4.10 — the archived campaign's
   `results_by_scene.csv` is no longer in the repository. Restoring that bundle
   unblocks it.
