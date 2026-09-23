@@ -16,6 +16,23 @@ are retained, so this is a rendering pass, not a retrain.
 
 ---
 
+## 0. The anchor
+
+All evaluation is reported against **SS**, the published reference, not against
+A0. See `research-questions-revised.md` for the decision and its consequences.
+A0 remains the internal control — it is the (0,0,0) corner the factorial
+contrasts are built from, and those contrasts are unchanged by the
+re-anchoring, since the reference cancels: (A1 − SS) − (A0 − SS) = A1 − A0.
+
+One exception, stated wherever it is used: SS records no `total_bytes` or
+`bytes_per_primitive`, so **stored size cannot be expressed against SS** and is
+reported against A0.
+
+Figures showing a mechanism against a comparator now show SS. The `q1` family
+shows both, SS and A0, which is why it subsumes several of the older
+three-column renders.
+
+
 ## 1. Tables
 
 | No. | Title | § | Columns / content | Source | Status |
@@ -56,16 +73,16 @@ everything else is load-bearing.
 | 4.1 | Resolvable effect size against observed effect size | 4.1.3 | Per scene, the 2 SE threshold for main, two-way and three-way contrasts, with the observed main effects overlaid. Shows graphically why PSNR interactions are undetermined | `_noise_floor.json`, §0 | PLOT |
 | 4.2 | Baseline and reference against ground truth | 4.2.1, 4.2.3 | Four scenes × (ground truth, SS render, A0 render), with one far-field and one near-field crop per scene. The reference panel is what makes the equivalence claim visible rather than tabular | checkpoints | RENDER |
 | 4.3 | **Learned attenuation spectra, per scene** | 4.2.4 | β_att by channel for each scene, A0 and SS side by side; physical ordering marked; the inverted scene highlighted | `results_runs.csv` | **DERIVE + PLOT** |
-| 4.4 | Medium decomposition of a held-out view | 4.2.5 | One view per scene: composed image Î, restored image Ĵ, attenuation map, backscatter map | checkpoints | RENDER |
+| 4.4 | Medium decomposition of a held-out view | 4.2.5 | One view per scene from **SS**: composed image Î, restored image Ĵ, attenuation map, backscatter map. Illustrative, so it shows the published reference's own account rather than ours | checkpoints | RENDER |
 | 4.5 | The invisible population | 4.2.6 | Point cloud coloured by visibility, one scene; and the same view rendered with sub-threshold primitives removed, showing no visible difference | checkpoints | RENDER |
-| 4.6 | Initialisation: input cloud and reconstruction | 4.3.4 | Sparse SfM cloud versus dense correspondence cloud; A0 and A1 renders at the same view and crop | checkpoints, `dataset/` | RENDER |
-| 4.7 | Simplification: characteristic artefacts | 4.4.4 | A0 and A2 at the same view and crop, on the scene with the largest LPIPS cost; texture loss visible | checkpoints | RENDER |
-| 4.8 | Quantisation: far-field behaviour | 4.5.4, 4.5.7 | A0 and A3 far-field crop; and the same crop of the restored image, where the difference is larger | checkpoints | RENDER |
+| 4.6 | Initialisation: input cloud and reconstruction | 4.3.4 | Sparse SfM cloud versus dense correspondence cloud; **SS** and A1 renders at the same view and crop. Subsumed by `figure-q1-a1`, which adds A0 and per-panel metrics — retire one before submission | checkpoints, `dataset/` | RENDER |
+| 4.7 | Simplification: characteristic artefacts | 4.4.4 | **SS** and A2 at the same view and crop, on the scene with the largest LPIPS cost; texture loss visible. Subsumed by `figure-q1-a2` — retire one before submission | checkpoints | RENDER |
+| 4.8 | Quantisation: far-field behaviour | 4.5.4, 4.5.7 | **SS** and A3 far-field crop; and the same crop of the restored image, where the difference is larger | checkpoints | RENDER |
 | 4.9 | Operating points, per scene | 4.6.6 | 2 × 4 panel: count × LPIPS and bytes × LPIPS, one panel per scene, nine cells marked, non-dominated set connected | `results_by_scene.csv`, §7 | PLOT |
 | 4.10 | Attenuation trajectory through the simplification events | 4.7.4 | β_att per channel against iteration for one collapsed and one intact run of the same cell and scene; both events and both bursts marked. Supersedes the exploratory `h4_*` plots, which show one channel and one run | diagnostics CSVs | PLOT |
 | 4.11 | Dispersion ratio by outcome | 4.7.3 | The two strata as a strip or dot plot, showing the overlap that refutes the registered explanation; the four initialisation runs with ratios of 3.5–7.3 and no collapse marked | `medium_collapse.json`, §5b | PLOT |
 | 4.12 | Fraction removed against attenuation loss | 4.7.4 | One point per run at each event, all 48 simplification runs, collapsed runs marked; the two groups separate on the x-axis | diagnostics CSVs, §5 | PLOT |
-| 4.13 | A collapsed medium, visually | 4.7.6 | Same cell, scene and view: attenuation map and restored image for a collapsed and an intact run. The composed images look alike; the restorations do not | checkpoints | RENDER |
+| 4.13 | A collapsed medium, visually | 4.7.6 | One scene and view, three configurations — **SS**, A0 and the collapsed A2 — as attenuation map and restored Ĵ. The collapsed attenuation map is unmistakable and the composed images are not. Carries RQ4 | checkpoints | RENDER |
 | 4.14 | Restored image under both attribute states | 4.8.2 | Ĵ from the continuous and the codebook state, plus their difference map, for one quantised run | checkpoints | RENDER |
 
 **20 figures.** Thirteen are plots or derivations over committed data and are

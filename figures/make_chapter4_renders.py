@@ -383,19 +383,19 @@ def main() -> int:
          "equivalent within the pre-registered margin; this is what that looks like.")
 
     grid("figure-4-04-medium-decomposition",
-         [("A0", "composed", "composed  Î"),
-          ("A0", "restored", "restored  Ĵ"),
-          ("A0", "attenuation", "attenuation"),
-          ("A0", "backscatter", "backscatter")],
+         [("SS", "composed", "composed  Î"),
+          ("SS", "restored", "restored  Ĵ"),
+          ("SS", "attenuation", "attenuation"),
+          ("SS", "backscatter", "backscatter")],
          None,
-         "What the baseline claims the water is doing",
+         "What the reference claims the water is doing",
          "The decomposition the method exists to produce. Only the composed image "
          "has ground truth; the other three are the model's own account and are not "
          "validated against a measurement.")
 
     grid("figure-4-06-initialisation",
-         [("A0", "gt", "ground truth"),
-          ("A0", "composed", "baseline (A0)"),
+         [("SS", "gt", "ground truth"),
+          ("SS", "composed", "reference (SS)"),
           ("A1", "composed", "initialisation (A1)")],
          "near",
          "Deterministic initialisation, near-field detail",
@@ -404,8 +404,8 @@ def main() -> int:
          "on IUI3 Red Sea.")
 
     grid("figure-4-07-simplification",
-         [("A0", "gt", "ground truth"),
-          ("A0", "composed", "baseline (A0)"),
+         [("SS", "gt", "ground truth"),
+          ("SS", "composed", "reference (SS)"),
           ("A2", "composed", "simplification (A2)")],
          "near",
          "Spatial reorganisation, near-field detail",
@@ -414,13 +414,14 @@ def main() -> int:
          "that disagreement lives.")
 
     grid("figure-4-08-quantisation",
-         [("A0", "composed", "baseline, composed"),
+         [("SS", "composed", "reference, composed"),
           ("A3", "composed", "quantised, composed"),
-          ("A0", "restored", "baseline, restored"),
+          ("SS", "restored", "reference, restored"),
           ("A3", "restored", "quantised, restored")],
          "far",
          "Attribute quantisation in the far field: composed against restored",
-         "Two separately trained models. Their composed images are nearly "
+         "Two separately trained models, and different implementations. Their "
+         "composed images are nearly "
          "indistinguishable and their restorations are not — but this comparison "
          "confounds quantisation with trajectory divergence between runs, so it "
          "illustrates rather than measures. The within-model comparison, one model "
@@ -449,31 +450,42 @@ def collapsed_pair() -> None:
     differ in configuration as well as in outcome, and the caption says so.
     """
     scene = "JapaneseGradens-RedSea"
-    panels = [("A0", "attenuation", "baseline — attenuation"),
-              ("A2", "attenuation", "collapsed — attenuation"),
-              ("A0", "restored", "baseline — restored  Ĵ"),
-              ("A2", "restored", "collapsed — restored  Ĵ")]
-    fig, axes = plt.subplots(1, 4, figsize=(9.4, 2.1))
-    for ax, (cell, kind, label) in zip(axes, panels):
-        ax.set_xticks([]); ax.set_yticks([])
-        for spine in ax.spines.values():
-            spine.set_edgecolor("#C9D4D3"); spine.set_linewidth(0.6)
-        im = load(scene, cell, kind)
-        if im is None:
-            ax.text(0.5, 0.5, "not collected", transform=ax.transAxes,
-                    ha="center", va="center", fontsize=7, color=NEUTRAL)
-            continue
-        ax.imshow(im)
-        ax.set_title(label, fontsize=8.5, pad=4)
-    fig.suptitle("A lost attenuation channel — " + SCENES[scene], y=1.04, fontsize=10.5)
-    band = _caption_band(fig, "x" * 330)
-    fig.tight_layout(rect=(0, band, 1, 1), w_pad=0.25)
+    cells = [("SS", "reference (SS)"), ("A0", "no mechanism (A0)"),
+             ("A2", "collapsed (A2)")]
+    kinds = [("attenuation", "attenuation"), ("restored", "restored  Ĵ")]
+    # Column titles and row labels, as in `grid` — a title over every panel
+    # does not fit once the images take their own aspect ratio.
+    fig, axes = plt.subplots(len(kinds), len(cells), figsize=(7.6, 4.6))
+    for r, (kind, klabel) in enumerate(kinds):
+        for c, (cell, label) in enumerate(cells):
+            ax = axes[r][c]
+            ax.set_xticks([]); ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_edgecolor("#C9D4D3"); spine.set_linewidth(0.6)
+            im = load(scene, cell, kind)
+            if im is None:
+                ax.text(0.5, 0.5, "not collected", transform=ax.transAxes,
+                        ha="center", va="center", fontsize=7, color=NEUTRAL)
+                continue
+            ax.imshow(im)
+            if r == 0:
+                ax.set_title(label, fontsize=8.5, pad=4)
+            if c == 0:
+                ax.set_ylabel(klabel, fontsize=8.5)
+    fig.suptitle("A lost attenuation channel — " + SCENES[scene], y=1.02, fontsize=10.5)
+    band = _caption_band(fig, "x" * 430)
+    # Two rows of titled panels: without vertical padding the lower row's
+    # titles land on the upper row's images.
+    fig.tight_layout(rect=(0, band, 1, 1), w_pad=0.25, h_pad=1.6)
     fig.text(0.5, band * 0.42,
-             "The simplification run lost its blue channel; the baseline did not. "
-             "Their composed images score within 0.8 of a baseline standard deviation "
-             "of each other. No cell has both a collapsed and an intact repeat at the "
-             "one seed whose point cloud is retained, so these differ in configuration "
-             "as well as in outcome.",
+             "The simplification run lost its blue channel; neither the reference "
+             "nor the unmodified configuration did. Across the twelve within-cell "
+             "comparisons the campaign supports, a collapsed run differs from an "
+             "intact one by a median 0.8 of a baseline standard deviation on the "
+             "composed image, with the sign inconsistent — the failure is here, in "
+             "the medium, and not in the picture the metrics score. No cell has both "
+             "a collapsed and an intact repeat at the one seed whose point cloud is "
+             "retained, so these differ in configuration as well as in outcome.",
              ha="center", va="center", fontsize=7.5, color=NEUTRAL, wrap=True)
     _save(fig, "figure-4-13-collapsed-medium")
 
