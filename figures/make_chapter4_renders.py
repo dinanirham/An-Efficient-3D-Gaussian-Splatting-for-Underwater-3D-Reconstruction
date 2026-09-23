@@ -294,6 +294,63 @@ def comparison(cell: str, label: str, region: str) -> None:
     _save(fig, f"figure-q1-{cell.lower()}-{label.split()[0]}", missing)
 
 
+def baseline_crops() -> None:
+    """Figure 4.2b — the reference and the baseline at both fields.
+
+    `grid` applies one crop region to every column; this figure needs two, so
+    it builds its own axes rather than bending that helper out of shape.
+    """
+    metrics = per_view()
+    columns: list[tuple[str, str, str]] = [
+        ("__gt__", "far", "ground truth"), ("SS", "far", "reference (SS)"),
+        ("A0", "far", "baseline (A0)"),
+        ("__gt__", "near", "ground truth"), ("SS", "near", "reference (SS)"),
+        ("A0", "near", "baseline (A0)"),
+    ]
+    scenes = list(SCENES)
+    fig, axes = plt.subplots(len(scenes), len(columns),
+                             figsize=(2.0 * len(columns), 1.75 * len(scenes)))
+    missing: list[str] = []
+    for r, scene in enumerate(scenes):
+        for c, (who, region, head) in enumerate(columns):
+            ax = axes[r][c]
+            ax.set_xticks([]); ax.set_yticks([])
+            for sp in ax.spines.values():
+                sp.set_edgecolor("#C9D4D3"); sp.set_linewidth(0.6)
+            src = "SS" if who == "__gt__" else who
+            im = load(scene, src, "gt" if who == "__gt__" else "composed")
+            if im is None:
+                missing.append(f"{scene}/{who}/{region}")
+                ax.text(0.5, 0.5, "not collected", transform=ax.transAxes,
+                        ha="center", va="center", fontsize=7, color=NEUTRAL)
+                continue
+            ax.imshow(crop(im, region))
+            if r == 0:
+                ax.set_title(head, fontsize=8, pad=4)
+            if c == 0:
+                ax.set_ylabel(SCENES[scene], fontsize=8.5)
+            m = metrics.get((src, scene)) if who != "__gt__" else None
+            if m and region == "near":
+                ax.text(0.97, 0.05, f"{m['psnr']:.1f} dB", transform=ax.transAxes,
+                        ha="right", va="bottom", fontsize=6.4, color="white",
+                        bbox={"facecolor": "#10201F", "alpha": 0.55,
+                              "edgecolor": "none", "pad": 1.4})
+    # One divider between the two fields, so the reader sees three-and-three.
+    for r in range(len(scenes)):
+        axes[r][3].spines["left"].set_edgecolor("#10201F")
+        axes[r][3].spines["left"].set_linewidth(1.6)
+    fig.suptitle("The reference and the baseline at far field (left) and near field (right)",
+                 y=1.005, fontsize=10.5)
+    note = ("One held-out view per scene, seed 0, at two crops. The far field is where "
+            "the medium term dominates and the near field where geometry does. Peak "
+            "signal-to-noise ratio is given for the view shown, not the scene mean.")
+    band = _caption_band(fig, note)
+    fig.tight_layout(rect=(0, band, 1, 1), h_pad=0.4, w_pad=0.2)
+    fig.text(0.5, band * 0.42, note, ha="center", va="center",
+             fontsize=7.5, color=NEUTRAL, wrap=True)
+    _save(fig, "figure-4-02b-baseline-crops", missing)
+
+
 def overview(scene: str = "Curasao") -> None:
     """F2 — the whole design at one glance, two rows of five."""
     metrics = per_view()
@@ -429,6 +486,7 @@ def main() -> int:
     # 4.13 needs no new collection: the collapsed run and an intact one on the
     # same scene are both already rendered.
     collapsed_pair()
+    baseline_crops()
     extras()
 
     # The qualitative family: every mechanism against ground truth, the
