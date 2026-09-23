@@ -129,7 +129,7 @@ The centre of the chapter. Nothing here may be softened.
 
 | § | Title | Content | Tag |
 |---|---|---|---|
-| 4.7.1 | Incidence and Boundary Alignment | Collapse counts per cell per scene; every affected run places its largest attenuation drop at the first simplification event; the same channel is lost in every case | [PRE] |
+| 4.7.1 | Incidence and Boundary Alignment | Collapse counts per cell per scene; every affected run places its largest attenuation drop at the first simplification event; blue is lost in every case and green simultaneously in two of the nine, so the invariant is the spectral direction rather than a single channel | [PRE] |
 | 4.7.2 | Final Size Is Not the Cause | The initialisation-plus-simplification cells finish 13–17 % *below* the simplification-only cells and never collapse. Deconfounds magnitude of the final representation from the discontinuity that produced it | [PRE] |
 | 4.7.3 | The Registered Explanation and Its Refutation | The dispersion account as written before the campaign; the instrument; the rank test; the counterexample. **The account is withdrawn, not qualified** | [PRE] [NEG] |
 | 4.7.4 | What the Diagnostics Show Instead | The cut moves no medium parameter; the medium moves in the 200 medium-only steps that follow; association with removal fraction; no pre-cut predictor of which repeat crosses zero; the three protections of dense initialisation are mutually confounded | [POST] |
