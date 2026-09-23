@@ -137,6 +137,10 @@ requirement Chapter IV already depends on.
 
 # CHAPTER IV — RESULTS AND DISCUSSION  ·  60 pp (from 63)
 
+> **Superseded by `chapter-04-specification.md` (Revision 3)**, which adds the
+> qualitative and medium-parameter subsections this table omits.
+
+
 Detailed rationale in `chapter-04-architecture.md` (Revision 2). §4.1 and §4.2
 are drafted.
 

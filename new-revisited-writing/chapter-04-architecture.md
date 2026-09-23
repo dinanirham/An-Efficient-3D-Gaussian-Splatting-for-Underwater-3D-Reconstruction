@@ -1,5 +1,9 @@
 # Chapter 4 — Results and Analysis: architecture for approval
 
+> **Superseded for structure by `chapter-04-specification.md` (Revision 3).**
+> This document remains the record of the diagnosis and of the two earlier
+> revisions; the specification is the one to write from.
+
 Gate 5 package, per `THESIS.md` §16. This is not the chapter. It is the
 section architecture, the table and figure inventory, and the list of results
 the chapter cannot omit, presented for approval before any prose is written.
