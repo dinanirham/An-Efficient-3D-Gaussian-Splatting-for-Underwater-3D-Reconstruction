@@ -373,7 +373,7 @@ prediction:
    | count entering the first event | 1.4–4.2 M | 196–247 k |
    | fraction removed at the first event | **86–95 %** | **29–36 %** |
    | β̄_att entering the event | 0.66–1.71 (median 1.2) | 1.60–5.35 (median 3.3) |
-   | β̄_att after the burst, as a fraction of before | collapsed 0.00–0.47 (med 0.21); intact 0.26–0.60 (med 0.38) | **0.89–1.04 (med 0.97)** |
+   | β̄_att after the burst, as a fraction of before *(first event)* | collapsed 0.00–0.47 (med 0.21); intact 0.26–0.60 (med 0.38) | **0.89–1.04 (med 0.97)** |
    | collapses | 9 / 24 | 0 / 24 |
 
    Every 86–95 % cut loses 40–100 % of its attenuation within 200 medium steps; nine of 24
@@ -394,14 +394,32 @@ prediction:
    nothing on eight of twelve, and 60–70 % on the four high-ratio runs — from a base of 3.3–6.9,
    so no channel approaches zero.
 
-5. **M1 is confounded with its own protections.** Removal fraction, entering β, and entering
+5. **Fractional loss is not what decides the outcome; the level reached is.**
+   *(Added 2026-09-23, while building Chapter IV's figures. The table above is the
+   FIRST event only, and reading it as the whole story was wrong.)* At the second
+   event four M1 runs lose 52–73 % of their mean attenuation — A4/Curasao s1
+   3.32→0.90, A7/Curasao s1 3.49→0.96, A7/Curasao s2 6.85→2.76, A7/JG s1
+   3.78→1.80 — from cuts of only 18–22 %, and none loses a channel. A large
+   fractional loss is therefore not sufficient. What separates the outcomes is the
+   **absolute level the weakest channel reaches after a burst**: across all 96
+   burst events, runs that eventually lose a channel reach −0.056 to +0.314
+   (median −0.038), and runs that do not reach +0.110 to +6.327 (median +1.694).
+   M1 cells enter the first event at β̄ 1.60–5.35 against 0.66–1.71 without it, so
+   even a 73 % loss leaves them well clear of zero. The large-cut association in
+   point 2 survives, with its mechanism narrowed: a 86–95 % cut matters because it
+   produces a large fractional loss **from an already low level**.
+
+6. **M1 is confounded with its own protections.** Removal fraction, entering β, and entering
    count all differ between M1 and non-M1 cells because M1 sets all three. This design cannot
    say which of them is the cause, and this document does not.
 
 **The honest statement of the mechanism after this campaign:** the medium model survives the
 removal of a third of the population and does not reliably survive the removal of nine
-tenths; the loss is expressed in the medium-only steps immediately after the cut; whether it
-crosses zero is not predicted by anything measured here. *Why* a large cut moves β is open.
+tenths; the loss is expressed in the medium-only steps immediately after the cut; and whether
+a channel is lost is decided by the absolute level reached, not by the fraction lost — which
+is why cells entering at three times the attenuation survive comparable fractional losses.
+Which repeat crosses zero is not predicted by anything measured here. *Why* a large cut moves
+β at all is open.
 
 ### 5c. M1 protects — the rate held; the reason offered for it did not
 
