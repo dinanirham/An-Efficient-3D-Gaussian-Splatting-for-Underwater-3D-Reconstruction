@@ -1115,38 +1115,42 @@ measurement.
 FIGURES = notebook([
     md("""# 03 — Chapter IV assets
 
-Collects everything Chapter IV needs that cannot be produced from the analysis
-bundle: per-view metrics, the render figures, and four data products that need
-the full run directories rather than the 48 diagnostics the bundle carries.
+Everything Chapter IV needs that cannot be produced from the analysis bundle:
+per-view metrics, the render figures for all ten configurations, and four data
+products that need the full run directories rather than the 48 diagnostics the
+bundle carries.
 
 Runs against the finished campaign. It trains nothing and writes nothing into
-`runs/` — it reads checkpoints and writes into a new folder you download.
+`runs/` — it reads checkpoints and writes a folder you download.
 
-Expect roughly 20–35 minutes on an A100, most of it LPIPS over held-out views.
-"""),
+**Order matters.** The cheap file-reading products come first, so a disconnect
+during the long pass still leaves you with something. The self-check in
+section 7 is the gate: do not use the per-view numbers until it reads `ok` on
+every run.
+
+Expect 45–70 minutes on an A100 for a complete run — most of it LPIPS over
+held-out views, and 240 renders."""),
 
     md("""## 1. Mount Drive and set the campaign root
 
 The same header every other notebook uses: it defines `DRIVE_ROOT` and the
-repository constants the clone cell below needs."""),
+repository constants the clone cell needs."""),
     code(DRIVE_HEADER),
     code("""ASSETS = '/content/ch4_assets'
 
 import os
 assert os.path.isdir(f'{DRIVE_ROOT}/runs'), f'{DRIVE_ROOT}/runs not found'
-print('campaign root:', DRIVE_ROOT)
-print('cells present:', sorted(os.listdir(f'{DRIVE_ROOT}/runs')))
-print('assets will be written to:', ASSETS)"""),
+print('campaign root :', DRIVE_ROOT)
+print('cells present :', sorted(os.listdir(f'{DRIVE_ROOT}/runs')))
+print('writing to    :', ASSETS)"""),
 
     md("""## 2. Clone and build
 
-The same clone and build every other notebook uses. This notebook is meant to
-be run on a fresh runtime — it does not assume `00_setup` has been run here,
-because collecting assets from a finished campaign has no reason to wait on
-dataset preparation.
+This notebook is meant to run on a fresh runtime — it does not assume
+`00_setup` has been run here, because collecting assets from a finished
+campaign has no reason to wait on dataset preparation.
 
-The build is needed for section 5, which renders. Sections 4's products only
-read files."""),
+The build is needed from section 5 onward, which renders."""),
     code(CLONE),
     code(BUILD),
     code(BUILD_CHECK),
@@ -1155,67 +1159,102 @@ read files."""),
 import torch
 print('torch', torch.__version__, '| cuda', torch.cuda.is_available())"""),
 
-    md("## 3. Check the collector before spending GPU time\n\nNine tests over the "
-       "pure parts: view selection, crop arithmetic, output shapes. They take a "
-       "second and catch the errors that would otherwise surface after twenty "
-       "minutes of rendering."),
+    md("""## 3. Check the collector before spending GPU time
+
+Twelve tests over the pure parts: view selection, crop arithmetic, the
+self-check thresholds, and the rule that the compressed store has exactly one
+reader. They take a second and catch the errors that would otherwise surface
+forty minutes into a render pass."""),
     code("""!python tools/verify_chapter_assets.py"""),
 
-    md("""## 4. The cheap products first
+    md("""## 4. The file-reading products
 
-C4, C5 and C6 read files rather than rendering, so they finish in under a
-minute. Running them first means a disconnect during the render pass still
-leaves you with something."""),
-    code("""!python -m tools.chapter_assets \\
+C4, C5 and C6 read diagnostics and point clouds rather than rendering, so they
+finish in about a minute:
+
+* **C4** per-frame depth-range distributions — the quantity the registered
+  explanation was about
+* **C5** medium parameters over training for all 120 runs; the analysis bundle
+  carried only the 48 simplification runs
+* **C6** primitive distance from the cloud centre, the evidence for the
+  invisible-population account"""),
+    code(f"""!python -m tools.chapter_assets \\
     --output_root "$DRIVE_ROOT" --out "$ASSETS" --only C4,C5,C6"""),
 
-    md("""## 5. Per-view metrics and the renders
+    md("""## 5. Per-view metrics and the renders — the long pass
 
-This is the long cell. It loads each seed-0 checkpoint, renders every held-out
-view, and records the four metrics per image under the campaign's own
-conventions — not a second implementation of them.
+Loads each seed-0 checkpoint, renders every held-out view, and records the four
+metrics per image under the campaign's own conventions rather than a second
+implementation of them. Renders all ten configurations at one fixed view and
+crop per scene, so the qualitative figures can put ground truth, the reference
+and the baseline beside every mechanism.
 
-**Bounded by the storage policy.** Full point clouds are kept for seed 0 only,
-so per-view metrics cover one repeat per cell and scene. That answers whether a
+**Quantised runs are rendered in their codebook state.** The stored point cloud
+holds the *continuous* parameters, which the campaign never evaluated; an
+earlier version of this collector measured those by mistake and reported
+quantisation as costing six decibels.
+
+**Bounded by the storage policy.** Full point clouds are kept for seed 0, so
+per-view metrics cover one repeat per cell and scene. That answers whether a
 scene mean rests on a single bad view; it cannot show how per-view fidelity
 moves between repeats."""),
-    code("""!python -m tools.chapter_assets \\
+    code(f"""!python -m tools.chapter_assets \\
     --output_root "$DRIVE_ROOT" --out "$ASSETS" --only C1,renders"""),
 
-    md("""## 5b. Correcting part of a collection
+    md("""## 6. The two extra render passes
 
-Only needed if a previous pass produced rows for some cells that were wrong.
-`--cells` restricts the pass; the output carries a `PARTIAL.txt` so it is merged
-into the full bundle rather than replacing it.
+* **The invisible population.** The baseline is rendered twice: as it stands,
+  and with every primitive below the visibility threshold silenced rather than
+  deleted, so the second render is provably the same model minus a subset.
+* **Both attribute states.** One quantised model rendered from its codebook and
+  from its continuous parameters — the comparison the cross-cell figure cannot
+  make, because that one contrasts two separately trained runs."""),
+    code(f"""!python -m tools.chapter_assets \\
+    --output_root "$DRIVE_ROOT" --out "$ASSETS" --only extras"""),
 
-The September 2026 case: the collector rendered quantised cells from their
-stored point cloud, which holds the *continuous* parameters, so A3, A5, A6 and
-A7 measured a model the campaign never evaluated. The cell below redoes exactly
-those, and the self-check printed at the end compares every run with its own
-`eval_metrics.json` — watch for `MISMATCH`."""),
-    code("""!python -m tools.chapter_assets \
-    --output_root "$DRIVE_ROOT" --out /content/ch4_fix \
-    --only C1,renders --cells A3,A5,A6,A7"""),
+    md("""## 7. The gate — every run against its own evaluation
 
-    md("## 6. What landed"),
-    code("""import json, os
+Each run's recomputed mean is compared with the `eval_metrics.json` that run
+wrote during the campaign. Same run, same views, same conventions, so they
+should agree to within the render path's tolerance.
+
+**A `MISMATCH` means the model was rendered in a state the campaign did not
+evaluate.** Stop and report it rather than using the numbers."""),
+    code("""import csv
+rows = list(csv.DictReader(open(ASSETS + '/per_view_selfcheck.csv')))
+bad = [r for r in rows if r['verdict'] != 'ok']
+print(f"{len(rows)} runs checked, {len(bad)} disagreeing")
+print()
+print(f"{'cell':5}{'scene':24}{'state':11}{'mine':>8}{'recorded':>10}{'delta':>8}  verdict")
+for r in sorted(rows, key=lambda x: (x['cell'], x['scene'])):
+    print(f"{r['cell']:5}{r['scene']:24}{r['state']:11}"
+          f"{float(r['per_view_mean']):>8.2f}{float(r['eval_metrics']):>10.2f}"
+          f"{float(r['delta']):>+8.2f}  {r['verdict']}")
+if bad:
+    raise SystemExit('Self-check failed. Do not use per_view_metrics.csv for those runs.')"""),
+
+    md("""## 8. What landed"""),
+    code("""import json, os, collections
 man = json.load(open(ASSETS + '/assets_manifest.json'))
-print('written:')
+print('data products')
 for k, v in man['written'].items():
     print(f'  {k:28} {v}')
-if man['absent']:
-    print('absent:')
-    for k, v in man['absent'].items():
-        print(f'  {k:28} {v}')
-r = ASSETS + '/renders'
-if os.path.isdir(r):
-    pngs = sorted(os.listdir(r))
-    print(f'\\nrenders: {len([p for p in pngs if p.endswith(".png")])} images')
-    for p in pngs[:12]:
-        print('  ', p)"""),
+for k, v in man.get('absent', {}).items():
+    print(f'  {k:28} MISSING — {v}')
 
-    md("## 7. A first look at the per-view distribution\n\nThe question this "
-       "answers: is any scene mean resting on one bad view?"),
+r = ASSETS + '/renders'
+pngs = [p for p in sorted(os.listdir(r)) if p.endswith('.png')]
+by_cell = collections.Counter(p.split('_')[1] for p in pngs)
+by_kind = collections.Counter(p.split('_', 2)[2][:-4] for p in pngs)
+print()
+print('renders:', len(pngs), 'images')
+print('  by configuration:', dict(sorted(by_cell.items())))
+print('  by kind         :', dict(sorted(by_kind.items())))"""),
+
+    md("""## 9. Is any scene mean resting on one bad view?
+
+The held-out set is 13 frames, so a scene mean rests on three or four images.
+This is the question C1 exists to answer."""),
     code("""import csv, statistics as st
 from collections import defaultdict
 
@@ -1226,31 +1265,47 @@ for r in rows:
 
 print(f"{'cell':5}{'scene':24}{'n':>3}{'mean':>8}{'min':>8}{'max':>8}{'spread':>9}")
 for (cell, scene), v in sorted(by.items()):
-    if cell not in ('A0', 'A2'):
+    if cell not in ('SS', 'A0', 'A2'):
         continue
     print(f'{cell:5}{scene:24}{len(v):>3}{st.mean(v):>8.2f}{min(v):>8.2f}'
           f'{max(v):>8.2f}{max(v) - min(v):>9.2f}')
-print('\\nA spread of several dB within one run means the scene mean is a mean')
-print('over very unequal views, and per-view reporting belongs in the chapter.')"""),
+print()
+print('A spread of several dB within one run means the scene mean is a mean over')
+print('very unequal views. It does not affect cell-versus-cell comparisons, which')
+print('are scored on the same fixed views; it affects reading a scene mean as the')
+print('quality on that scene.')"""),
 
-    md("## 8. Bundle and download"),
+    md("""## 10. Bundle and download"""),
     code("""%cd /content
 !tar -czf ch4_assets.tar.gz -C /content ch4_assets
+import os
+print('bundle:', round(os.path.getsize('/content/ch4_assets.tar.gz') / 1e6, 1), 'MB')
 from google.colab import files
 files.download('/content/ch4_assets.tar.gz')"""),
 
-    md("""## 9. Locally
+    md(f"""## 11. Locally
 
-Unpack beside the campaign bundle, then regenerate the figures:
+Unpack beside the campaign bundle and rebuild every figure:
 
 ```
 tar -xzf ch4_assets.tar.gz -C analysis/campaign-2026-09/
-python figures/make_chapter4_figures.py
+python figures/make_chapter4_figures.py     # plots over the data products
+python figures/make_chapter4_renders.py     # the qualitative family
 ```
 
-The render images are figures in themselves; crop rectangles per scene are in
-`tools/chapter_assets.py` under `CROPS` and are applied when the figure is
-assembled, so the full frames stay available."""),
+The first writes the figures that need C1 and C4–C6; the second writes the
+per-mechanism comparisons, the overview and the error maps. Both are
+deterministic: the same bundle produces byte-identical images."""),
+
+    md("""## Appendix — redoing part of a collection
+
+`--cells` restricts the pass, and a restricted run writes `PARTIAL.txt` so its
+output is merged into the full bundle rather than replacing it. Use it when one
+group of configurations has to be redone, not for a first collection."""),
+    code(f"""# Example: the four cells that were added to the render set later.
+!python -m tools.chapter_assets \\
+    --output_root "$DRIVE_ROOT" --out /content/ch4_rest \\
+    --only C1,renders --cells A0D,A5,A6,A7"""),
 ])
 
 
