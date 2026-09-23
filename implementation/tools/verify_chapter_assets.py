@@ -27,6 +27,7 @@ from tools.chapter_assets import (  # noqa: E402
     clamp_crop,
     per_view_rows,
     pick_view_index,
+    selfcheck_verdict,
     radius_histogram,
     write_manifest,
 )
@@ -116,6 +117,28 @@ def t9_manifest_records_what_was_written():
         return ok, f"written {list(got['written'])}, absent {list(got['absent'])}"
 
 
+def t10_selfcheck_catches_the_wrong_model_state():
+    """DECISIVE. The guard that would have caught the quantised-cell defect.
+
+    The first version of this tool rendered quantised runs from their stored
+    point cloud, which holds the CONTINUOUS parameters, and so measured a model
+    the campaign never evaluated: A3 on Panama came out 6 dB below its own
+    recorded result and nothing objected. Every run is now compared with its
+    own eval_metrics.json before the numbers are written.
+    """
+    cases = [
+        (30.00, 30.20, "ok"),          # render-path tolerance
+        (30.00, 30.50, "ok"),          # exactly at the bound
+        (30.00, 30.51, "MISMATCH"),    # just past it
+        (21.87, 28.71, "MISMATCH"),    # the real A3/Panama defect
+        (30.00, None, "no eval_metrics"),
+    ]
+    bad = [(m, e, want, selfcheck_verdict(m, e)[1]) for m, e, want in cases
+           if selfcheck_verdict(m, e)[1] != want]
+    return not bad, ("boundaries and the real defect classified"
+                     if not bad else f"wrong: {bad}")
+
+
 def main() -> int:
     print("=" * 68)
     print("Chapter IV asset collector")
@@ -131,6 +154,8 @@ def main() -> int:
     check("T7 per-view rows carry one row per image", t7_per_view_rows_carry_one_row_per_image)
     check("T8 radius histogram is normalised", t8_radius_histogram_is_normalised_and_binned)
     check("T9 manifest records written and absent", t9_manifest_records_what_was_written)
+    check("T10 self-check catches the wrong model state  <-- decisive",
+          t10_selfcheck_catches_the_wrong_model_state)
 
     failed = [n for n, ok, _ in _results if not ok]
     print("\n" + "=" * 68)

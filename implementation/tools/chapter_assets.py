@@ -30,6 +30,16 @@ What it produces, keyed to `new-revisited-writing/chapter-04-assets.md`:
 only, so per-image metrics can be recovered for one repeat per cell and scene.
 That is enough to show whether a scene mean rests on one bad view; it cannot
 show how per-view fidelity varies between repeats. Reported as such.
+
+**The quantised cells need their codebooks installed.** `save_ply` writes the
+*continuous* parameters — it reads the raw tensors and bypasses the
+quantisation override — so loading a quantised run's point cloud and rendering
+it measures a latent the campaign never evaluated. The first version of this
+tool did exactly that, and reported quantisation as costing up to 6 dB where
+the campaign measured a fraction of one. Every run with a `compressed_*` store
+now has its codebook state installed before anything is rendered, and every
+run is checked against its own `eval_metrics.json` before the numbers are
+written.
 """
 
 from __future__ import annotations
@@ -261,6 +271,74 @@ def collect_radius_histograms(root: Path, out: Path, bins: int = 40) -> int:
 
 # ── C1 + renders: everything that needs the GPU ──────────────────────────
 
+SELFCHECK_TOL_DB: float = 0.5
+
+
+def selfcheck_verdict(mine: float, expected: Optional[float],
+                      tol: float = SELFCHECK_TOL_DB) -> tuple[Optional[float], str]:
+    """Compare a recomputed mean against the run's own recorded evaluation.
+
+    Same run, same views, same conventions, so the two should agree to within
+    the render path's tolerance. A disagreement means the model was rendered in
+    a state the campaign never evaluated -- precisely the defect that made the
+    first version of this tool report quantisation as costing six decibels.
+    """
+    if expected is None:
+        return None, "no eval_metrics"
+    delta = round(mine - expected, 4)
+    return delta, "ok" if abs(delta) <= tol else "MISMATCH"
+
+
+def _selfcheck(d: Path, mine: float) -> tuple[Optional[float], Optional[float], str]:
+    path = d / "eval_metrics.json"
+    expected: Optional[float] = None
+    if path.is_file():
+        try:
+            block = json.loads(path.read_text(encoding="utf-8")).get("Test") or {}
+            value = block.get("psnr_pooled")
+            expected = round(float(value), 4) if value is not None else None
+        except (ValueError, TypeError):
+            expected = None
+    delta, verdict = selfcheck_verdict(mine, expected)
+    return expected, delta, verdict
+
+
+def _quant_overrides(d: Path):
+    """The codebook state for a run, or None if it was not quantised.
+
+    Mirrors what the training loop installs, and what `j_consistency` compares
+    against: the override lands on the RAW parameters, so the model's own
+    activation applies afterwards.
+    """
+    import torch
+    from source.storage import unpack_indices
+    from tools.j_consistency import GROUP_TO_ATTR, STORE_GLOB, reconstruct_quantized
+
+    stores = sorted(d.glob(f"{STORE_GLOB}/meta.json"))
+    if not stores:
+        return None
+    store = stores[-1].parent
+    meta = json.loads(stores[-1].read_text(encoding="utf-8"))
+    cb = np.load(store / "codebooks.npz")
+    packed = (store / "indices.bin").read_bytes()
+
+    overrides: dict[str, Any] = {}
+    n = int(meta["num_primitives"])
+    offset = 0
+    for name in sorted(meta["groups"]):
+        g = meta["groups"][name]
+        bits = int(g["index_bits"])
+        size = (n * bits + 7) // 8
+        idx = unpack_indices(packed[offset:offset + size], n, bits)
+        offset += size
+        arr = reconstruct_quantized(cb[name], idx, int(g["vec_dim"]))
+        t = torch.from_numpy(np.ascontiguousarray(arr)).float().cuda()
+        if name == "dc":
+            t = t.reshape(t.shape[0], 1, 3)
+        overrides[GROUP_TO_ATTR[name]] = t
+    return overrides
+
+
 def _load_run(d: Path, source: Path, sh_degree: int = 0):
     """Model, scene and medium for one run, through the real parsers."""
     import torch
@@ -319,6 +397,7 @@ def collect_per_view_and_renders(root: Path, out: Path, source_root: Path,
     img_dir = out / "renders"
     img_dir.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, Any]] = []
+    checks: list[dict[str, Any]] = []
     n_images = 0
 
     for cell, scene, seed, d in _runs(root):
@@ -332,6 +411,16 @@ def collect_per_view_and_renders(root: Path, out: Path, source_root: Path,
         views = sc.getTestCameras() or sc.getTrainCameras()
         if not views:
             continue
+
+        # A quantised run must be rendered in its codebook state. The stored
+        # point cloud holds the continuous parameters, which the campaign never
+        # evaluated and which score several dB lower.
+        overrides = _quant_overrides(d)
+        state = "continuous"
+        if overrides:
+            for attr, tensor in overrides.items():
+                gaussians.set_quant_override(attr, tensor)
+            state = "codebook"
         keep = pick_view_index(scene, len(views))
         bg = torch.zeros(3, device="cuda")
 
@@ -355,6 +444,7 @@ def collect_per_view_and_renders(root: Path, out: Path, source_root: Path,
 
                 rec = evaluate_pair(img, gt, ssim, lpips, lpips_net=LPIPS_NET)
                 rec["image"] = getattr(cam, "image_name", f"view_{idx}")
+                rec["state"] = state
                 records.append(rec)
                 n_images += 1
 
@@ -370,11 +460,27 @@ def collect_per_view_and_renders(root: Path, out: Path, source_root: Path,
                         save(back.squeeze(0), img_dir / f"{stem}_backscatter.png")
 
             rows.extend(per_view_rows(cell, scene, seed, records))
-        print(f"  {cell}/{scene}: {len(records)} views")
+
+        mine = sum(r["psnr_pooled"] for r in records) / len(records)
+        expected, delta, verdict = _selfcheck(d, mine)
+        checks.append({"cell": cell, "scene": scene, "seed": seed, "state": state,
+                       "per_view_mean": round(mine, 4),
+                       "eval_metrics": expected, "delta": delta, "verdict": verdict})
+        print(f"  {cell}/{scene}: {len(records)} views, {state} state, "
+              f"mean {mine:.2f} vs eval_metrics {expected} -> {verdict}")
+        gaussians.clear_quant_override()
         del gaussians, sc
         torch.cuda.empty_cache()
 
     _write_csv(out / "per_view_metrics.csv", rows)
+    _write_csv(out / "per_view_selfcheck.csv", checks)
+    bad = [c for c in checks if c["verdict"] != "ok"]
+    if bad:
+        print(f"\n  {len(bad)} run(s) disagree with their own eval_metrics.json:")
+        for c in bad:
+            print(f"    {c['cell']}/{c['scene']} {c['state']}: "
+                  f"{c['per_view_mean']} vs {c['eval_metrics']} ({c['verdict']})")
+        print("  Do not use per_view_metrics.csv for those rows until it is understood.")
     (out / "renders" / "README.txt").write_text(
         "One held-out view per scene, chosen deterministically by scene name and\n"
         "reused by every configuration, so the panels of a figure are comparable.\n"
