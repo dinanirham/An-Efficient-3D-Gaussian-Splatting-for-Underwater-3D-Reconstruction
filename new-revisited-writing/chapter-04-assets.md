@@ -98,7 +98,7 @@ them with a note until the bundle is unpacked.
 
 | Tag | Product | Answers | Bound |
 |---|---|---|---|
-| C1 | `per_view_metrics.csv` | Whether a scene mean rests on one bad view — the held-out set is 13 frames | **Seed 0 only.** Full point clouds are kept for one repeat, so this cannot show per-view variation *between* repeats |
+| C1 | `per_view_metrics.csv` | Whether a scene mean rests on one bad view — the held-out set is 13 frames | **Collected, §15.** Seed 0 only; 40/40 runs agree with their own `eval_metrics.json` within 0.5 dB |
 | C2 | depth renders | The medium reads depth and the coupling acts through it, yet no figure showed depth | Fixed view per scene |
 | C3 | restoration renders | Ĵ is the method's scientific output and appeared only inside the decomposition figure | Fixed view per scene |
 | C4 | `depth_range_sweeps.csv` | Makes the refuted explanation tangible: the distribution moves, the outcome does not follow | All runs with sweeps |
@@ -119,10 +119,11 @@ moves it and never resizes it.
 * **Cross-campaign replication scatter** for 4.10 — the archived campaign's
   `results_by_scene.csv` is no longer in the repository. Restoring that bundle
   unblocks it.
-* **Per-view fidelity distribution** — the held-out set is 13 frames and a
-  scene mean over three or four test images can be moved by one bad view. Per
-  image metrics are not in the bundle and would have to be collected from the
-  Drive `eval_metrics.json` files. Worth having before an examiner asks.
+* ~~Per-view fidelity distribution~~ — **collected**; see C1 above and
+  `FINDINGS.md` §15. Views within one run differ by 6.65–11.25 dB and the
+  hardest view is the same view in every configuration, so the spread is view
+  difficulty and cancels in a cell-versus-cell contrast. Figure
+  `figure-4-c1-per-view` carries it.
 
 ---
 

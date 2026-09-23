@@ -730,6 +730,14 @@ Every A0-anchored count contrast on those scenes carries that floor; the mechani
 effects still resolve because they are 10–25×, and a 37 % floor is a 1.4× floor. Interactions
 on count do not resolve on those scenes for the same reason.
 
+**Scene means are means over very unequal views.** Held-out views within one run
+differ by 6.65–11.25 dB, 14–86× the repeat dispersion, and the hardest view is
+the same view in every configuration (§15). Comparisons are unaffected, since
+every cell is scored on the same views; what is affected is any reading of a
+scene mean as typical quality on that scene. Every per-scene fidelity number in
+this document should be read as a comparison instrument, not as an estimate of
+scene quality.
+
 **One seed per cell for geometry and Ĵ.** §9 and §10 are n = 1 per scene. A3/Curasao's 1 301×
 inflation and A3/Panama's 17 dB are single observations and are labelled so.
 
@@ -740,6 +748,72 @@ was trained from an uncommitted tree, which is the most likely home of §11's no
 cannot be recovered now.
 
 ---
+
+## §15. Per-view fidelity — ADDED after the fact, not in PLAN
+
+*Collected 2026-09-23 to answer a question the design raised and the analysis
+never checked: the held-out set is 13 frames, so each scene mean rests on three
+or four images. Descriptive and unregistered.*
+
+**Provenance, because this data has already been wrong once.** Per-image
+metrics are not retained by the campaign's evaluator, which aggregates to means,
+so they were recomputed from the stored checkpoints. The first collection
+rendered the quantised cells from their point clouds, which hold the
+*continuous* parameters, and so measured a model the campaign never evaluated —
+A3 on Panama came out 6.8 dB low. Every quantised run now has its codebook state
+installed, and each of the 40 runs is checked against its own
+`eval_metrics.json`: all 40 agree within 0.5 dB. Seed 0 only, since full point
+clouds are kept for one repeat.
+
+**Views within a single run differ by far more than anything this campaign
+measures.**
+
+| scene | A0 per-view PSNR | spread |
+|---|---|---:|
+| Curasao | 22.13 – 33.38 | **11.25 dB** |
+| IUI3-RedSea | 21.90 – 32.72 | **10.82 dB** |
+| JapaneseGardens | 17.70 – 25.81 | 8.10 dB |
+| Panama | 23.70 – 30.35 | 6.65 dB |
+
+That is 14–86× the repeat dispersion the resolution rule is built on
+(0.126–0.481 dB, §0).
+
+**It is view difficulty, not noise.** The hardest view is *the same view* in
+every configuration on every scene — `MTN_1288`, `MTN_5894`, `MTN_1090`,
+`MTN_1529` — and the banding is visible across all ten cells. A held-out frame
+that is hard for the baseline is hard for every mechanism.
+
+**This does not threaten the comparisons.** Every configuration is scored on the
+same fixed views, so view difficulty cancels in a cell-versus-cell contrast, and
+the between-repeat dispersion already used for resolution is computed over those
+same views. Nothing in §1–§13 is affected.
+
+**It threatens the reading of a scene mean as "the quality on this scene."**
+JapaneseGardens' 22.70 dB is a mean over views spanning 17.70 to 25.81. The
+means are fit for comparing configurations and unfit as estimates of typical
+reconstruction quality on a scene. That is a limitation of external validity,
+and §14 now carries it.
+
+**Pairing by view does not buy resolution, which was worth finding out.**
+Contrasting the same image across cells removes view difficulty, so it should be
+the more powerful estimator. At three or four views it is not: paired PSNR
+resolves on 1 of 12 scene × mechanism combinations, against 5 of 12 for the
+registered scene-mean analysis. The reason is in the per-view numbers — the
+mechanisms move one view substantially and leave the others flat (M1 on Panama:
++4.74, −0.08, −0.44; M2 on Curasao: +2.81, −0.54, −0.17), so the paired
+differences have a large standard deviation relative to their mean.
+
+**LPIPS behaves differently, and consistently.** Paired LPIPS resolves on 6 of
+12, including every simplification comparison except Panama, with per-view
+differences tight around their mean (M2 on JapaneseGardens: +0.0425 ± 0.0087,
+t = 8.5). Perceptual degradation from simplification is uniform across views;
+PSNR change is not. This is the same metric split §2 and §3 found at the scene
+level, now visible one view at a time, and it strengthens the decision to
+adjudicate on LPIPS.
+
+**Not claimed.** That per-view pairing is invalid — it is under-powered here,
+which is a statement about three views. That any particular view is an outlier
+to be excluded; the hard views are consistent and are part of the corpus.
 
 ## What changed the thesis
 
