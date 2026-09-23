@@ -172,7 +172,13 @@ view per scene.
 | `attenuation` map | same | 4.4, 4.13 |
 | `backscatter` map | same | 4.4 |
 
-Enough for figures 4.2, 4.4, 4.6, 4.7 and 4.8. Still outstanding: 4.5 (the
+**Five figures are assembled** by `figures/make_chapter4_renders.py` — 4.2,
+4.4, 4.6, 4.7 and 4.8 — from these images, with crops applied at assembly so
+the full frames stay available. Crops are fractions of the image, not pixel
+boxes: the scenes were captured at four different resolutions and a fixed pixel
+box would cover a different share of each.
+
+Still outstanding: 4.5 (the
 invisible population needs a render with sub-threshold primitives removed),
 4.13 (a collapsed and an intact repeat of the same cell and scene) and 4.14
 (both attribute states of one quantised run) — each needs a rendering pass the
