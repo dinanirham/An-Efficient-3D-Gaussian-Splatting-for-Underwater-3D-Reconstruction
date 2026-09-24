@@ -7,6 +7,7 @@ evidence: ["FINDINGS §2", "results_by_scene.csv"]
 figures: ["figure-q1-a3-quantisation", "figure-4-15b-configurations-vs-reference"]
 tables: ["Table 4.13"]
 citations: ["Navaneet et al., 2024"]
+note: "PSNR loss on IUI3 does not replicate; see 4.10.1"
 status: refined
 word_count: 762
 ---
@@ -76,6 +77,16 @@ fidelity finding — a resolved loss on one scene and neutrality elsewhere — i
 the same under both. Where Sections 4.3.1 and 4.4.1 had to distinguish the two
 comparisons carefully, here they largely coincide.
 
+**One qualification attaches to the IUI3 Red Sea pixel-metric loss and must
+travel with it.** It does not replicate across campaigns. In the archived
+campaign the same mechanism's effect on that scene was +0.35 dB; here it is
+−1.21 dB against the reference. That is a reversal of sign, not a change of
+magnitude, and Section 4.10.1 reports the comparison and adjudicates which
+figure is anchored. The effect is resolved within this campaign and
+`UNRESOLVED` across campaigns, and the scene finding therefore rests on
+perceptual similarity — which replicates on all sixteen comparisons — rather
+than on peak signal-to-noise ratio.
+
 One property of this mechanism separates it from the other two and is developed
 in Section 4.5.7. Its fidelity effect on the composed image is small, and its
 effect on the *restored* image — the medium-free radiance that is the
@@ -107,9 +118,12 @@ neutral-on-what-is-measured. Second: the three mechanisms' result shapes had
 never been compared, and doing so makes this one's distinctiveness visible.
 → *applied*.
 
-**Journal Reviewer** — The perceptual effects on three scenes were given
-without a scale. → *applied*: a quarter of the equivalence margin. Second: the
-factorial figures were quoted alongside the anchored ones without saying which
-was which. → *applied*: the paragraph now labels both and states that the
-finding is unchanged under either. Third: the source method needed citation at
-first mention. → *applied*, from the register.
+**Journal Reviewer** — The only resolved pixel-metric result in this
+subsection does not replicate across campaigns, and the draft did not say so,
+leaving a reader to meet the downgrade in Section 4.10.1 or not at all.
+→ *applied*: the qualification travels with the claim. Second: the perceptual
+effects on three scenes were given without a scale. → *applied*: a quarter of
+the equivalence margin. Third: the factorial figures were quoted alongside the
+anchored ones without saying which was which. → *applied*: the paragraph now
+labels both and states that the finding is unchanged under either. Fourth: the
+source method needed citation at first mention. → *applied*, from the register.
