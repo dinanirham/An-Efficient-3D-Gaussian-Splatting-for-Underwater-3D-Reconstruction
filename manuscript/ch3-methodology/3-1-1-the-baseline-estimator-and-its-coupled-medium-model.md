@@ -6,7 +6,11 @@ action: Refine
 evidence: ["CD register", "implementation"]
 figures: ["figure-0-optimisation-loop"]
 tables: []
-citations: ["Kerbl et al., 2023", "Akkaynak & Treibitz, 2018", "Yang et al., 2024", "Levy et al., 2023"]
+citations:
+  - "Kerbl et al., 2023"
+  - "Akkaynak & Treibitz, 2018"
+  - "Yang et al., 2024"
+  - "Levy et al., 2023"
 status: refined
 word_count: 796
 ---

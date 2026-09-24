@@ -42,8 +42,11 @@ dominated by which scenes were included rather than by what the mechanism did.
 
 **The two fidelity metrics do not rank the scenes alike, and the disagreement
 is not marginal.** By peak signal-to-noise ratio the corpus orders Curaçao,
-Panama, IUI3 Red Sea, Japanese Gardens. By learned perceptual similarity it
-orders Panama, Curaçao, Japanese Gardens, IUI3 Red Sea. Japanese Gardens is
+Panama, IUI3 Red Sea, Japanese Gardens, in both configurations. By learned
+perceptual similarity the reference orders Panama, Japanese Gardens, Curaçao,
+IUI3 Red Sea — and the unmodified configuration swaps the middle pair, the two
+being separated by 0.0024 there against a repeat dispersion of 0.0050 on one of
+them, so the ordering between them is not resolved. Japanese Gardens is
 the worst scene by a distance on the pixel metric, 4.6 dB behind IUI3 Red Sea
 in the reference, yet it is the better of the two perceptually. The two metrics are not
 measuring the same property: one is sensitive to overall radiometric agreement
@@ -99,9 +102,14 @@ quantified at 4.6 dB, and closed with the commitment that disagreement is
 reported rather than resolved by metric selection. Second: the subsection had
 no closing statement of its own role. → *applied*.
 
-**Journal Reviewer** — Two metrics named without citation at first substantive
-use in this subsection. → *applied*. Second: render rate given without saying
-where it was measured. → *applied*: cross-reference to Section 4.1.1. Third:
-the Japanese Gardens count inversion appeared in the table with no comment,
-which invites a reader to draw a conclusion the data does not support.
-→ *applied*: penultimate paragraph.
+**Journal Reviewer** — The perceptual ordering of the scenes was given
+without saying which configuration it came from, and the two differ: the
+reference and the unmodified configuration swap Japanese Gardens and Curaçao,
+which are separated by less than one repeat standard deviation. → *applied*:
+the reference's ordering given, the swap noted as unresolved, and Section 3.3.2
+now agrees. Second: two metrics named without citation at first substantive use
+in this subsection. → *applied*. Third: render rate given without saying where
+it was measured. → *applied*: cross-reference to Section 4.1.1. Fourth: the
+Japanese Gardens count inversion appeared in the table with no comment, which
+invites a reader to draw a conclusion the data does not support. → *applied*:
+penultimate paragraph.
