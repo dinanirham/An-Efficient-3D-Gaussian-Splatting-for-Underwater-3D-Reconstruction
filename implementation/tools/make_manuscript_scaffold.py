@@ -49,6 +49,17 @@ class Entry:
         return self.number.count(".") >= 2
 
 
+def leaves(entries: list[Entry]) -> list[Entry]:
+    """The entries that get their own file.
+
+    Normally a subsection, but a section with no subsections beneath it is
+    itself the smallest unit and would otherwise have nowhere for its prose to
+    live — eight sections of this thesis are in that position.
+    """
+    parents = {e.number.rsplit(".", 1)[0] for e in entries if e.is_subsection}
+    return [e for e in entries if e.is_subsection or e.number not in parents]
+
+
 def slug(title: str) -> str:
     """A file-safe stem: emphasis stripped, dashes normalised, runs collapsed."""
     text = title.replace("**", "").replace("*", "")
@@ -140,8 +151,9 @@ Continuous prose, 300-900 words, every number traced to a named artefact.
 
 def render_index(chapter: int, entries: list[Entry]) -> str:
     rows = []
+    leaf = {e.number for e in leaves(entries)}
     for e in entries:
-        if e.is_subsection:
+        if e.number in leaf:
             link = f"[{e.number}]({e.number.replace('.', '-')}-{slug(e.title)}.md)"
             rows.append(f"| {link} | {e.title} | {e.action} | {e.evidence} |")
         else:
@@ -181,7 +193,7 @@ def prune_orphans(entries: list[Entry], out_root: Path) -> tuple[list[str], list
     """
     expected = {
         out_root / CHAPTER_SLUG[e.chapter] / f"{e.number.replace('.', '-')}-{slug(e.title)}.md"
-        for e in entries if e.is_subsection
+        for e in leaves(entries)
     }
     removed: list[str] = []
     kept: list[str] = []
@@ -211,9 +223,7 @@ def write_scaffold(entries: list[Entry], out_root: Path) -> tuple[int, int]:
             created += 1
         else:
             skipped += 1
-        for e in group:
-            if not e.is_subsection:
-                continue
+        for e in leaves(group):
             target = folder / f"{e.number.replace('.', '-')}-{slug(e.title)}.md"
             if target.exists():
                 skipped += 1
@@ -231,8 +241,8 @@ def main() -> int:
     args = ap.parse_args()
 
     entries = parse_structure(STRUCTURE)
-    subs = [e for e in entries if e.is_subsection]
-    print(f"parsed {len(entries)} rows, {len(subs)} subsections")
+    subs = leaves(entries)
+    print(f"parsed {len(entries)} rows, {len(subs)} deliverables")
     if args.dry_run:
         for e in subs[:10]:
             print(f"  {e.number:9}{slug(e.title)}")

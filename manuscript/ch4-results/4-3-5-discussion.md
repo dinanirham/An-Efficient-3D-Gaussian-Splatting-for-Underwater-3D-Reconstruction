@@ -77,7 +77,7 @@ One methodological point closes the section. The mechanism as measured here is
 an implementation rather than a published description: the released
 implementation of the source method predates its paper by approximately ten
 months and contains behaviour the paper does not describe (Kotovenko et al.,
-2026). This thesis measures what the implementation does, and Section 3.9
+2026). This thesis measures what the implementation does, and Section 3.5.6
 records the differences. A result reported here should be read as a result
 about that implementation composed into this estimator, not as a replication of
 a published claim.

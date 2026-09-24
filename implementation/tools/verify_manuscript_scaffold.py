@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from make_manuscript_scaffold import (  # noqa: E402
     Entry,
+    leaves,
     prune_orphans,
     parse_structure,
     render_stub,
@@ -160,12 +161,47 @@ def t7_prune_spares_drafted_prose() -> None:
         check("T7 the drafted orphan still exists", orphan.exists())
 
 
+def t8_a_childless_section_is_its_own_leaf() -> None:
+    """A section with no subsections has nowhere else for its prose to go."""
+    rows = [
+        Entry(chapter=1, number="1.4", title="Research Objectives",
+              action="Refine", evidence="PLAN", content=""),
+        Entry(chapter=1, number="1.5", title="Research Benefits",
+              action="Refine", evidence="", content=""),
+        Entry(chapter=1, number="1.5.1", title="Practical Benefits",
+              action="Refine", evidence="", content=""),
+    ]
+    got = {e.number for e in leaves(rows)}
+    check("T8 a childless section is a leaf", "1.4" in got, str(got))
+    check("T8 a section with children is not", "1.5" not in got, str(got))
+    check("T8 subsections remain leaves", "1.5.1" in got, str(got))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        write_scaffold(rows, out)
+        names = {p.name for p in out.rglob("*.md")}
+        check("T8 the childless section gets a file",
+              "1-4-research-objectives.md" in names, str(sorted(names)))
+        check("T8 the parent section does not",
+              not any(n.startswith("1-5-research-benefits") for n in names),
+              str(sorted(names)))
+
+    every = parse_structure(STRUCTURE)
+    parents = {e.number.rsplit(".", 1)[0] for e in every if e.is_subsection}
+    homeless = [e.number for e in every
+                if not e.is_subsection and e.number not in parents
+                and e not in leaves(every)]
+    check("T8 no section in the real structure is left without a home",
+          not homeless, str(homeless))
+
+
 def main() -> int:
     print("manuscript scaffold")
     for fn in (t1_slug, t2_structure_invariants, t3_four_and_five_column_tables,
                t4_never_clobbers_drafted_prose, t5_stub_carries_its_metadata,
                t6_sections_become_directories_not_files,
-               t7_prune_spares_drafted_prose):
+               t7_prune_spares_drafted_prose,
+               t8_a_childless_section_is_its_own_leaf):
         fn()
     print()
     if FAILURES:
