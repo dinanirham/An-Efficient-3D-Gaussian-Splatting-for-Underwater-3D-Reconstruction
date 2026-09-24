@@ -511,7 +511,7 @@ What the fronts show, described and not ranked:
   fewer primitives (§5d) and lower LPIPS (Curasao 0.215 vs 0.216, JapaneseGardens 0.202 vs
   0.217, Panama 0.193 vs 0.203). M2 alone is not on the perceptual front where M1 + M2 is. IUI3
   is again the exception.
-- **A7 is on the bytes front everywhere** — 2.4–2.7 MB against SS's 114–240 MB, a 45–90×
+- **A7 is on the bytes front everywhere** — 2.4–2.7 MB against SS's 114–240 MB (*derived*: SS logs no `total_bytes`, so its size is its count at A0's 56.0 B/prim — exact for the shared layout, but arithmetic on a measured count, not a measurement), a 43–90×
   reduction in stored bytes — at an LPIPS cost of +0.06 to +0.11 over baseline.
 - **On PSNR the fronts are the M2-containing cells,** because PSNR does not resolve the
   mechanisms' costs (§2, §3); a front drawn on an unresolved metric is a front drawn on noise,
