@@ -598,9 +598,9 @@ The archived ledger records NVIDIA A100-SXM4-40GB for all 120 entries. Its first
 
 | Configuration set | Scenes | Repeat indices | Ledger status and attempts | Final evaluation and checkpoint | Code identifier and dirty state | GPU and software | Input and dense-cloud hashes, if applicable | Effective optimizer steps |
 |---|---|---|---|---|---|---|---|---|
-| SS, A0–A7, A0D (12 each) | Curasao, IUI3-RedSea, JapaneseGradens-RedSea, Panama (30 each) | 0, 1, 2 (40 each) | 120 `done`; 116 × 1 attempt, 3 × 2, 1 × 3 | [VERIFY PER-RUN FILES] | [VERIFY PER-RUN MANIFESTS] | A100-SXM4-40GB in all ledger entries; software [VERIFY] | [VERIFY PER-RUN MANIFESTS] | [VERIFY PER-RUN METRICS] |
+| SS, A0–A7, A0D (12 each) | Curasao, IUI3-RedSea, JapaneseGradens-RedSea, Panama (30 each) | 0, 1, 2 (40 each) | 120 `done`; 116 × 1 attempt, 3 × 2, 1 × 3 | Final evaluation present for all 120 (`complete = 1`, and all six core metrics populated in every row); retained point clouds are **seed 0 only**, 40 runs | Blank in the collected table for all 120; present in the per-run manifests as `git_sha` and recoverable by re-running the collector (§3.2, item 4) | A100-SXM4-40GB in all 120 ledger entries, and in `results_runs.csv` for the 108 refactored runs but blank for SS's 12; software versions are in the manifests and are not collected | Not collected; the four dense-cloud hashes are transcribed in Table 3.7 from sidecars held outside this repository | 43,000 for every cell without M2 and 43,400 for A2, A4, A6, A7; blank for SS |
 
-*The ledger identifies each final run by cell, scene, repeat, stage, attempt count, timestamps, and output directory; it does not establish artifact completeness, code identity, or metric coverage. Retain a one-row-per-run appendix after reconciling those files. For SS, record the separate source checkout and its different seeding behavior.*
+*The ledger identifies each final run by cell, scene, repeat, stage, attempt count, timestamps, and output directory. **Artifact completeness and metric coverage are now established for the collected outcomes** — all 120 rows carry the six core metrics, and the 43,000 / 43,400 optimizer-step split falls exactly on M2 presence, confirming that the two medium-only bursts are the whole of the difference. **Code identity is not established** and remains the single open provenance item. SS is systematically thinner in the collected table: sixteen fields are blank for its twelve runs, including stored size, optimizer steps, GPU, depth extremes and every medium diagnostic — a consequence of the reference harness, not of a collection failure, and §3.7 must carry it into the coverage table. For SS, record the separate source checkout — `dxyang/seasplat @ ddc6259`, pinned in `cells.json` — and its different seeding behaviour.*
 
 ### 3.6.4 Baseline correspondence and campaign lineage
 
@@ -618,20 +618,49 @@ Four ledger entries had more than one attempt: A0/JapaneseGradens-RedSea/s0 (two
 
 The reproducibility unit is a completed run identified by configuration, scene, repeat index, and final attempt. The campaign ledger defaults to indices 0, 1, and 2, and `run_queue.py` passes the index as `--seed` to the refactored trainer or the separate SS reference runner. In the inspected refactored implementation, `safe_state` seeds Python's `random`, NumPy, PyTorch CPU, and all PyTorch CUDA generators with that value. The SS reference accepts the seed argument but does not seed its CUDA generator through the same path. Thus equal labels across SS and A0 do not define paired stochastic draws. GPU rasterization and density control can also vary between repetitions despite fixed seeds; the three executions quantify observed run variation rather than certify bitwise reproducibility. Record the realized seed, seeding routine, and reference checkout for each run rather than describing all ten configurations as having identical randomness controls.
 
-For each run, retain the full launch command and resolved `run_config.json`, including cell overrides, image directory, evaluation split, nominal iteration limit, event times, primitive budget, quantization parameters, and save and test iterations. Pair these with the Git revision and dirty-tree state, relevant source or patch when dirty, Python and PyTorch versions, CUDA runtime and driver, rasterizer and other compiled extension revisions, and GPU model. The queue normally requires an A100; an `--allow_any_gpu` override must be recorded for its affected runs. The manifest fields establish what the software attempted to capture, while the completed per-run files determine what can actually be reported. [VERIFY RUN-LEVEL COVERAGE: device memory, driver, extension build, exact commands, and all software versions.] For a timing comparison, identify any hardware or software mismatch and give the held-out resolution and profiling settings specified in Section 3.7.3.
+For each run, retain the full launch command and resolved `run_config.json`, including cell overrides, image directory, evaluation split, nominal iteration limit, event times, primitive budget, quantization parameters, and save and test iterations. Pair these with the Git revision and dirty-tree state, relevant source or patch when dirty, Python and PyTorch versions, CUDA runtime and driver, rasterizer and other compiled extension revisions, and GPU model. The queue normally requires an A100; an `--allow_any_gpu` override must be recorded for its affected runs. The manifest fields establish what the software attempted to capture, while the completed per-run files determine what can actually be reported. [OPEN — none of these is in the collected table, and all are recoverable only from the per-run manifests. `results_runs.csv` carries the GPU name for the 108 refactored runs and `render_peak_mem_mb` as a measured quantity, but no driver version, extension build, launch command or library version. Resolve together with the `git_commit` re-collection of §3.2, item 4, since both read the same manifests.] For a timing comparison, identify any hardware or software mismatch and give the held-out resolution and profiling settings specified in Section 3.7.3.
 
 Input provenance requires the prepared image and COLMAP reconstruction versions, camera and held-out filename lists, and the sparse cloud used by configurations without M1. For M1, retain the dense-cloud PLY and sidecar with cloud hash, matcher weights and settings, generation seed, and training-view exclusion evidence. The same scene key alone does not demonstrate identical pixel and camera inputs across runs. A reproducible report should name the actual dataset snapshot or checksums when available and disclose an input whose byte identity cannot be reconstructed. Similarly, a run's Git commit followed by `-dirty` cannot reconstruct the uncommitted source without a saved diff or source archive.
 
 Finally, retain the final attempt log, final checkpoint or serialized artifact, `eval_metrics.json`, diagnostic files where present, and the scripts and versioned settings used to aggregate Chapter IV tables. A stale queue entry is retried from the beginning because a legacy Gaussian checkpoint omits medium, quantizer, and schedule state; an earlier partial attempt is not a resumable continuation. The run inventory should mark any absent optional PLY or profiler output explicitly. These records support reanalysis of the 120 completed executions; their presence does not guarantee that a new execution on another machine will reproduce identical floating-point values.
 
-### Editorial verification queue for Section 3.6 (outside thesis prose)
+### Editorial verification status for Section 3.6 (outside thesis prose)
 
-1. The final ledger contains all 120 expected cell-scene-repeat keys marked `done`; reconcile each with its physical run directory, `run_config.json`, and `eval_metrics.json`, particularly the four retried keys.
-2. Enumerate every distinct run code hash and `-dirty` state, determine whether the changed tree can be reconstructed, and group comparisons by compatible lineage.
-3. Check the actual command-line overrides, per-run hardware and software, scene split, M2/M3 event settings, and effective optimizer steps.
-4. Inspect retries and archived attempts to prevent mixed diagnostic series or double counting.
-5. Verify when baseline margins and analysis rules were recorded relative to the runs and outcome inspection; distinguish pre-run decisions from retrospective rules.
-6. Populate the reproducibility record with actual per-run seed, GPU, software and extension versions, driver, launch command, data hashes, code revision or dirty diff, final checkpoint, and aggregation script. Mark fields not archived as unavailable rather than inferring them from the queue's defaults.
+1. **Partly resolved.** All 120 keys are `done` and all 120 carry a populated evaluation
+   record — `complete = 1` with the six core metrics present in every row — so the
+   evaluation side of the reconciliation is done at table level. **Still open:** the physical
+   directory and `run_config.json` for each run, and specifically the four retried keys, whose
+   earlier attempts are not represented anywhere in the collected data.
+2. **Open, and it is the section's single largest gap.** No code hash can be enumerated from
+   the collected table: `git_commit` is blank in all 120 rows. §3.2 item 4 establishes that the
+   identifiers exist in the manifests and that the collector now reads the right key, so this
+   is recoverable by re-collection rather than by hand. Until then, comparisons cannot be
+   grouped by lineage, and the chapter should not claim they share one.
+3. **Partly resolved.** Effective optimizer steps are settled and informative: 43,000 for every
+   cell without M2 and 43,400 for A2, A4, A6 and A7, blank for SS. The split falls exactly on
+   M2 presence, which confirms the two 200-step medium-only bursts are the entire difference and
+   that no other mechanism alters the step budget. M2 and M3 event settings are confirmed in
+   `cells.json` (§3.5). **Still open:** per-run command-line overrides, and per-run hardware and
+   software beyond the GPU name.
+4. **Open — unchanged, and now scoped.** The four retried keys are named in §3.6.5. Their
+   error fields are empty in the ledger (§3.2 item 2), so the retry cause is only in the run
+   directories. The risk this item guards against is a mixed diagnostic series; since the
+   collected table holds one row per key, any mixing would have occurred upstream of it.
+5. **Partly resolved.** The margin's values and its pre-run status are evidenced inside
+   `cells.json`, which carries `psnr_pooled_db: 1.0`, `lpips: 0.02`,
+   `n_primitives_fraction: 0.3` with a note that they were fixed before S0 ran (§3.1, item 1b),
+   and the ledger confirms S0 ran first. **Still open:** the dated version of the wider analysis
+   plan, which is what licenses calling any other rule prospective.
+6. **Open.** None of the reproducibility fields beyond GPU name and peak render memory is in
+   the collected table. Resolve together with item 2, since both are read from the same
+   manifests. Follow the item's own instruction: mark unarchived fields unavailable rather than
+   inferring them from queue defaults.
+7. **New — SS's coverage asymmetry must be carried into §3.7.** Sixteen fields are blank for
+   SS's twelve runs in `results_runs.csv`: effective optimizer steps, all four storage fields,
+   the baseline-ratio and container fields, GPU, code identifier, both depth extremes, and every
+   medium diagnostic including collapse channels and the largest attenuation drop. This follows
+   from the reference harness rather than from a collection failure, but it decides which
+   comparisons against SS are possible at all, and §3.7's coverage table is where it belongs.
 
 ## 3.7 Measurements and diagnostic instruments
 
