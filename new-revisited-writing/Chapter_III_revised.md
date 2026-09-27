@@ -851,20 +851,56 @@ The experimental domain comprises four selected scenes, the recorded split, the 
 
 The campaign plan separates predictions documented before their corresponding execution stages from analyses written after some campaign information was already available. Its opening explicitly says the baseline-margin verdict and diagnostic-file completeness were known when the plan was written. Some entries point to earlier dated documents as evidence of prior prediction. Accordingly, the final thesis should use an item-level chronology: call a prediction prospective only when a dated source precedes the relevant run and outcome access; label the known baseline verdict as an already observed check; and label analyses formulated after inspecting their data as exploratory. Do not describe the entire plan as preregistered. Chapter IV should report negative and unresolved outcomes under the same rules as favorable ones and identify analyses developed after seeing the results.
 
-**Table 3.14. Analysis eligibility and inferential status [TO POPULATE].**
+**Table 3.14. Analysis eligibility and inferential status, resolved from the archived artifacts.**
 
 | Contrast or diagnostic | Required cells and artifacts | Matching conditions | Repeat coverage | Rule or status chronology | Eligible scenes | Principal limit |
 |---|---|---|---|---|---|---|
-| SS versus A0 | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY MARGIN DATE] | [VERIFY] | [VERIFY] |
-| Individual M1, M2, M3 | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] |
-| Two- and three-factor interactions | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] |
-| A0D versus A0 | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] |
-| Medium and spatial diagnostics | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] |
+| **SS versus A0** | SS (12) and A0 (12) with `eval_metrics`; SS from the external checkout `dxyang/seasplat @ ddc6259` | Same prepared scene, same partition, same evaluation harness; different code tree and different seeding routine | 3 repeats each, **not paired** — compare as scene means, per `cells.json` | Margin values and their pre-S0 status are recorded in `cells.json`; the ledger confirms S0 executed first. **A dated commit for that file would complete the chronology** | All four on PSNR, SSIM, LPIPS, count, render rate and training time | **Storage, optimizer steps, depth extremes and every medium diagnostic are unavailable for SS**, so no equivalence statement can be made on those axes |
+| **Individual M1, M2, M3** | A1, A2, A3 against A0; `eval_metrics` and cost block | Same scene, partition, checkpoint policy and outcome definition | 3 repeats in every cell; all six core metrics present in all 120 rows | H1 registered before execution; effects reported from below and from above | All four | One operating point per mechanism; M1 bundles initialization with disabled densification, M2 bundles the cut with its medium-only continuation |
+| **Two- and three-factor interactions** | All eight cells A0–A7 for the three-factor term; four cells for each two-factor term | All participating cells must share scene, inputs and outcome definition | 3 repeats per cell | Registered on LPIPS and count; **PSNR interactions declared `UNDETERMINED` by construction before analysis** | All four, subject to the dispersion floor per scene | Resolution falls with contrast order; the count interaction resolves only for M1 × M2, and the three-way term is the least resolvable quantity in the design |
+| **A0D versus A0** | A0D (12) and A0 (12) | Same scene, inputs and checkpoint policy | 3 repeats each; full metric coverage | Two-part prediction registered before S6 | All four | Not a factorial factor and never differenced with A0–A7; inert wherever M1 is active, so no combined estimate exists |
+| **Medium and spatial diagnostics** | `medium_collapse.json` (120), `spatial_extent.csv` (48), `j_consistency.json` (16 measured of 48) | Diagnostics must come from the final attempt of the same run as the fidelity record | Medium: 3 repeats for the 108 refactored runs, terminal state only for SS. Geometry: seed 0 for the nine refactored cells, **all three seeds for SS**. Restoration: seed 0 of the four M3 cells | Collapse criterion fixed on the optimisation trace, independent of any image metric | All four for collapse incidence; geometry and restoration are single-repeat for the refactored cells and carry no dispersion | Operational and consistency labels only — no physical ground truth for the medium, and none for the restored image |
 
-### Editorial verification queue for Section 3.8 (outside thesis prose)
+*Every cell above is read from the archived artifacts rather than from the logging code.
+Two asymmetries drive most of the limits: SS lacks sixteen collected fields including all
+storage and all medium diagnostics, and the seed-0 retention policy applies to the refactored
+cells but not to SS, so geometry is the one axis where SS is better covered than the rest.*
 
-1. Compute the per-scene contrasts from raw run records and compare them with any across-scene output; do not present `analyse.py` aggregates as per-scene estimates.
-2. Resolve the analysis plan's inclusive two-SE wording against the code's strict inequality and record the applied rule.
-3. Verify the timeline of each proposed hypothesis, margin, and diagnostic against dated commits and outcome access; reserve “preregistered” for items with sufficient evidence.
-4. Stratify mixed collapsed/intact groups and distinguish missing medium diagnostics from documented intact models.
-5. Complete Table 3.14 after reconciling all run manifests, retries, artifacts, and software revisions; withhold causal or equivalence language where comparability fails.
+### Editorial verification status for Section 3.8 (outside thesis prose)
+
+1. **Open — and the instruction is right.** Per-scene contrasts should be recomputed from the
+   run records rather than read from an aggregate. Nothing in the archived outputs prevents
+   this; it is a discipline for the Chapter IV build, not a missing artifact.
+2. **Resolved — the applied rule is strict.** `tools/analyse.py` tests `dev > 2 * res.sem` at
+   line 399 and the equivalent strict form at line 409. A contrast at exactly two standard
+   errors is therefore **unresolved** under the executed code, whatever the plan's prose says.
+   State the strict rule in §3.8.4 and reconcile the plan's wording to it rather than the other
+   way round. This decides a small number of borderline cases that Chapter IV currently
+   describes as “at the line” — among them the M1 × M2 and three-way LPIPS terms on one scene
+   each, the M2 × M3 LPIPS term on Panama, and M1's PSNR effect against SS on Japanese Gardens,
+   all at |z| = 2.0. Under the strict rule each is unresolved, which is how they should be
+   reported.
+3. **Partly resolved; one item still needs a date.** The equivalence margin's values and its
+   pre-S0 status are recorded inside `cells.json`, and the ledger confirms S0 executed first, so
+   that item has contemporaneous evidence. The `n_bud` binding rule and the `dense` preset
+   rationale are likewise recorded in the executed configuration. **Still needed:** dated
+   commits for the analysis-plan document itself. Until then, follow this section's own
+   instruction — call individual items prospective where a dated source precedes execution, and
+   do not describe the plan as a whole as preregistered.
+4. **Resolved in principle.** `medium_collapse.json` covers all 120 runs and marks SS's twelve
+   as `final_state_only`, so a missing trajectory is distinguishable from a documented intact
+   model by construction rather than by inference. Stratification of mixed collapsed and intact
+   groups is possible wherever both outcomes occur within a cell and scene; Chapter IV reports
+   six such strata.
+5. **Resolved — Table 3.14 is populated.** It is built from the archived artifacts rather than
+   from the logging code. Two asymmetries drive most of its limits and both are now documented:
+   SS lacks sixteen collected fields including all storage and all medium diagnostics, and the
+   seed-0 retention policy applies to the refactored cells but not to SS. The instruction to
+   withhold causal and equivalence language where comparability fails stands, and the table now
+   names where it fails.
+6. **New — one storage-axis finding is not yet in Chapter IV.** `bytes_per_primitive` varies
+   systematically across the M3 cells because the three codebooks are a fixed 163,840-byte cost
+   whose per-primitive share grows as the population falls (§3.7, item 2). M3's compression
+   therefore degrades once M1 or M2 has cut the population — a storage-axis interaction that the
+   count-axis analysis cannot detect, since M3 does not change count. Decide whether §4.6
+   reports it before the chapters are frozen.
