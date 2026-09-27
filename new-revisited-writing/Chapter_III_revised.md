@@ -185,15 +185,15 @@ The four scenes provide the study's evaluated underwater conditions. The dataset
 
 Figure 3.3 will show one input view per scene using a declared display transform. It provides visual context for the evaluated scenes and does not substitute for measurements of attenuation, scattering, or reconstruction error.
 
-> **[FIGURE 3.3 PLACEHOLDER: REPRESENTATIVE INPUT VIEWS]** Four panels in the order of Table 3.5, each drawn from the training partition. State the image filename, whether the displayed input is the original white-balanced image or the COLMAP-undistorted output, and any shared exposure or display transformation. Caption: *Figure 3.3. Representative input views from the four evaluated SeaThru-NeRF scenes. Panels show [INSERT EXACT FILENAMES AND DISPLAY PROCESSING]; visual appearance is descriptive and does not quantify medium parameters.* Do not substitute a Chapter IV reconstruction comparison for an input-data illustration.
+> **[FIGURE 3.3 PLACEHOLDER: REPRESENTATIVE INPUT VIEWS]** Four panels in the order of Table 3.5, each drawn from the training partition. State the image filename, whether the displayed input is the original white-balanced image or the COLMAP-undistorted output, and any shared exposure or display transformation. Caption: *Figure 3.3. Representative input views from the four evaluated SeaThru-NeRF scenes. Panels show [SELECT ONE TRAINING-PARTITION FILENAME PER SCENE AND STATE THE DISPLAY TRANSFORM]; visual appearance is descriptive and does not quantify medium parameters.* **Do not draw from these thirteen held-out images, which are the evaluation set and are excluded from the training partition:** Curasao `MTN_1288`, `MTN_1296`, `MTN_1304`; IUI3-RedSea `MTN_5894`, `MTN_5903`, `MTN_5911`, `MTN_5928`; JapaneseGradens-RedSea `MTN_1090`, `MTN_1098`, `MTN_1106`; Panama `MTN_1529`, `MTN_1539`, `MTN_1547`. The training-partition names for each scene are listed in `SEATHRU_NERF_DATASET` in `implementation/scene/dataset_readers.py`; choose from those. State whether the panel shows the original white-balanced input or the COLMAP-undistorted output, since §3.4 establishes that these differ. Do not substitute a Chapter IV reconstruction comparison for an input-data illustration.
 
 ### 3.3.2 View partition and evaluation unit
 
-The executed reader sorts cameras by image name and, when evaluation mode is enabled, assigns the camera at zero-based indices divisible by eight to the test partition (`llffhold = 8`). The remaining cameras form the training partition. On the nominal counts in Table 3.5, this produces four held-out views for IUI3-RedSea and three for each other scene. The reader contains a separate hard-coded list of scene-specific image names, but that list is commented out in the inspected implementation; it is not the active split rule. The resolved `eval` setting, `llffhold`, any subsampling or camera-range arguments, and the final partition sizes must be confirmed in the run records.
+The executed reader sorts cameras by image name and, when evaluation mode is enabled, assigns the camera at zero-based indices divisible by eight to the test partition (`llffhold = 8`). The remaining cameras form the training partition. On the nominal counts in Table 3.5, this produces four held-out views for IUI3-RedSea and three for each other scene. The reader also carries a hard-coded dictionary of scene-specific image names, `SEATHRU_NERF_DATASET`. It is **not** commented out — it is a live module-level constant, and it is consulted at line 240 to recognise a SeaThru scene. What is commented out is the name-based split that would have used it, at lines 265 to 269. The active rule is therefore the index rule, as stated. **The two agree exactly.** Comparing the dictionary's `test` lists with the held-out images actually scored in the campaign gives an identical set on all four scenes, and its `train`/`test` counts reproduce Table 3.5 exactly (21/29/20/18 captured, 18/25/17/15 training, 3/4/3/3 held out). The index rule thus reproduces the dataset's canonical named partition rather than merely resembling it. The resolved `eval` setting, `llffhold`, any subsampling or camera-range arguments, and the final partition sizes must be confirmed in the run records.
 
-During training, camera poses and training images provide the observations from which Gaussian attributes and medium parameters are fitted. Held-out images serve as reference observations for rendered-view fidelity. A held-out image is an evaluation view of a scene represented by one trained model; it is not an independent training repeat. Chapter IV should therefore retain scene and run identifiers alongside per-view scores and should report repeat variation at the run level. The corpus does not include an independent validation partition in the stated design. [VERIFY FROM RUN CONFIGURATIONS: any exploratory tuning based on test scores must be disclosed rather than treated as validation-free selection.]
+During training, camera poses and training images provide the observations from which Gaussian attributes and medium parameters are fitted. Held-out images serve as reference observations for rendered-view fidelity. A held-out image is an evaluation view of a scene represented by one trained model; it is not an independent training repeat. Chapter IV should therefore retain scene and run identifiers alongside per-view scores and should report repeat variation at the run level. The corpus does not include an independent validation partition in the stated design. [PARTLY RESOLVED, AND ONE DISCLOSURE IS REQUIRED. No hyperparameter in `implementation/configs/cells.json` is selected on held-out scores; the file fixes training length, the medium-model activation iteration, both simplification iterations, the CDF threshold, the re-warm length, and all codebook settings ahead of execution. **One value is nonetheless data-dependent and must be disclosed as such:** the M2 primitive budget `n_bud` is deliberately absent from the file, and its note states it “must be derived from A0's converged primitive count, which no publication of the baseline reports, so it is not knowable until A0 has run”. That is selection on a training outcome of an earlier campaign stage, not on held-out fidelity, and preflight refuses an M2 run without it because a budget that does not bind would make A4 equivalent to A1 and A7 to A5. The distinction is defensible and should be stated plainly in §3.5.3 and §3.6 rather than left implicit — a reader who finds an ordering dependency undisclosed will assume the worse reading.]
 
-The same index rule can facilitate comparison with prior work, but matching the phrase “every eighth frame” does not establish pixel-for-pixel comparability with a published result. That stronger claim would require verifying the source method's exact filenames, image version, undistortion, resolution, crop, color processing, and metric conventions. Accordingly, external published scores are contextual references until those conditions are checked; the controlled comparisons in this study are among configurations evaluated through the same local harness.
+The same index rule can facilitate comparison with prior work. The *frame selection* is on firmer ground than a phrase match: as shown above, the executed partition is identical to the dataset's canonical named split on all four scenes, so the held-out frames are the frames the dataset itself designates. That still does not establish pixel-for-pixel comparability with a published result. That stronger claim would require verifying the source method's exact filenames, image version, undistortion, resolution, crop, color processing, and metric conventions. Accordingly, external published scores are contextual references until those conditions are checked; the controlled comparisons in this study are among configurations evaluated through the same local harness.
 
 ### 3.3.3 Camera and initialization inputs
 
@@ -205,13 +205,37 @@ A0, A2, A3, and A6 use the prepared sparse point cloud as their initial Gaussian
 
 The four scenes and 13 held-out views define the observed evaluation domain. Three run repeats per cell and scene describe training variation under this domain; they do not add new independent scenes. The design can compare configurations on the same captured views, but it cannot by itself establish transfer to other cameras, water bodies, lighting conditions, or scene distributions. It also cannot validate medium coefficients as physical measurements unless independent ground truth or an adequate calibration procedure exists. These limits govern the analysis in Section 3.8.
 
-### Editorial verification queue for Section 3.3 (outside thesis prose)
+### Editorial verification status for Section 3.3 (outside thesis prose)
 
-1. Verify the final manifest's `eval`, split sizes, image directory, camera restrictions, and scene spelling for all compared runs.
-2. Extract exact held-out filenames from the resolved camera list, especially if undistortion changes the image set or ordering.
-3. Confirm whether M1's offline matcher excluded all held-out images by inspecting dense-cloud sidecars and generation code.
-4. Check dataset license and image credit before selecting the four Figure 3.3 panels.
-5. Avoid claiming identical evaluation pixels with published methods until preprocessing and metric conventions are verified for each method.
+1. **Partly verified.** `eval` is `true` in the `defaults` block of `cells.json`, so the split
+   is active for every cell, and the realised held-out sizes are confirmed at 3/4/3/3 from the
+   campaign's own per-view evaluation records. **Still open:** image directory, any camera
+   range or subsampling arguments, and scene spelling must be read from the resolved per-run
+   manifests; the configuration file's defaults do not prove what each run received.
+2. **Resolved.** The held-out filenames are recovered from the campaign's evaluation records,
+   which is stronger evidence than re-deriving them from the reader: Curasao `MTN_1288`,
+   `MTN_1296`, `MTN_1304`; IUI3-RedSea `MTN_5894`, `MTN_5903`, `MTN_5911`, `MTN_5928`;
+   JapaneseGradens-RedSea `MTN_1090`, `MTN_1098`, `MTN_1106`; Panama `MTN_1529`, `MTN_1539`,
+   `MTN_1547`. Their filename numbers are not uniformly spaced, which confirms the rule acts on
+   sorted index rather than on the number in the name.
+3. **Resolved from the generation code; no sidecar needed.** `implementation/source/roma_init.py`
+   loads the scene with the evaluation split enabled, takes `info.train_cameras` only, and
+   prints the count of held-out views “held out and NOT used”. Its module docstring states the
+   reason in the same terms this chapter uses: a leak through initialization “no metric would
+   reveal, since the leaked information arrives as geometry rather than as supervision”. The
+   same file confirms `K_ref = min(num_refs, V)` against an upstream default of 180.
+   **Remaining:** the sidecar hashes tabulated in §3.4 still cannot be checked here, because the
+   sidecars are not in this repository.
+4. **Open — not resolvable from the repository.** Dataset license and image credit must be
+   confirmed from the SeaThru-NeRF distribution before the four Figure 3.3 panels are selected.
+5. **Refined.** The caution stands for *pixels* and should be kept. But the frame *selection* is
+   now established rather than assumed: the executed partition is identical to the dataset's
+   canonical named split on all four scenes (§3.3.2). State that, and confine the caveat to
+   preprocessing, resolution, colour handling and metric conventions, which remain unverified
+   for any published comparator.
+6. **Verified — §3.3.3's normalisation claim is exact.** `getNerfppNorm` is called with
+   `train_cam_infos`, and computes `radius = diagonal * 1.1` where the diagonal is the maximum
+   distance from the mean camera centre. Training cameras only, as stated.
 
 ## 3.4 Data preprocessing
 
