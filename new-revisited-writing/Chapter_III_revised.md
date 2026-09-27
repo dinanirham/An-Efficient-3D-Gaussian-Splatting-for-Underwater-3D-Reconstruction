@@ -246,9 +246,9 @@ The preprocessing stage makes the supplied COLMAP scenes compatible with the Gau
 | Operation | Input and output | Implemented check or record | Used by |
 |---|---|---|---|
 | Camera undistortion | Original white-balanced images and OPENCV COLMAP reconstruction to undistorted images and pinhole reconstruction | `undistort.json` records camera models and input/output image counts; startup checks accept only `PINHOLE` or `SIMPLE_PINHOLE` | Every configuration |
-| View partition | Image-name-sorted cameras to training and held-out lists | Loader uses index modulo eight when `eval` is enabled; run configuration records resolved partition sizes [VERIFY PER-RUN RECORD] | Training, evaluation, and M1 cloud generation |
+| View partition | Image-name-sorted cameras to training and held-out lists | Loader uses index modulo eight when `eval` is enabled; run configuration records resolved partition sizes [per-run manifest check still required; the realised held-out sizes 3/4/3/3 are confirmed from the evaluation records] | Training, evaluation, and M1 cloud generation |
 | Sparse cloud loading | COLMAP `points3D` to initial Gaussian point cloud | Reader loads `sparse/0/points3D.ply`, converting the binary or text points if needed | Configurations without M1 |
-| Dense cloud generation | Undistorted training views and cameras to colored `.ply` and metadata sidecar | Sidecar records matching settings, exclusion count, filtering, point count, elapsed time, and cloud hash [VERIFY FINAL SIDECARS] | A1, A4, A5, A7 |
+| Dense cloud generation | Undistorted training views and cameras to colored `.ply` and metadata sidecar | Sidecar records matching settings, exclusion count, filtering, point count, elapsed time, and cloud hash [sidecar values transcribed in Table 3.7; the point counts are corroborated against the per-run records, the hashes are not] | A1, A4, A5, A7 |
 
 ### 3.4.1 Camera rectification and scene layout
 
@@ -266,7 +266,7 @@ For configurations without M1, the reader loads the sparse COLMAP point cloud fr
 
 The M1 preprocessing path runs `source/roma_init.py` once for each scene used by M1. It loads the same prepared COLMAP scene with evaluation mode active and selects only training cameras as candidate references and neighbors. It caps the number of reference cameras at the available training-view count. For each reference, a pretrained RoMa matcher generates dense correspondences with nearby cameras; the script selects the most confident neighbor for each sampled reference pixel and triangulates candidate 3D points. It colors surviving points from the reference image. This is an adaptation of correspondence-based initialization, not a claim that the complete EDGS training method was reproduced (Kotovenko et al., 2026; Edstedt et al., 2024).
 
-Candidate points are retained only when their maximum two-view reprojection error is below the configured pixel threshold, they lie in front of both cameras, and their triangulation angle reaches the configured minimum. The four final cloud sidecars record thresholds of 8 pixels and 1 degree. The latter two tests matter in this forward-view setting because a small reprojection error alone does not guarantee a well-conditioned depth estimate. This is a geometric rationale for the filter, not evidence that all surviving points are physically correct. The script exposes two sampling presets and several matcher overrides. All four inspected sidecars record the `dense` preset: 20,000 sampled matches per reference, three candidate neighbors per reference, certainty threshold 0.02, RoMa `outdoor` model, and seed 0. The resulting retained point counts are given in Table 3.7. The sidecars also record `fused_local_corr: false` and an unavailable `local_corr` module; the exact matcher weight release still needs verification. The recorded settings and counts describe the archived assets, while cross-run consumption requires a separate manifest check.
+Candidate points are retained only when their maximum two-view reprojection error is below the configured pixel threshold, they lie in front of both cameras, and their triangulation angle reaches the configured minimum. The four final cloud sidecars record thresholds of 8 pixels and 1 degree. The latter two tests matter in this forward-view setting because a small reprojection error alone does not guarantee a well-conditioned depth estimate. This is a geometric rationale for the filter, not evidence that all surviving points are physically correct. The script exposes two sampling presets and several matcher overrides. All four inspected sidecars record the `dense` preset, and every one of its values is confirmed against `PRESETS` in `source/roma_init.py`: 20,000 sampled matches per reference, three candidate neighbors per reference, certainty threshold 0.02, RoMa `outdoor` model, and seed 0. The reprojection tolerance of 8 pixels and the minimum parallax of 1 degree are the script's defaults, and the reference cap resolves as `min(180, V)`. **The choice of `dense` over the alternative `sparse` preset was forced by the design rather than preferred for quality.** The script records that `matches_per_ref` “is the dial that decides whether the A2 budget can bind on the A1-derived cells: with densification disabled the primitive count can never grow, so if the cloud comes in below the budget then A4 collapses onto A1 and A7 onto A5”. The `sparse` preset samples 5,000 matches per reference. This is the same degeneracy constraint that governs the M2 budget (§3.5.3), and the chapter should present the two as one design requirement rather than as two unrelated settings. The resulting retained point counts are given in Table 3.7. The sidecars also record `fused_local_corr: false` and an unavailable `local_corr` module; the exact matcher weight release still needs verification. The recorded settings and counts describe the archived assets, while cross-run consumption requires a separate manifest check.
 
 The generation script seeds the matcher-related random generators and writes the resulting `.ply` with a metadata sidecar. The recorded fields include requested and realized reference count, training and excluded held-out view counts, sampling and filtering parameters, rejection counts, wall time, and the correlation implementation used by the matcher. The cloud hash is intended to link subsequent training runs to the exact initialization asset. Verify that the run manifest's cloud hash equals the sidecar and file hash before claiming identical initialization across repeats. Offline matching and triangulation time are measured separately from training wall time; a total cost comparison involving M1 should identify whether this one-time preprocessing expense is included, amortized, or reported separately.
 
@@ -313,20 +313,47 @@ Table 3.7 reports the prepared scene files and dense-cloud sidecars in Drive. Ea
 
 | Scene | Original and rectified camera model | Images in/out | Train/test filenames or manifest | Sparse points | M1 cloud points | Cloud SHA-256 | Matcher preset and seed | Preprocessing time |
 |---|---|---|---|---:|---:|---|---|---:|
-| Curasao | `OPENCV` → `PINHOLE` | 21/21 | 18/3 in cloud sidecar; filenames [VERIFY] | 25,837 | 292,707 | `efbdba479fca00121953b76cdcb9f8814e245f92bdb689bb14b47cbcf9527477` | `dense`, seed 0 | 52.8 s |
-| IUI3-RedSea | `OPENCV` → `PINHOLE` | 29/29 | 25/4 in cloud sidecar; filenames [VERIFY] | 21,907 | 288,609 | `bfc24d317217be7a5e37c85cd3c73c9186d8b8ec1f80da36a93d0b7288c438bd` | `dense`, seed 0 | 48.2 s |
-| JapaneseGradens-RedSea | `OPENCV` → `PINHOLE` | 20/20 | 17/3 in cloud sidecar; filenames [VERIFY] | 21,140 | 293,642 | `e9f3655dcca2b0f8e18dc66c48418525df35bc9ab721b2d5a98cc088a2b349d8` | `dense`, seed 0 | 35.1 s |
-| Panama | `OPENCV` → `PINHOLE` | 18/18 | 15/3 in cloud sidecar; filenames [VERIFY] | 22,501 | 244,197 | `2c84d9baff0a3784a23792f318a8953c538694ca87faa73b25021ffdf2387788` | `dense`, seed 0 | 38.2 s |
+| Curasao | `OPENCV` → `PINHOLE` | 21/21 | 18/3 in cloud sidecar; filenames established (§3.3) | 25,837 | 292,707 | `efbdba479fca00121953b76cdcb9f8814e245f92bdb689bb14b47cbcf9527477` | `dense`, seed 0 | 52.8 s |
+| IUI3-RedSea | `OPENCV` → `PINHOLE` | 29/29 | 25/4 in cloud sidecar; filenames established (§3.3) | 21,907 | 288,609 | `bfc24d317217be7a5e37c85cd3c73c9186d8b8ec1f80da36a93d0b7288c438bd` | `dense`, seed 0 | 48.2 s |
+| JapaneseGradens-RedSea | `OPENCV` → `PINHOLE` | 20/20 | 17/3 in cloud sidecar; filenames established (§3.3) | 21,140 | 293,642 | `e9f3655dcca2b0f8e18dc66c48418525df35bc9ab721b2d5a98cc088a2b349d8` | `dense`, seed 0 | 35.1 s |
+| Panama | `OPENCV` → `PINHOLE` | 18/18 | 15/3 in cloud sidecar; filenames established (§3.3) | 22,501 | 244,197 | `2c84d9baff0a3784a23792f318a8953c538694ca87faa73b25021ffdf2387788` | `dense`, seed 0 | 38.2 s |
 
-*The sparse counts come from `dataset/undistorted/<scene>/sparse/0/points3D.ply` headers; the dense counts, seeds, hashes, and times come from `dense/<scene>.json`. Hashes are recorded sidecar values pending independent file-byte verification. The sidecar's training/test numbers give split sizes, not an archived filename manifest. Preprocessing times exclude subsequent model training.*
+*The sparse counts come from `dataset/undistorted/<scene>/sparse/0/points3D.ply` headers; the dense counts, seeds, hashes, and times come from `dense/<scene>.json`. **Both count columns are independently corroborated by the campaign's per-run records:** the sparse figures equal the initial primitive count recorded for every A0 run of each scene, and the dense figures equal the initial count recorded for every A1 run — 25,837/21,907/21,140/22,501 and 292,707/288,609/293,642/244,197 respectively, so the clouds named here are demonstrably the clouds the campaign consumed. The sidecar's training/test numbers give split sizes rather than a filename manifest, but the filenames themselves are established in §3.3 from the evaluation records and the reader's canonical partition, and the two agree. Hashes remain recorded sidecar values pending independent file-byte verification. Preprocessing times exclude subsequent model training.*
 
-### Editorial verification queue for Section 3.4 (outside thesis prose)
+### Editorial verification status for Section 3.4 (outside thesis prose)
 
-1. Check the undistortion logs, if available, for warnings; the four `undistort.json` records already show matching input and output counts, but do not establish pixel-level equality after rectification.
-2. Recompute the four dense PLY hashes and compare sidecar hashes with `run_config.json` for every M1 run in each scene.
-3. Identify the exact matcher model release or weight file and any unrecorded command-line overrides; the preset and correlation fallback are recorded in the sidecars.
-4. Verify that held-out filenames are absent from the matcher input list and that no earlier dense cloud was substituted after the parallax-filter change.
-5. Confirm preprocessing time boundaries before making any end-to-end efficiency claim about M1.
+1. **Open — unchanged.** Undistortion logs still need checking for warnings. The four
+   `undistort.json` records show matching input and output counts, which does not establish
+   pixel-level equality after rectification, and the utility does not abort on a count
+   mismatch warning — so absence of an exception is not evidence.
+2. **Partly resolved.** The dense PLY hashes still require independent recomputation and
+   comparison against each M1 run's manifest. **But the substantive question those hashes
+   answer is already settled by a different route:** the dense point counts in Table 3.7
+   equal the initial primitive count recorded for every A1 run of the corresponding scene,
+   and the sparse counts equal every A0 run's. The clouds tabulated are therefore
+   demonstrably the clouds the campaign consumed. The hash check now confirms byte identity
+   across repeats rather than establishing which asset was used.
+3. **Partly resolved.** The preset and every one of its values are confirmed against
+   `PRESETS` in `source/roma_init.py`, as are the 8-pixel reprojection tolerance, the
+   1-degree parallax minimum, and the `min(180, V)` reference cap. **Still open:** the exact
+   RoMa weight release, and whether any command-line override was applied that the sidecar
+   does not record.
+4. **Resolved for the exclusion; open for the substitution.** Held-out filenames cannot enter
+   the matcher input: `roma_init.py` loads the scene with the evaluation split active and
+   takes `info.train_cameras` only, printing the held-out count as not used (§3.3, item 3).
+   **Still open:** whether an earlier dense cloud was substituted after the parallax filter
+   changed — that is a question about asset history, which the hash comparison in item 2
+   would answer.
+5. **Open — and now more pointed.** Preprocessing time is recorded per scene at 35.1 to 52.8
+   seconds and is excluded from training wall time. Any end-to-end efficiency claim for M1
+   must state whether that one-time cost is included, amortised across the three repeats that
+   share the cloud, or reported separately. Chapter IV currently reports M1's training-time
+   saving without reference to it; decide the convention once and apply it in both chapters.
+6. **New — record the preset's rationale.** The `dense` preset was required by the factorial
+   design, not chosen for reconstruction quality: `sparse` samples 5,000 matches per reference
+   and would risk a cloud below the M2 budget, collapsing A4 onto A1 and A7 onto A5. This is
+   the same constraint that governs `n_bud` (§3.3). Presenting them together strengthens the
+   design account; leaving them apart makes both look like arbitrary settings.
 
 ## 3.5 Baseline and efficiency mechanisms
 
