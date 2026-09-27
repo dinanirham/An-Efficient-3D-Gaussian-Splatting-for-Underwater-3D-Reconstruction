@@ -729,22 +729,72 @@ For a second description of spatial concentration, the code partitions each clou
 
 The script scans `runs/<cell>/<scene>/s<repeat>/point_cloud/iteration_*/point_cloud.ply` and uses the last path found for each run. The campaign storage policy describes saving PLYs for seed 0 only unless an override was enabled. Accordingly, `spatial_extent.csv` may provide one model per cell and scene, while fidelity and other outcomes have three repeats. The observed coverage, selected iteration, and file identity must be checked before reporting a spatial comparison or treating its apparent pattern as repeat-stable. The final analysis must not fill absent seeds with values inferred from the other two repeats or from compressed-model counts.
 
-**Table 3.13. Diagnostic availability matrix [TO POPULATE].**
+**Table 3.13. Diagnostic availability, resolved from the archived analysis artifacts.**
 
-| Configuration group | Run-level fidelity | Population trajectory | Medium coefficient trajectory | Cross-view depth sweep | Serialized artifact | Render profile | Geometry/restoration checks |
-|---|---|---|---|---|---|---|---|
-| SS | [VERIFY] | [VERIFY] | Terminal state only [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] |
-| A0, A1, A3, A5, A0D | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | [VERIFY] | Final PLY where saved, likely seed 0 only [VERIFY] |
-| A2, A4, A6, A7 | [VERIFY] | [VERIFY] | [VERIFY] | Event sweeps [VERIFY] | [VERIFY] | [VERIFY] | Final PLY where saved, likely seed 0 only [VERIFY] |
+| Configuration group | Run-level fidelity | Population trajectory | Medium coefficient trajectory | Cross-view depth sweep | Serialized artifact | Render profile | Geometry | Restoration check |
+|---|---|---|---|---|---|---|---|---|
+| **SS** (12 runs) | 3 repeats, all 12 | Initial and final only; the 10,000- and 15,000-iteration anchors are blank | **Terminal state only** — one logged row per run, as the draft anticipated | **Not recorded** — both final depth extremes blank | **Not recorded** — all four storage fields blank | 3 repeats, all 12 | **All three seeds, 12 rows — the only configuration with repeat coverage on geometry** | n/a (no M3) |
+| **A0, A1, A3, A5, A0D** (60 runs) | 3 repeats | All four anchors, every run | Full trajectory, 60 logged rows per run | Periodic sweep; final extremes recorded | 3 repeats | 3 repeats | Seed 0 only, 4 rows per cell | A3 and A5 only: seed 0, 4 runs each |
+| **A2, A4, A6, A7** (48 runs) | 3 repeats | All four anchors, every run | Full trajectory, **62** logged rows per run | **Event sweeps at both M2 events** — the two extra rows are exactly this | 3 repeats | 3 repeats | Seed 0 only, 4 rows per cell | A6 and A7 only: seed 0, 4 runs each |
 
-### Editorial verification queue for Section 3.7 (outside thesis prose)
+*Sources: `results_runs.csv` for fidelity, population, storage, render profile and final
+depth extremes; `medium_collapse.json` for trajectory coverage and logged-row counts;
+`spatial_extent.csv` for geometry; `j_consistency.json` for the restoration check.
+**Two findings correct assumptions in the draft.** First, the seed-0 storage policy applies to
+the nine refactored cells and *not* to SS: `spatial_extent.csv` holds 48 rows, of which SS
+contributes twelve across all three seeds and each refactored cell contributes four at seed 0.
+On geometry, SS is therefore the best-covered configuration rather than the thinnest. Second,
+`j_consistency.json` contains 48 entries but only 16 carry measurements; the other 32 record
+`skipped: no PLY -- seed>0 keeps only the compressed store`, so the restoration check is seed 0
+only and the file documents why rather than omitting the runs. The 62-versus-60 logged-row
+difference falls exactly on M2 presence, which identifies the two additional rows as the
+event sweeps.*
 
-1. Check the exact disk reread, image scaling, SSIM implementation, LPIPS backbone, and final-checkpoint selection against each `eval_metrics.json` and the evaluation call site.
-2. Reconcile model-size totals with the actual saved files, including whether any point-cloud and medium files sit outside the counted artifact directory.
-3. Verify warm-up, timed pass count, CUDA synchronization, hardware, resolution, and profiler failure notes in run cost records.
-4. Populate Table 3.13 by scene, configuration, checkpoint, and repeat rather than assuming group-wide coverage from the logger's code.
-5. Treat absent depth sweeps and SS trajectories as missing measurements; do not turn operational collapse flags into physical-ground-truth labels.
-6. Inspect every row of `spatial_extent.csv` against a final PLY and its iteration. Identify omitted cells and repeat IDs; distinguish center-only extent, the approximate footprint extent, and opacity-filtered statistics in Chapter IV.
+### Editorial verification status for Section 3.7 (outside thesis prose)
+
+1. **Open.** The LPIPS backbone is recorded per run in `results_runs.csv` as a dedicated
+   field, so the convention is at least captured rather than assumed. The disk reread, image
+   scaling, SSIM window implementation and final-checkpoint selection still require the
+   evaluation call site and a sample `eval_metrics.json`.
+2. **Open for reconciliation, but one sub-claim is now settled and it is not what it looked
+   like.** Storage is recorded as `total_bytes`, `total_mb` and `bytes_per_primitive` for all
+   108 refactored runs and not at all for SS. Reconciling totals against the saved files still
+   needs the run directories. **`bytes_per_primitive` is not constant**: it varies per run, and
+   systematically across cells — 56.00 for the six unquantised cells, but 20.57 for A3 against
+   21.25, 21.68 and 21.86 for A5, A6 and A7. The figure is therefore a file-level measurement,
+   not an analytical constant, and §3.7 should describe it as measured. **The cell-to-cell
+   pattern has a structural cause and is worth reporting rather than smoothing away.** Three
+   codebooks of 4,096 entries over ten quantised floats cost a fixed 163,840 bytes regardless
+   of population, so the per-primitive share of that cost grows as the population shrinks.
+   Fitting that model to A3's mean and predicting the other three reproduces them to within
+   0.02 B per primitive: A5 predicted 21.240 against 21.252 observed, A6 21.661 against 21.678,
+   A7 21.839 against 21.861. **Consequence for Chapter IV:** §4.5.2's figure of 20.6 bytes per
+   primitive is correct as scoped, since it reports the M3-alone cell, but M3's per-primitive
+   compression degrades measurably once M1 or M2 has reduced the population, and §4.6.3 and
+   §4.6.6 currently do not say so. This is a quantified storage-axis interaction that the
+   chapter's count-axis interaction analysis does not capture.
+3. **Open.** Warm-up, timed pass count and synchronisation are not in the collected table.
+   `render_frames_timed` and `render_ms_per_frame_cv` are, so the sample size and stability of
+   each rate measurement are recoverable, which is the part that matters most for a rate claim.
+4. **Resolved — Table 3.13 is populated from the artifacts, not inferred from logger code.**
+   Coverage is uniform within each of the three groups, so a group-wise table is adequate; the
+   asymmetries that matter are between groups and are now stated.
+5. **Resolved in principle, with one correction.** Absent depth sweeps and SS trajectories are
+   recorded as missing rather than zero. **But the draft's assumption about SS is wrong in one
+   direction:** SS is missing storage, depth extremes, mid-run population anchors and the
+   coefficient trajectory, and yet is the *only* configuration with three-seed geometry. The
+   collapse-flag caution stands unchanged and is correct.
+6. **Substantially resolved.** Every row of `spatial_extent.csv` is accounted for: 48 rows, of
+   which SS holds twelve across three seeds and each of the nine refactored cells holds four at
+   seed 0. No cell is omitted. **Still open:** confirming each row against its source PLY and
+   the iteration selected, since the script takes the last matching path. The instruction to
+   keep centre-only extent, footprint extent and opacity-filtered statistics distinct in
+   Chapter IV stands and should be carried to §4.2.6.
+7. **New — the restoration check's coverage is documented in its own file.**
+   `j_consistency.json` holds 48 entries of which 16 carry measurements; the remaining 32 record
+   `skipped: no PLY -- seed>0 keeps only the compressed store`. Cite that string when §3.7 or
+   Chapter IV states the n = 1 limitation, since it establishes the cause as the storage policy
+   rather than a failed measurement.
 
 ## 3.8 Analysis procedure and validity boundaries
 
