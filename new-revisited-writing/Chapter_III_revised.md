@@ -370,18 +370,27 @@ $$
 
 where $\hat{I}$ is the composed image compared with the capture, $\hat{Z}$ is rendered and normalized depth, $A$ is direct-signal attenuation, and $B$ is modeled backscatter. The two coefficient groups are distinct. This equation gives the dependency structure; the exact activation, clamping, per-channel operations, and normalization order must follow `implementation/train.py` and `deepseecolor/models.py` in the final mathematical specification. Do not treat the fitted coefficients as calibrated physical attenuation without independent validation.
 
-Training begins with a geometry-only regime and switches to medium-aware composition after the configured threshold. The code enables `do_seathru` and sets `seathru_from_iter` to 10,000 in the shared cell configuration; the training loop checks `iteration > seathru_from_iter`. The total objective combines image reconstruction with depth, backscatter, color, saturation, opacity, and smoothness terms from the refactored SeaSplat training path. Its exact active terms and coefficients are configuration-dependent and will be stated in a verified loss table rather than copied uncritically from an earlier method note. All three primary mechanisms retain this baseline objective in the intended factorial design; M3 changes the attributes used during the forward render, and D changes a density-control gradient route. [VERIFY AGAINST RUN MANIFESTS AND `train.py`: every active coefficient and conditional branch.]
+Training begins with a geometry-only regime and switches to medium-aware composition after the configured threshold. The code enables `do_seathru` and sets `seathru_from_iter` to 10,000 in the shared cell configuration; the training loop checks `iteration > seathru_from_iter`. The total objective combines image reconstruction with depth, backscatter, color, saturation, opacity, and smoothness terms from the refactored SeaSplat training path. Its exact active terms and coefficients are configuration-dependent and will be stated in a verified loss table rather than copied uncritically from an earlier method note. All three primary mechanisms retain this baseline objective in the intended factorial design; M3 changes the attributes used during the forward render, and D changes a density-control gradient route. [SUBSTANTIALLY RESOLVED FROM `train.py` AND `arguments/__init__.py`; per-run overrides still to confirm. The active terms at code defaults are: L1 with D-SSIM at `lambda_dssim = 0.2`; dark-channel prior (`use_dcp_loss` true, weight 1.0); depth smoothness (true, weight 2.0); grey-world prior (true, weight 0.1, from iteration 10,000); RGB saturation (true, weight 2.0); and background-alpha (weight 0.01). Inactive at defaults, and therefore contributing nothing unless a run overrode them: depth L1, alpha smoothness, B∞, DeepSeeColor attenuation, RGB spatial variation, and the opacity prior. The attenuation model resolves to `use_at_v3`, the simplest variant. **One trap is worth stating in prose:** `seathru_from_iter` defaults to 9,000,000 in the code — past the end of training — and is overridden to 10,000 only by `cells.json`, whose own note records that the upstream defaults would otherwise make every cell a study of plain 3DGS. The same is true of `do_seathru` and `eval`. Remaining: confirm no per-run command line overrode a loss flag, by reading the resolved `run_config.json` rather than the configuration file.]
 
-**Table 3.8. Baseline rendering and optimization specification [TO COMPLETE FROM EXECUTED CONFIGURATION].**
+**Table 3.8. Baseline rendering and optimization specification, resolved from the executed configuration.**
 
-| Component | Implemented choice to document | Evidence anchor |
+| Component | Resolved value | Evidence anchor |
 |---|---|---|
-| Primitive attributes | Position, scale, rotation, opacity, zero-order color | `scene/gaussian_model.py`; resolved `sh_degree` |
-| Color and depth rendering | Color pass, depth/opacity handling, per-view normalization | `gaussian_renderer`; `train.py`; `utils/depth_stats.py` |
-| Medium formation | Attenuation, backscatter, channel constraints, scene-level parameters | `deepseecolor/models.py`; `train.py` |
-| Reconstruction and auxiliary losses | Active term, weight, activation phase, gradient destination | `train.py`; resolved options in `run_config.json` |
-| Density control | Densification, pruning, opacity reset, optimization schedule | `train.py`; resolved options |
-| Model outputs | Final checkpoint or point cloud, medium parameters, quantized artifact where applicable | Saved run directory and evaluation record |
+| Primitive attributes | Position (3), scale (3), rotation (4), opacity (1), zero-order colour (3) = 14 floats at `sh_degree = 0` | `scene/gaussian_model.py`; resolved `sh_degree` |
+| Colour and depth rendering | Separate depth pass; depth accumulation divided by accumulated opacity on covered pixels; normalised per view | `gaussian_renderer`; `train.py`; `utils/depth_stats.py` |
+| Medium formation | Distinct attenuation and backscatter coefficient groups acting on normalised depth; nine scene-global scalars; attenuation variant `use_at_v3` (simplest); σ activation on B∞; the β–depth product clamped at zero | `deepseecolor/models.py`; `train.py`; `tools/analyse.py` |
+| Medium activation | `do_seathru` true; `seathru_from_iter` = 10 000 via `cells.json`, against a code default of 9 000 000; gate is `iteration > seathru_from_iter` | `configs/cells.json`; `train.py` |
+| Reconstruction loss | L1 with D-SSIM, `lambda_dssim = 0.2` | `train.py` L402 |
+| Auxiliary losses **active** | Dark-channel prior (1.0); depth smoothness (2.0); grey-world prior (0.1, from iteration 10 000); RGB saturation (2.0); background alpha (0.01) | `train.py`; `arguments/__init__.py` |
+| Auxiliary losses **inactive at default** | Depth L1; alpha smoothness; B∞; DeepSeeColor attenuation; RGB spatial variation; opacity prior — each gated on a `use_*` flag that is `False` | `arguments/__init__.py` |
+| Density control | Densification from iteration 500; disabled entirely under M1, which retains alpha-pruning and opacity reset | `train.py`; `configs/cells.json` |
+| Model outputs | Final point cloud, nine medium scalars, per-run evaluation record, diagnostics at 500-iteration interval, quantised artifact for M3 cells | Saved run directory and evaluation record |
+
+*Values are the executed configuration: code defaults as overridden by
+`implementation/configs/cells.json`. The resolution order is code defaults <
+`cells.json` < command line, so a per-run `run_config.json` check is still required to
+exclude a command-line override on any row. No loss flag is set in `cells.json`, so the
+loss rows rest on code defaults alone.*
 
 ### 3.5.2 M1: dense correspondence initialization
 
@@ -444,13 +453,13 @@ Output: pruned Gaussian set G and aligned optimizer state
 
 ### 3.5.4 M3: in-training attribute quantization
 
-M3 applies vector quantization to three raw Gaussian parameter groups: direct-current color, scale, and rotation. `source/quantize.py` constructs a codebook for each group, assigns a codeword index per primitive, and exposes a straight-through quantized value to the forward render while retaining trainable underlying parameters. Scale is quantized before its exponential activation and rotation before normalization. Position and opacity stay unquantized. The baseline uses spherical-harmonic degree zero, so it has no higher-order coefficients to place in a corresponding codebook. This intervention is a restricted adaptation of the source vector-quantization approach, not the source method's full compression system (Navaneet et al., 2024). [VERIFY ALIGNMENT WITH CURRENT CHAPTER II REFERENCE LIST.]
+M3 applies vector quantization to three raw Gaussian parameter groups: direct-current color, scale, and rotation. `source/quantize.py` constructs a codebook for each group, assigns a codeword index per primitive, and exposes a straight-through quantized value to the forward render while retaining trainable underlying parameters. Scale is quantized before its exponential activation and rotation before normalization. Position and opacity stay unquantized. The baseline uses spherical-harmonic degree zero, so it has no higher-order coefficients to place in a corresponding codebook. This intervention is a restricted adaptation of the source vector-quantization approach, not the source method's full compression system (Navaneet et al., 2024). [Navaneet et al. (2024) matches the repository reference register; no action beyond the register-wide PDF verification noted in §3.1.]
 
 The configured activation gate is at iteration 22,000, after both M2 events. The shared configuration specifies 4,096 codewords per group, assignment refresh every 100 iterations, and one codebook-update iteration. The inspected training loop activates M3 when `iteration > kmeans_st_iter`; its exact first active optimizer step should be reported using that inequality rather than describing 22,000 as an active quantized iteration. On a simplification event, assignment vectors must remain aligned with surviving primitives and are invalidated for reassignment. Because M2's scheduled events precede M3 activation in this configuration, that integration guard primarily prevents a future schedule change from producing stale assignments.
 
-At zero-order color, the 14-float baseline has ten scalars in the three quantized groups and four unquantized position/opacity scalars. The `storage_report` calculates index and codebook bits together with the four-float remainder. This analytical bit count is distinct from the actual serialized artifact size, which also depends on file encoding, headers, and any additional stored state. Section 3.7 measures both with separate names and denominators. The source opacity regularizer is not introduced as an M3-specific loss in this factorial design; verify its resolved weight is zero across M3 cells before claiming that only the attribute encoding changed.
+At zero-order color, the 14-float baseline has ten scalars in the three quantized groups and four unquantized position/opacity scalars. The `storage_report` calculates index and codebook bits together with the four-float remainder. This analytical bit count is distinct from the actual serialized artifact size, which also depends on file encoding, headers, and any additional stored state. Section 3.7 measures both with separate names and denominators. The source opacity regularizer is not introduced as an M3-specific loss in this factorial design, and the check is stronger than a zero weight: `use_opacity_prior` is `False` at code default and `train.py` gates the term on that flag, so the regulariser never enters the objective at all. The claim that only the attribute encoding changes is therefore supportable, subject to confirming that no per-run command line set the flag true.
 
-The trained model contains continuous underlying attributes and the codebook assignments used by the quantized forward path. Evaluation or restoration checks of M3 must apply the saved codebook state before rendering; reading a saved point cloud's continuous attributes alone does not reconstruct the quantized state used during training. The final protocol should identify the artifact, loader, and state-switch used for each reported image and metric, with a same-checkpoint consistency check before comparing continuous and quantized renderings. [VERIFY AGAINST FINAL EVALUATION AND RELOAD CODE.]
+The trained model contains continuous underlying attributes and the codebook assignments used by the quantized forward path. Evaluation or restoration checks of M3 must apply the saved codebook state before rendering; reading a saved point cloud's continuous attributes alone does not reconstruct the quantized state used during training. The final protocol should identify the artifact, loader, and state-switch used for each reported image and metric, with a same-checkpoint consistency check before comparing continuous and quantized renderings. **This is not a hypothetical risk and the check has already caught it once.** An earlier version of the Chapter IV asset collector rendered quantised configurations from their stored continuous parameters — the state the campaign never evaluated — and reported a fidelity figure several decibels below the recorded one. The collector now applies the codebook state explicitly and recomputes each run's mean fidelity against the metrics that run wrote during the campaign, reporting a disagreement beyond tolerance as a failure that blocks use of the recomputed values; all forty covered runs pass. Describe that check as part of the protocol rather than leaving the reload as an assumption.
 
 **Algorithm 3.4. M3 attribute substitution during training.**
 
@@ -520,13 +529,38 @@ The implementation register should additionally record the rasterizer and gradie
 
 This table states the implementation's scope, not equivalence with any full published method. Exact causal attribution remains conditional on matched settings, realized events, checkpoint lineage, and measurement coverage described in Sections 3.6 to 3.8.
 
-### Editorial verification queue for Section 3.5 (outside thesis prose)
+### Editorial verification status for Section 3.5 (outside thesis prose)
 
-1. Resolve all source-method author, year, and venue entries against the locked Chapter II papers, including the quantization source.
-2. Extract the active loss branches, coefficients, gradient detach points, and medium-model activations from the recorded code and per-run configuration before finalizing Table 3.8 or a full equation.
-3. Verify the M1 opacity schedule, M2 achieved counts and event timing, M3 first active iteration, codebook settings, and final storage decoder from each applicable run.
-4. Compare the effective optimizer-step totals and medium-only continuation in Figure 3.5 with the per-run `eval_metrics.json` cost records.
-5. Confirm that `m2_lr_rewind` is false and any M3-only opacity regularizer is disabled in the executed manifests; the earlier combined-method notes contain superseded prospective paths.
+1. **Open — register-wide, not specific to this section.** All four source-method entries
+   match the repository register; the outstanding work is the PDF check of author, year and
+   venue recorded in §3.1, of which the SeaSplat year is the one live disagreement.
+2. **Resolved for Table 3.8; one check remains.** The active loss set, the weights, the
+   activation gates and the attenuation variant are extracted and tabulated. The remaining
+   check is narrow: confirm from a resolved `run_config.json` that no command line overrode a
+   `use_*` flag, since `cells.json` sets none of them.
+3. **Partly resolved.** M3's first active iteration is settled — the gate is
+   `iteration > kmeans_st_iter` with `kmeans_st_iter = 22 000`, so quantisation is first
+   active at 22 001, and the codebook settings (4,096 codewords, refresh every 100 iterations,
+   one update iteration) are confirmed in `cells.json`. `GROUPS = ("dc", "scale", "rotation")`
+   in `source/quantize.py` confirms three groups, and the straight-through substitution is the
+   standard `param - param.detach() + sampled` form. **Still open:** the M1 opacity schedule as
+   executed, M2's achieved per-run counts and realised event timing, and the storage decoder.
+4. **Open.** The effective optimizer-step totals printed in Figure 3.5 — 43 000, and 43 400
+   with M2's two bursts — are consistent with the campaign's own accounting, but should still
+   be checked against the per-run cost records rather than against a derived summary.
+5. **Resolved for the regulariser; open for `m2_lr_rewind`.** The opacity regulariser is not
+   merely zero-weighted: `use_opacity_prior` is `False` and `train.py` gates the term on it, so
+   it never enters the objective. `m2_lr_rewind` is `false` in `cells.json`'s `defaults`, which
+   settles the configured value; confirm no per-run override.
+6. **New — state the defaults trap in prose.** `seathru_from_iter` defaults to 9 000 000 in
+   the code, past the end of training, and `do_seathru` and `eval` default to off and false.
+   `cells.json` overrides all three, and its own note records why: the upstream defaults would
+   make every cell a study of plain 3DGS, or would train on everything and report inflated
+   numbers without raising an error. A methodology chapter that describes the configuration
+   should say this — it is evidence of a deliberate guard, not a detail.
+7. **New — the M3 reload risk is documented and already materialised.** See §3.5.4: an earlier
+   asset collector rendered quantised cells from stored continuous parameters and under-reported
+   fidelity by several decibels. The self-check that caught it should be named in the protocol.
 
 ## 3.6 Experimental design and execution
 
